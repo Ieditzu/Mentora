@@ -8,11 +8,11 @@ using UnityEngine.UI;
 public class CommunityIslandMenu : MonoBehaviour
 {
     [Header("Trigger")]
-    [SerializeField] private Vector3 triggerSize = new Vector3(3.2f, 2.4f, 3.2f);
+    [SerializeField] private Vector3 triggerSize = new Vector3(1f, 1f, 2f);
     [SerializeField] private Vector3 triggerOffset = new Vector3(0f, 1.25f, 0f);
     [SerializeField] private float reenterCooldown = 0.2f;
     [SerializeField] private Vector3 iconLocalPosition = new Vector3(0f, 1.2f, 0f);
-    [SerializeField] private Vector3 iconLocalScale = new Vector3(2f, 2f, 2f);
+    [SerializeField] private Vector3 iconLocalScale = new Vector3(1f, 1f, 1f);
     [SerializeField] private bool autoPlaceTriggerWhenMissing = true;
 
     [Header("Theme")]
@@ -40,12 +40,10 @@ public class CommunityIslandMenu : MonoBehaviour
     private bool running;
     private bool leaveRequested;
     private bool overlayInteractionActive;
-    private bool triggerArmed;
 
     private void Awake()
     {
         EnsureTriggerVolume();
-        triggerArmed = false;
     }
 
     private void OnEnable()
@@ -56,11 +54,6 @@ public class CommunityIslandMenu : MonoBehaviour
     private void OnValidate()
     {
         EnsureTriggerVolume();
-    }
-
-    private IEnumerator Start()
-    {
-        yield return WaitUntilPlayerLeavesTrigger();
     }
 
     private void LateUpdate()
@@ -112,6 +105,15 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         relay.Initialize(this);
 
+        Rigidbody triggerBody = triggerObject.GetComponent<Rigidbody>();
+        if (triggerBody == null)
+        {
+            triggerBody = triggerObject.AddComponent<Rigidbody>();
+        }
+        triggerBody.isKinematic = true;
+        triggerBody.useGravity = false;
+        triggerBody.constraints = RigidbodyConstraints.FreezeAll;
+
         triggerVolume = triggerObject.GetComponent<BoxCollider>();
         if (triggerVolume == null)
         {
@@ -127,15 +129,18 @@ public class CommunityIslandMenu : MonoBehaviour
     private void EnsureTriggerIcon()
     {
         Transform existing = triggerObject.transform.Find("Visual");
+        if (existing != null && (existing.GetComponent<MeshFilter>() != null || existing.GetComponent<MeshRenderer>() != null))
+        {
+            Object.DestroyImmediate(existing.gameObject);
+            existing = null;
+        }
+
         GameObject visualObject = existing != null ? existing.gameObject : new GameObject("Visual");
         visualObject.name = "Visual";
         visualObject.transform.SetParent(triggerObject.transform, false);
-        if (existing == null)
-        {
-            visualObject.transform.localPosition = iconLocalPosition;
-            visualObject.transform.localRotation = Quaternion.identity;
-            visualObject.transform.localScale = iconLocalScale;
-        }
+        visualObject.transform.localPosition = iconLocalPosition;
+        visualObject.transform.localRotation = Quaternion.identity;
+        visualObject.transform.localScale = iconLocalScale;
         visualObject.hideFlags = HideFlags.None;
 
         Collider visualCollider = visualObject.GetComponent<Collider>();
@@ -158,10 +163,16 @@ public class CommunityIslandMenu : MonoBehaviour
             spriteRenderer = visualObject.AddComponent<SpriteRenderer>();
         }
 
+        if (spriteRenderer == null)
+        {
+            return;
+        }
+
         if (iconTexture != null)
         {
             Rect rect = new Rect(0f, 0f, iconTexture.width, iconTexture.height);
-            Sprite sprite = Sprite.Create(iconTexture, rect, new Vector2(0.5f, 0.5f), 100f);
+            float pixelsPerUnit = Mathf.Max(iconTexture.width, iconTexture.height);
+            Sprite sprite = Sprite.Create(iconTexture, rect, new Vector2(0.5f, 0.5f), pixelsPerUnit);
             spriteRenderer.sprite = sprite;
             spriteRenderer.color = Color.white;
         }
@@ -172,11 +183,13 @@ public class CommunityIslandMenu : MonoBehaviour
         }
 
         spriteRenderer.sortingOrder = 20;
+        spriteRenderer.drawMode = SpriteDrawMode.Simple;
+        visualObject.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
     }
 
     public void HandleTriggerEnter(Collider other)
     {
-        if (running || !triggerArmed)
+        if (running)
         {
             return;
         }
@@ -193,7 +206,6 @@ public class CommunityIslandMenu : MonoBehaviour
     {
         running = true;
         leaveRequested = false;
-        triggerArmed = false;
 
         if (triggerVolume != null)
         {
@@ -237,45 +249,7 @@ public class CommunityIslandMenu : MonoBehaviour
         {
             triggerVolume.enabled = true;
         }
-        yield return WaitUntilPlayerLeavesTrigger();
         running = false;
-    }
-
-    private IEnumerator WaitUntilPlayerLeavesTrigger()
-    {
-        while (IsPlayerInsideTrigger())
-        {
-            yield return null;
-        }
-
-        triggerArmed = true;
-    }
-
-    private bool IsPlayerInsideTrigger()
-    {
-        if (triggerVolume == null)
-        {
-            return false;
-        }
-
-        Vector3 center = triggerVolume.transform.TransformPoint(triggerVolume.center);
-        Vector3 halfExtents = Vector3.Scale(triggerVolume.size * 0.5f, triggerVolume.transform.lossyScale);
-        Collider[] overlaps = Physics.OverlapBox(
-            center,
-            halfExtents,
-            triggerVolume.transform.rotation,
-            ~0,
-            QueryTriggerInteraction.Ignore);
-
-        for (int i = 0; i < overlaps.Length; i++)
-        {
-            if (TryGetPlayer(overlaps[i], out _, out _))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void EnsureOverlay()
