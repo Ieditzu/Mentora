@@ -1,0 +1,50 @@
+# Project settings
+.vs/
+.vscode/
+.idea/
+.settings/
+
+# Build systems
+.m2/
+.gradle/
+
+# Project files
+.classpath
+.project
+*.iml
+*.ipr
+*.iws
+
+# Common compiler output directories
+target/
+!src/**/target/
+build/
+!src/**/build/
+out/
+!src/**/out/
+
+# Common working directories
+run/
+!src/**/run/
+test_run/
+!src/**/test_run/
+work/
+!src/**/work/
+workspace/
+!src/**/workspace/
+
+# Ignored by default
+*.class
+*.log
+
+# Ignored by default
+*.jar
+*.jar.*
+
+# JVM Crash Logs
+hs_err_pid*
+replay_pid*
+
+# Obfuscation
+obfuscate/
+ZKM_log.txt

@@ -1,0 +1,55 @@
+# Unity
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/UserSettings/
+/MemoryCaptures/
+/Recordings/
+/CrashReports/
+
+# IDE
+/*.csproj
+/*.unityproj
+/*.sln
+/*.suo
+/*.tmp
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.svd
+/.vs/
+/.idea/
+
+# Packages cache (huge binaries e.g., Burst LLVM)
+/Packages/com.unity.burst@*/Unity.Burst.CodeGen*/
+/Library/PackageCache/
+
+# Addressables/AssetPipeline
+/Assets/StreamingAssets/aa.meta
+/Assets/StreamingAssets/aa/*
+/Assets/AddressableAssetsData/*/bin/*
+/Assets/AddressableAssetsData/*/obj/*
+
+# Builds & generated
+/*.apk
+/*.aab
+/*.app
+/*.xcarchive
+/*.ipa
+/*.exe
+/*.zip
+/*.unitypackage
+*.log
+
+# Rider/JetBrains
+/.idea/
+/.fleet/
+
+# Misc
+/.DS_Store
+Thumbs.db
+session.json

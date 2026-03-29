@@ -1,0 +1,54 @@
+# Unity
+/unity/NeuroKey/Library/
+/unity/NeuroKey/Temp/
+/unity/NeuroKey/Obj/
+/unity/NeuroKey/Build/
+/unity/NeuroKey/Builds/
+/unity/NeuroKey/Logs/
+/unity/NeuroKey/UserSettings/
+/unity/NeuroKey/MemoryCaptures/
+/unity/NeuroKey/Recordings/
+/unity/NeuroKey/CrashReports/
+
+# IDE
+/unity/NeuroKey/*.csproj
+/unity/NeuroKey/*.unityproj
+/unity/NeuroKey/*.sln
+/unity/NeuroKey/*.suo
+/unity/NeuroKey/*.tmp
+/unity/NeuroKey/*.user
+/unity/NeuroKey/*.userprefs
+/unity/NeuroKey/*.pidb
+/unity/NeuroKey/*.booproj
+/unity/NeuroKey/*.svd
+/unity/NeuroKey/.vs/
+/unity/NeuroKey/.idea/
+
+# Packages cache (huge binaries e.g., Burst LLVM)
+/unity/NeuroKey/Packages/com.unity.burst@*/Unity.Burst.CodeGen*/
+/unity/NeuroKey/Library/PackageCache/
+
+# Addressables/AssetPipeline
+/unity/NeuroKey/Assets/StreamingAssets/aa.meta
+/unity/NeuroKey/Assets/StreamingAssets/aa/*
+/unity/NeuroKey/Assets/AddressableAssetsData/*/bin/*
+/unity/NeuroKey/Assets/AddressableAssetsData/*/obj/*
+
+# Builds & generated
+/unity/NeuroKey/*.apk
+/unity/NeuroKey/*.aab
+/unity/NeuroKey/*.app
+/unity/NeuroKey/*.xcarchive
+/unity/NeuroKey/*.ipa
+/unity/NeuroKey/*.exe
+/unity/NeuroKey/*.zip
+/unity/NeuroKey/*.unitypackage
+*.log
+
+# Rider/JetBrains
+/unity/NeuroKey/.idea/
+/unity/NeuroKey/.fleet/
+
+# Misc
+/.DS_Store
+Thumbs.db

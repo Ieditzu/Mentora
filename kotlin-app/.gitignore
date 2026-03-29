@@ -1,0 +1,70 @@
+# Built artifacts
+bin/
+gen/
+out/
+build/
+.gradle/
+
+# Android Studio / IntelliJ IDEA
+.idea/assetWizardSettings.xml
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/caches/
+.idea/libraries/
+*.iml
+*.ipr
+*.iws
+.idea/modules/
+.idea/shelf/
+.idea/assetWizardSettings.xml
+
+# Local configuration file (contains SDK paths, etc)
+local.properties
+
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+
+# Log Files
+*.log
+
+# Android Studio Captures
+captures/
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# NDK
+obj/
+libs/
+
+# Proguard / R8
+app/proguard-rules.pro
+!app/proguard-rules.pro
+# Keep the rules, ignore the mappings if they are generated in the root (usually they are in build/)
+# *.txt
+# *.map
+
+# Backup files
+*.bak
+*.swp
+*~
+
+# Kotlin
+.kotlin/
+
+# Secrets
+.env
+signing.properties
+*.jks
+*.keystore
+!debug.keystore
