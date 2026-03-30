@@ -19,6 +19,14 @@ public class WebAuthController {
     private final ParentService parentService;
     private final WebSessionService webSessionService;
 
+    @PostMapping("/lookup")
+    public LookupResponse lookup(@RequestBody final EmailLookupRequest request) {
+        validateEmail(request == null ? null : request.email());
+        String emailHash = HashUtility.hash(request.email().trim().toLowerCase());
+        boolean exists = parentService.findByEmail(emailHash).isPresent();
+        return new LookupResponse(exists);
+    }
+
     @PostMapping("/register")
     public AuthResponse register(@RequestBody AuthRequest request) {
         validateAuthRequest(request);
@@ -56,6 +64,14 @@ public class WebAuthController {
         }
     }
 
+    private void validateEmail(final String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("Email is required");
+        }
+    }
+
+    public record EmailLookupRequest(String email) {}
+    public record LookupResponse(boolean exists) {}
     public record AuthRequest(String email, String password) {}
     public record AuthResponse(Long parentId, String token) {}
 }

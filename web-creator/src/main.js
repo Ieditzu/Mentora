@@ -8,6 +8,12 @@ const state = {
   courses: []
 };
 
+const authState = {
+  step: "email",
+  mode: "login",
+  email: ""
+};
+
 function blankCourse() {
   return {
     id: null,
@@ -92,22 +98,34 @@ document.querySelector("#app").innerHTML = `
         <div class="section-heading">
           <div>
             <p class="eyebrow">Creator Access</p>
-            <h2>Authenticate the console</h2>
+            <h2 id="authTitle">Authenticate the console</h2>
           </div>
         </div>
-        <div class="grid-two">
+        <p id="authLead" class="muted">Enter your email first. Existing accounts go to sign in. New addresses go to sign up.</p>
+
+        <div id="emailStep">
           <label>
             <span>Email</span>
             <input id="emailInput" type="email" placeholder="you@example.com">
           </label>
+          <div class="button-row">
+            <button id="continueButton">Continue</button>
+          </div>
+        </div>
+
+        <div id="passwordStep" hidden>
+          <div class="auth-email-pill">
+            <span class="chip-label">Email</span>
+            <strong id="authEmailValue"></strong>
+          </div>
           <label>
             <span>Password</span>
             <input id="passwordInput" type="password" placeholder="Password">
           </label>
-        </div>
-        <div class="button-row">
-          <button id="loginButton">Login</button>
-          <button id="registerButton" class="secondary-button">Register</button>
+          <div class="button-row">
+            <button id="authSubmitButton">Continue</button>
+            <button id="changeEmailButton" class="secondary-button">Change email</button>
+          </div>
         </div>
       </section>
 
@@ -218,11 +236,17 @@ const els = {
   workspaceSection: document.getElementById("workspaceSection"),
   authStatus: document.getElementById("authStatus"),
   authHint: document.getElementById("authHint"),
+  authTitle: document.getElementById("authTitle"),
+  authLead: document.getElementById("authLead"),
   logoutButton: document.getElementById("logoutButton"),
+  emailStep: document.getElementById("emailStep"),
+  passwordStep: document.getElementById("passwordStep"),
   emailInput: document.getElementById("emailInput"),
+  continueButton: document.getElementById("continueButton"),
   passwordInput: document.getElementById("passwordInput"),
-  loginButton: document.getElementById("loginButton"),
-  registerButton: document.getElementById("registerButton"),
+  authEmailValue: document.getElementById("authEmailValue"),
+  authSubmitButton: document.getElementById("authSubmitButton"),
+  changeEmailButton: document.getElementById("changeEmailButton"),
   newCourseButton: document.getElementById("newCourseButton"),
   saveCourseButton: document.getElementById("saveCourseButton"),
   deleteCourseButton: document.getElementById("deleteCourseButton"),
@@ -285,6 +309,24 @@ function syncAuthUI() {
     ? "Remote authoring access confirmed."
     : "Authenticate to load your course network.";
   updateDashboardStats();
+}
+
+function renderAuthFlow() {
+  const inPasswordStep = authState.step === "password";
+  const isLogin = authState.mode === "login";
+
+  els.emailStep.hidden = inPasswordStep;
+  els.passwordStep.hidden = !inPasswordStep;
+  els.authEmailValue.textContent = authState.email;
+  els.authTitle.textContent = inPasswordStep
+    ? (isLogin ? "Welcome back" : "Create your account")
+    : "Authenticate the console";
+  els.authLead.textContent = inPasswordStep
+    ? (isLogin
+        ? "We found your email. Enter your password to sign in."
+        : "This email is new. Create a password to open a creator account.")
+    : "Enter your email first. Existing accounts go to sign in. New addresses go to sign up.";
+  els.authSubmitButton.textContent = isLogin ? "Sign in" : "Sign up";
 }
 
 function updateDashboardStats() {
@@ -478,11 +520,31 @@ async function deleteCourse() {
   showToast("Course deleted");
 }
 
+async function continueAuthFlow() {
+  const email = els.emailInput.value.trim();
+  if (!email) {
+    showToast("Enter your email");
+    return;
+  }
+
+  const response = await api("/api/web/auth/lookup", {
+    method: "POST",
+    body: JSON.stringify({ email })
+  });
+
+  authState.email = email;
+  authState.mode = response.exists ? "login" : "register";
+  authState.step = "password";
+  els.passwordInput.value = "";
+  renderAuthFlow();
+  els.passwordInput.focus();
+}
+
 async function handleAuth(mode) {
   const response = await api(`/api/web/auth/${mode}`, {
     method: "POST",
     body: JSON.stringify({
-      email: els.emailInput.value.trim(),
+      email: authState.email || els.emailInput.value.trim(),
       password: els.passwordInput.value
     })
   });
@@ -504,14 +566,27 @@ function logout() {
   editorCourse = blankCourse();
   localStorage.removeItem("mentora_creator_token");
   localStorage.removeItem("mentora_creator_parent_id");
+  authState.step = "email";
+  authState.mode = "login";
+  authState.email = "";
+  els.passwordInput.value = "";
   syncAuthUI();
+  renderAuthFlow();
   renderCourseList();
   renderEditor();
 }
 
 function wireEvents() {
-  els.loginButton.addEventListener("click", () => handleAuth("login").catch((error) => showToast(error.message)));
-  els.registerButton.addEventListener("click", () => handleAuth("register").catch((error) => showToast(error.message)));
+  els.continueButton.addEventListener("click", () => continueAuthFlow().catch((error) => showToast(error.message)));
+  els.authSubmitButton.addEventListener("click", () => handleAuth(authState.mode).catch((error) => showToast(error.message)));
+  els.changeEmailButton.addEventListener("click", () => {
+    authState.step = "email";
+    authState.mode = "login";
+    authState.email = "";
+    els.passwordInput.value = "";
+    renderAuthFlow();
+    els.emailInput.focus();
+  });
   els.logoutButton.addEventListener("click", logout);
   els.newCourseButton.addEventListener("click", () => {
     editorCourse = blankCourse();
@@ -540,6 +615,7 @@ function escapeHtml(value) {
 
 async function bootstrap() {
   syncAuthUI();
+  renderAuthFlow();
   renderCourseList();
   renderEditor();
   wireEvents();

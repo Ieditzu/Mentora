@@ -261,6 +261,21 @@ select:focus-visible {
   max-width: 860px;
 }
 
+.auth-email-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(121, 216, 255, 0.16);
+  background: rgba(121, 216, 255, 0.08);
+}
+
+.auth-email-pill strong {
+  color: var(--cyan);
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
