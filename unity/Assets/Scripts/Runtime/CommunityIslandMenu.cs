@@ -9,11 +9,11 @@ using UnityEngine.UI;
 public class CommunityIslandMenu : MonoBehaviour
 {
     [Header("Trigger")]
-    [SerializeField] private Vector3 triggerSize = new Vector3(1f, 1f, 2f);
+    [SerializeField] private Vector3 triggerSize = new Vector3(0.25f, 0.4f, 0.25f);
     [SerializeField] private Vector3 triggerOffset = new Vector3(0f, 1.25f, 0f);
     [SerializeField] private float reenterCooldown = 0.2f;
     [SerializeField] private Vector3 iconLocalPosition = new Vector3(0f, 1.2f, 0f);
-    [SerializeField] private Vector3 iconLocalScale = new Vector3(1f, 1f, 1f);
+    [SerializeField] private Vector3 iconLocalScale = new Vector3(2.4f, 2.4f, 2.4f);
     [SerializeField] private bool autoPlaceTriggerWhenMissing = true;
 
     [Header("Theme")]
@@ -188,7 +188,6 @@ public class CommunityIslandMenu : MonoBehaviour
 
         spriteRenderer.sortingOrder = 20;
         spriteRenderer.drawMode = SpriteDrawMode.Simple;
-        visualObject.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
     }
 
     public void HandleTriggerEnter(Collider other)
@@ -246,6 +245,7 @@ public class CommunityIslandMenu : MonoBehaviour
         EnsureOverlay();
         ResetOverlay();
         SetOverlayVisible(true);
+        SetCursorVisible(true);
 
         yield return FadeImage(whiteImage, 0f, 1f, fadeToWhiteDuration, pageTint);
         yield return AnimatePanel(true);
