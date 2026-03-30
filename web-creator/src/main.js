@@ -38,25 +38,62 @@ function blankQuestion() {
 let editorCourse = blankCourse();
 
 document.querySelector("#app").innerHTML = `
-  <div class="page-shell">
-    <aside class="sidebar">
-      <div>
-        <p class="eyebrow">Mentora</p>
-        <h1>Course Creator</h1>
-        <p class="muted">Local frontend, remote backend.</p>
-        <p class="muted">API: ${escapeHtml(API_BASE)}</p>
+  <div class="app-shell">
+    <div class="ambient-grid"></div>
+    <div class="ambient-orb ambient-orb-a"></div>
+    <div class="ambient-orb ambient-orb-b"></div>
+
+    <aside class="control-rail">
+      <div class="brand-block">
+        <p class="eyebrow">Mentora // Creator</p>
+        <h1>Web Creator</h1>
+        <p class="muted">Design and publish in-game learning paths from one local control surface.</p>
       </div>
-      <div class="sidebar-panel">
-        <div id="authStatus" class="status-chip">Logged out</div>
+
+      <div class="rail-card status-card">
+        <div class="status-line">
+          <span class="status-dot"></span>
+          <span id="authStatus">Logged out</span>
+        </div>
+        <p id="authHint" class="muted">Authenticate to load your course network.</p>
         <button id="logoutButton" class="ghost-button" hidden>Log out</button>
       </div>
+
+      <div class="rail-card">
+        <p class="eyebrow">Endpoint</p>
+        <p class="mono-line">${escapeHtml(API_BASE)}</p>
+      </div>
     </aside>
-    <main class="main-content">
+
+    <main class="main-stage">
+      <section class="hero-panel panel">
+        <div class="hero-copy">
+          <p class="eyebrow">Futuristic Authoring Surface</p>
+          <h2>Build quiz worlds that feel native to the Mentora universe.</h2>
+          <p class="muted">Shape titles, publish states, reward values, and question logic from a single tactical editor.</p>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric-card">
+            <span class="metric-label">Courses</span>
+            <strong id="courseCount">0</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Questions</span>
+            <strong id="questionCount">1</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Mode</span>
+            <strong id="publishBadge">Draft</strong>
+          </div>
+        </div>
+      </section>
+
       <section id="authSection" class="panel auth-panel">
-        <div>
-          <p class="eyebrow">Creator Access</p>
-          <h2>Login or register</h2>
-          <p class="muted">This local app talks directly to the VPS backend.</p>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Creator Access</p>
+            <h2>Authenticate the console</h2>
+          </div>
         </div>
         <div class="grid-two">
           <label>
@@ -73,22 +110,24 @@ document.querySelector("#app").innerHTML = `
           <button id="registerButton" class="secondary-button">Register</button>
         </div>
       </section>
-      <section id="workspaceSection" hidden>
+
+      <section id="workspaceSection" class="workspace-section" hidden>
         <div class="workspace-grid">
-          <section class="panel">
+          <section class="panel library-panel">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Your Courses</p>
-                <h2>Drafts and published content</h2>
+                <p class="eyebrow">Course Library</p>
+                <h2>Drafts and published tracks</h2>
               </div>
               <button id="newCourseButton">New course</button>
             </div>
             <div id="courseList" class="course-list"></div>
           </section>
+
           <section class="panel editor-panel">
-            <div class="section-heading">
+            <div class="section-heading editor-heading">
               <div>
-                <p class="eyebrow">Editor</p>
+                <p class="eyebrow">Editor Core</p>
                 <h2 id="editorTitle">Create a quiz course</h2>
               </div>
               <div class="button-row compact">
@@ -96,6 +135,22 @@ document.querySelector("#app").innerHTML = `
                 <button id="deleteCourseButton" class="danger-button" hidden>Delete</button>
               </div>
             </div>
+
+            <div class="editor-meta">
+              <div class="info-chip">
+                <span class="chip-label">API</span>
+                <span class="chip-value">Live</span>
+              </div>
+              <div class="info-chip">
+                <span class="chip-label">Questions</span>
+                <span id="inlineQuestionCount" class="chip-value">1</span>
+              </div>
+              <div class="info-chip">
+                <span class="chip-label">Visibility</span>
+                <span id="inlinePublishBadge" class="chip-value">Draft</span>
+              </div>
+            </div>
+
             <div class="grid-two">
               <label>
                 <span>Title</span>
@@ -130,21 +185,25 @@ document.querySelector("#app").innerHTML = `
                 <span>Published and visible in the game</span>
               </label>
             </div>
+
             <label>
               <span>Summary</span>
               <input id="courseSummary" type="text" maxlength="280" placeholder="A short one-line description for the game browser">
             </label>
+
             <label>
               <span>Description</span>
               <textarea id="courseDescription" rows="4" placeholder="What does this course teach?"></textarea>
             </label>
+
             <div class="section-heading subheading">
               <div>
-                <p class="eyebrow">Quiz Questions</p>
+                <p class="eyebrow">Question Matrix</p>
                 <h3>Question set</h3>
               </div>
               <button id="addQuestionButton" class="secondary-button">Add question</button>
             </div>
+
             <div id="questionList" class="question-list"></div>
           </section>
         </div>
@@ -158,6 +217,7 @@ const els = {
   authSection: document.getElementById("authSection"),
   workspaceSection: document.getElementById("workspaceSection"),
   authStatus: document.getElementById("authStatus"),
+  authHint: document.getElementById("authHint"),
   logoutButton: document.getElementById("logoutButton"),
   emailInput: document.getElementById("emailInput"),
   passwordInput: document.getElementById("passwordInput"),
@@ -178,15 +238,23 @@ const els = {
   courseSummary: document.getElementById("courseSummary"),
   courseDescription: document.getElementById("courseDescription"),
   coursePublished: document.getElementById("coursePublished"),
+  courseCount: document.getElementById("courseCount"),
+  questionCount: document.getElementById("questionCount"),
+  publishBadge: document.getElementById("publishBadge"),
+  inlineQuestionCount: document.getElementById("inlineQuestionCount"),
+  inlinePublishBadge: document.getElementById("inlinePublishBadge"),
   toast: document.getElementById("toast")
 };
 
 function showToast(message) {
   els.toast.textContent = message;
   els.toast.hidden = false;
+  els.toast.classList.remove("toast-live");
+  requestAnimationFrame(() => els.toast.classList.add("toast-live"));
   clearTimeout(showToast.timeout);
   showToast.timeout = setTimeout(() => {
     els.toast.hidden = true;
+    els.toast.classList.remove("toast-live");
   }, 3000);
 }
 
@@ -212,13 +280,35 @@ function syncAuthUI() {
   els.authSection.hidden = loggedIn;
   els.workspaceSection.hidden = !loggedIn;
   els.logoutButton.hidden = !loggedIn;
-  els.authStatus.textContent = loggedIn ? `Logged in as creator #${state.parentId}` : "Logged out";
+  els.authStatus.textContent = loggedIn ? `Creator #${state.parentId} linked` : "Logged out";
+  els.authHint.textContent = loggedIn
+    ? "Remote authoring access confirmed."
+    : "Authenticate to load your course network.";
+  updateDashboardStats();
+}
+
+function updateDashboardStats() {
+  const questionTotal = editorCourse.questions.length || 0;
+  const publishedLabel = editorCourse.published ? "Published" : "Draft";
+
+  els.courseCount.textContent = String(state.courses.length);
+  els.questionCount.textContent = String(questionTotal);
+  els.publishBadge.textContent = publishedLabel;
+  els.inlineQuestionCount.textContent = String(questionTotal);
+  els.inlinePublishBadge.textContent = publishedLabel;
 }
 
 function renderCourseList() {
   els.courseList.innerHTML = "";
   if (!state.courses.length) {
-    els.courseList.innerHTML = `<div class="course-card"><p class="muted">No courses yet. Create your first quiz course.</p></div>`;
+    els.courseList.innerHTML = `
+      <div class="empty-state">
+        <p class="eyebrow">Empty Library</p>
+        <h3>No courses online yet</h3>
+        <p class="muted">Create your first course to seed the Mentora catalog.</p>
+      </div>
+    `;
+    updateDashboardStats();
     return;
   }
 
@@ -227,11 +317,14 @@ function renderCourseList() {
     card.type = "button";
     card.className = `course-card ${course.id === editorCourse.id ? "active" : ""}`;
     card.innerHTML = `
-      <div class="section-heading">
-        <strong>${escapeHtml(course.title)}</strong>
-        <span class="chip">${course.published ? "Published" : "Draft"}</span>
+      <div class="course-card-top">
+        <div>
+          <strong>${escapeHtml(course.title)}</strong>
+          <p class="muted">${escapeHtml(course.acronym || "NO-ACRONYM")}</p>
+        </div>
+        <span class="chip ${course.published ? "chip-success" : ""}">${course.published ? "Published" : "Draft"}</span>
       </div>
-      <p class="muted">${escapeHtml(course.summary || "No summary yet.")}</p>
+      <p class="course-summary">${escapeHtml(course.summary || "No summary yet.")}</p>
       <div class="course-meta">
         <span class="chip">${escapeHtml(course.language)}</span>
         <span class="chip">${escapeHtml(course.difficulty)}</span>
@@ -242,6 +335,8 @@ function renderCourseList() {
     card.addEventListener("click", () => loadCourse(course.id));
     els.courseList.appendChild(card);
   });
+
+  updateDashboardStats();
 }
 
 function renderEditor() {
@@ -262,23 +357,34 @@ function renderEditor() {
     card.className = "question-card";
     card.innerHTML = `
       <div class="section-heading">
-        <strong>Question ${index + 1}</strong>
+        <div>
+          <p class="eyebrow">Question ${index + 1}</p>
+          <strong>Response logic node</strong>
+        </div>
         <button type="button" class="danger-button" data-remove="${index}">Remove</button>
       </div>
-      <label><span>Prompt</span><textarea data-field="prompt" data-index="${index}" rows="3">${escapeHtml(question.prompt || "")}</textarea></label>
+      <label>
+        <span>Prompt</span>
+        <textarea data-field="prompt" data-index="${index}" rows="3">${escapeHtml(question.prompt || "")}</textarea>
+      </label>
       <div class="question-options">
         ${["A", "B", "C", "D"].map((letter, optionIndex) => `
-          <label class="option-row">
-            <input type="radio" name="correct-${index}" ${question.correctIndex === optionIndex ? "checked" : ""} data-correct="${index}" value="${optionIndex}">
-            <span>Correct ${letter}</span>
-          </label>
-          <label>
-            <span>Option ${letter}</span>
-            <input type="text" data-field="option${letter}" data-index="${index}" value="${escapeHtml(question[`option${letter}`] || "")}">
-          </label>
+          <div class="option-card">
+            <label class="option-row">
+              <input type="radio" name="correct-${index}" ${question.correctIndex === optionIndex ? "checked" : ""} data-correct="${index}" value="${optionIndex}">
+              <span>Correct ${letter}</span>
+            </label>
+            <label>
+              <span>Option ${letter}</span>
+              <input type="text" data-field="option${letter}" data-index="${index}" value="${escapeHtml(question[`option${letter}`] || "")}">
+            </label>
+          </div>
         `).join("")}
       </div>
-      <label><span>Explanation</span><textarea data-field="explanation" data-index="${index}" rows="2">${escapeHtml(question.explanation || "")}</textarea></label>
+      <label>
+        <span>Explanation</span>
+        <textarea data-field="explanation" data-index="${index}" rows="2">${escapeHtml(question.explanation || "")}</textarea>
+      </label>
     `;
     els.questionList.appendChild(card);
   });
@@ -288,6 +394,7 @@ function renderEditor() {
       const index = Number(event.target.dataset.index);
       const field = event.target.dataset.field;
       editorCourse.questions[index][field] = event.target.value;
+      updateDashboardStats();
     });
   });
 
@@ -308,6 +415,8 @@ function renderEditor() {
       renderEditor();
     });
   });
+
+  updateDashboardStats();
 }
 
 async function loadCourses() {
@@ -415,6 +524,10 @@ function wireEvents() {
   });
   els.saveCourseButton.addEventListener("click", () => saveCourse().catch((error) => showToast(error.message)));
   els.deleteCourseButton.addEventListener("click", () => deleteCourse().catch((error) => showToast(error.message)));
+  els.coursePublished.addEventListener("change", () => {
+    editorCourse.published = els.coursePublished.checked;
+    updateDashboardStats();
+  });
 }
 
 function escapeHtml(value) {
