@@ -337,7 +337,7 @@ It also derives:
 - common mistakes
 - help-request topics
 
-AI summaries are generated lazily using `GeminiAI`.
+AI summaries are generated lazily using `GroqAI`.
 
 ### Global Task Catalog
 
@@ -360,13 +360,11 @@ The task titles are used by the Unity game when it auto-completes matching tasks
 
 File:
 
-- `java-server/Java-Server/src/main/java/io/github/kawase/utility/GeminiAI.java`
+- `java-server/Java-Server/src/main/java/io/github/kawase/utility/GroqAI.java`
 
 Behavior:
 
-- loads API keys from `api-keys.json` or environment variables
-- tries Gemini models first
-- falls back to Groq
+- loads the Groq API key from `java-server/Java-Server/api-keys.json`
 - caches responses in memory
 - handles cooldowns after 429 responses
 
@@ -1038,7 +1036,7 @@ Unity C++ medium / Python flows:
 - `java-server/Java-Server/src/main/java/io/github/kawase/database/entity/*`
 - `java-server/Java-Server/src/main/java/io/github/kawase/cpp/CppExecutor.java`
 - `java-server/Java-Server/src/main/java/io/github/kawase/python/PythonExecutor.java`
-- `java-server/Java-Server/src/main/java/io/github/kawase/utility/GeminiAI.java`
+- `java-server/Java-Server/src/main/java/io/github/kawase/utility/GroqAI.java`
 
 ### Android
 

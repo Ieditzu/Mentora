@@ -430,8 +430,8 @@ public class ClientHandler {
                 case AskAiPacket askAiPacket -> {
                     System.out.println("AI Question from " + (client.getChildId() != null ? "child " + client.getChildId() : "parent " + client.getParentId()) + ": " + askAiPacket.getQuestion());
                     
-                    io.github.kawase.utility.GeminiAI ai = new io.github.kawase.utility.GeminiAI();
-                    String profileSummary = "";
+                    io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
+                    String profileContext = "";
                     if (client.getChildId() != null) {
                         Server.getInstance().getLearningProfileService().recordAiInteraction(client.getChildId(), askAiPacket.getContext(), askAiPacket.getQuestion());
                         String language = null;
@@ -443,13 +443,13 @@ public class ClientHandler {
                                 language = "python";
                             }
                         }
-                        profileSummary = Server.getInstance().getLearningProfileService().buildProfileSummary(client.getChildId(), language);
+                        profileContext = Server.getInstance().getLearningProfileService().buildAiHelpProfileContext(client.getChildId(), language);
                     }
 
                     String response = ai.ask(
                             askAiPacket.getQuestion(),
                             askAiPacket.getContext(),
-                            profileSummary
+                            profileContext
                     );
                     
                     connection.send(new AiResponsePacket(response).encode());
