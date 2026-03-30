@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Mentora.Network;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -23,6 +24,12 @@ public class CommunityIslandMenu : MonoBehaviour
     [SerializeField] private Color secondaryTextColor = new Color(0.28f, 0.31f, 0.36f, 1f);
     [SerializeField] private Color buttonColor = new Color(0.14f, 0.14f, 0.14f, 0.92f);
     [SerializeField] private Color accentColor = new Color(0.18f, 0.62f, 0.32f, 1f);
+    [SerializeField] private Color darkPageTint = new Color(0.05f, 0.07f, 0.10f, 1f);
+    [SerializeField] private Color darkPanelColor = new Color(0.10f, 0.13f, 0.18f, 0.97f);
+    [SerializeField] private Color darkTextColor = new Color(0.92f, 0.96f, 1f, 1f);
+    [SerializeField] private Color darkSecondaryTextColor = new Color(0.74f, 0.80f, 0.88f, 1f);
+    [SerializeField] private Color darkButtonColor = new Color(0.20f, 0.24f, 0.30f, 0.96f);
+    [SerializeField] private Color darkAccentColor = new Color(0.33f, 0.74f, 1f, 1f);
 
     [Header("Animation")]
     [SerializeField] private float fadeToWhiteDuration = 0.34f;
@@ -35,6 +42,10 @@ public class CommunityIslandMenu : MonoBehaviour
     private static Text bodyText;
     private static Button leaveButton;
     private static Text leaveButtonText;
+    private static Button fetchButton;
+    private static Text fetchButtonText;
+    private static Button themeButton;
+    private static Text themeButtonText;
 
     private GameObject triggerObject;
     private BoxCollider triggerVolume;
@@ -44,14 +55,35 @@ public class CommunityIslandMenu : MonoBehaviour
     private bool requireExitBeforeReopen;
     private float reenterBlockedUntil;
     private readonly HashSet<Collider> overlappingPlayerColliders = new HashSet<Collider>();
+    private bool useDarkTheme;
+    private bool packetSubscribed;
+    private bool fetchInProgress;
+    private string communityBodyMessage = "Press Fetch Courses to load community quizzes.";
+    private Color lightPageTint;
+    private Color lightPanelColor;
+    private Color lightTextColor;
+    private Color lightSecondaryTextColor;
+    private Color lightButtonColor;
+    private Color lightAccentColor;
+    private bool capturedLightTheme;
 
     private void Awake()
     {
+        if (Application.isPlaying)
+        {
+            UnityMainThreadDispatcher.Initialize();
+        }
+        CacheLightTheme();
         EnsureTriggerVolume();
     }
 
     private void OnEnable()
     {
+        if (Application.isPlaying)
+        {
+            UnityMainThreadDispatcher.Initialize();
+        }
+        CacheLightTheme();
         EnsureTriggerVolume();
     }
 
@@ -212,6 +244,27 @@ public class CommunityIslandMenu : MonoBehaviour
         StartCoroutine(PlaySequence(sphere, fps));
     }
 
+    private void OnDisable()
+    {
+        UnsubscribeFromPackets();
+    }
+
+    private void CacheLightTheme()
+    {
+        if (capturedLightTheme)
+        {
+            return;
+        }
+
+        lightPageTint = pageTint;
+        lightPanelColor = panelColor;
+        lightTextColor = textColor;
+        lightSecondaryTextColor = secondaryTextColor;
+        lightButtonColor = buttonColor;
+        lightAccentColor = accentColor;
+        capturedLightTheme = true;
+    }
+
     public void HandleTriggerExit(Collider other)
     {
         if (!TryGetPlayer(other, out _, out _))
@@ -251,14 +304,20 @@ public class CommunityIslandMenu : MonoBehaviour
         yield return AnimatePanel(true);
 
         ShowLeaveButton(true);
+        ShowFetchButton(true);
+        ShowThemeButton(true);
+        ApplyTheme();
         titleText.text = "Community";
-        bodyText.text = string.Empty;
+        UpdateBodyText();
 
         while (!leaveRequested)
         {
             yield return null;
         }
 
+        UnsubscribeFromPackets();
+        ShowThemeButton(false);
+        ShowFetchButton(false);
         ShowLeaveButton(false);
         yield return AnimatePanel(false);
         yield return FadeImage(whiteImage, 1f, 0f, 0.2f, pageTint);
@@ -311,10 +370,15 @@ public class CommunityIslandMenu : MonoBehaviour
         panelOutline.effectDistance = new Vector2(3f, -3f);
 
         titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.82f), new Vector2(900f, 100f), 42, FontStyle.Bold, textColor);
-        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.55f), new Vector2(1100f, 160f), 24, FontStyle.Normal, secondaryTextColor);
-        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.50f), new Vector2(1260f, 520f), 24, FontStyle.Normal, secondaryTextColor);
+        bodyText.alignment = TextAnchor.UpperLeft;
 
-        leaveButton = EnsureButton(canvasObject.transform, "LeaveButton", new Vector2(0.11f, 0.11f), new Vector2(180f, 56f), buttonColor, "Leave", 24);
+        fetchButton = EnsureButton(canvasObject.transform, "FetchButton", new Vector2(0.93f, 0.92f), new Vector2(72f, 56f), buttonColor, "↻", 28);
+        fetchButtonText = fetchButton.GetComponentInChildren<Text>(true);
+        themeButton = EnsureButton(canvasObject.transform, "ThemeButton", new Vector2(0.85f, 0.92f), new Vector2(72f, 56f), buttonColor, "☾", 28);
+        themeButtonText = themeButton.GetComponentInChildren<Text>(true);
+
+        leaveButton = EnsureButton(canvasObject.transform, "LeaveButton", new Vector2(0.11f, 0.11f), new Vector2(72f, 56f), buttonColor, "✕", 30);
         leaveButtonText = leaveButton.GetComponentInChildren<Text>(true);
 
         EnsureEventSystem();
@@ -348,6 +412,8 @@ public class CommunityIslandMenu : MonoBehaviour
         }
 
         ShowLeaveButton(false);
+        ShowFetchButton(false);
+        ShowThemeButton(false);
     }
 
     private void SetOverlayVisible(bool visible)
@@ -434,10 +500,311 @@ public class CommunityIslandMenu : MonoBehaviour
         leaveButton.gameObject.SetActive(visible);
     }
 
+    private void ShowFetchButton(bool visible)
+    {
+        if (fetchButton == null)
+        {
+            return;
+        }
+
+        fetchButton.onClick.RemoveAllListeners();
+        if (visible)
+        {
+            fetchButton.onClick.AddListener(OnFetchCoursesClicked);
+            if (fetchButtonText != null)
+            {
+                fetchButtonText.text = fetchInProgress ? "…" : "↻";
+            }
+        }
+
+        fetchButton.interactable = !fetchInProgress;
+        fetchButton.gameObject.SetActive(visible);
+    }
+
+    private void ShowThemeButton(bool visible)
+    {
+        if (themeButton == null)
+        {
+            return;
+        }
+
+        themeButton.onClick.RemoveAllListeners();
+        if (visible)
+        {
+            themeButton.onClick.AddListener(ToggleTheme);
+            UpdateThemeButtonLabel();
+        }
+
+        themeButton.gameObject.SetActive(visible);
+    }
+
     private void OnLeaveClicked()
     {
         reenterBlockedUntil = Time.time + reenterCooldown;
         leaveRequested = true;
+    }
+
+    private async void OnFetchCoursesClicked()
+    {
+        if (fetchInProgress)
+        {
+            return;
+        }
+
+        fetchInProgress = true;
+        communityBodyMessage = "Fetching community quizzes from the server...";
+        UpdateBodyText();
+        ShowFetchButton(true);
+
+        try
+        {
+            EnsurePacketSubscription();
+
+            if (GameClient.Instance == null)
+            {
+                communityBodyMessage = "Game client is not available in this scene.";
+                return;
+            }
+
+            if (!GameClient.Instance.IsConnected)
+            {
+                await GameClient.Instance.Connect();
+            }
+
+            if (!GameClient.Instance.IsConnected)
+            {
+                communityBodyMessage = "Could not connect to the server.";
+                return;
+            }
+
+            await GameClient.Instance.SendPacket(new FetchPublishedCoursesPacket());
+        }
+        catch (System.Exception ex)
+        {
+            communityBodyMessage = "Fetch failed: " + ex.Message;
+            fetchInProgress = false;
+            ShowFetchButton(true);
+            UpdateBodyText();
+        }
+    }
+
+    private void ToggleTheme()
+    {
+        useDarkTheme = !useDarkTheme;
+        ApplyTheme();
+        UpdateThemeButtonLabel();
+    }
+
+    private void UpdateThemeButtonLabel()
+    {
+        if (themeButtonText != null)
+        {
+            themeButtonText.text = useDarkTheme ? "☀" : "☾";
+        }
+    }
+
+    private void ApplyTheme()
+    {
+        if (useDarkTheme)
+        {
+            pageTint = darkPageTint;
+            panelColor = darkPanelColor;
+            textColor = darkTextColor;
+            secondaryTextColor = darkSecondaryTextColor;
+            buttonColor = darkButtonColor;
+            accentColor = darkAccentColor;
+        }
+        else
+        {
+            pageTint = lightPageTint;
+            panelColor = lightPanelColor;
+            textColor = lightTextColor;
+            secondaryTextColor = lightSecondaryTextColor;
+            buttonColor = lightButtonColor;
+            accentColor = lightAccentColor;
+        }
+
+        if (whiteImage != null)
+        {
+            whiteImage.color = new Color(pageTint.r, pageTint.g, pageTint.b, whiteImage.color.a);
+        }
+
+        if (panelImage != null)
+        {
+            panelImage.color = new Color(panelColor.r, panelColor.g, panelColor.b, panelImage.color.a <= 0f ? 0f : panelColor.a * Mathf.Clamp01(panelImage.color.a));
+            Outline panelOutline = panelImage.GetComponent<Outline>();
+            if (panelOutline != null)
+            {
+                panelOutline.effectColor = new Color(accentColor.r, accentColor.g, accentColor.b, 0.16f);
+            }
+        }
+
+        if (titleText != null)
+        {
+            titleText.color = new Color(textColor.r, textColor.g, textColor.b, titleText.color.a <= 0f ? 1f : titleText.color.a);
+        }
+
+        if (bodyText != null)
+        {
+            bodyText.color = new Color(secondaryTextColor.r, secondaryTextColor.g, secondaryTextColor.b, bodyText.color.a <= 0f ? 1f : bodyText.color.a);
+        }
+
+        ApplyButtonTheme(fetchButton, fetchButtonText, fetchInProgress ? "…" : "↻");
+        ApplyButtonTheme(themeButton, themeButtonText, useDarkTheme ? "☀" : "☾");
+        ApplyButtonTheme(leaveButton, leaveButtonText, "✕");
+    }
+
+    private void ApplyButtonTheme(Button button, Text label, string buttonLabel)
+    {
+        if (button == null)
+        {
+            return;
+        }
+
+        Image image = button.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = buttonColor;
+        }
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = buttonColor;
+        colors.highlightedColor = new Color(Mathf.Clamp01(buttonColor.r + 0.08f), Mathf.Clamp01(buttonColor.g + 0.08f), Mathf.Clamp01(buttonColor.b + 0.08f), buttonColor.a);
+        colors.pressedColor = new Color(Mathf.Clamp01(buttonColor.r - 0.08f), Mathf.Clamp01(buttonColor.g - 0.08f), Mathf.Clamp01(buttonColor.b - 0.08f), buttonColor.a);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(buttonColor.r, buttonColor.g, buttonColor.b, buttonColor.a * 0.35f);
+        button.colors = colors;
+
+        if (label != null)
+        {
+            label.text = buttonLabel;
+            label.color = useDarkTheme ? darkTextColor : Color.white;
+        }
+    }
+
+    private void UpdateBodyText()
+    {
+        if (bodyText != null)
+        {
+            bodyText.text = communityBodyMessage;
+        }
+    }
+
+    private void EnsurePacketSubscription()
+    {
+        if (packetSubscribed || GameClient.Instance == null)
+        {
+            return;
+        }
+
+        GameClient.Instance.OnPacketReceived += OnPacketReceived;
+        packetSubscribed = true;
+    }
+
+    private void UnsubscribeFromPackets()
+    {
+        if (!packetSubscribed || GameClient.Instance == null)
+        {
+            return;
+        }
+
+        GameClient.Instance.OnPacketReceived -= OnPacketReceived;
+        packetSubscribed = false;
+    }
+
+    private void OnPacketReceived(Packet packet)
+    {
+        if (packet is FetchPublishedCoursesResponsePacket coursesPacket)
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() =>
+            {
+                fetchInProgress = false;
+                communityBodyMessage = BuildCourseListText(coursesPacket.CoursesJson);
+                ShowFetchButton(true);
+                UpdateBodyText();
+            });
+            return;
+        }
+
+        if (packet is ActionResponsePacket actionPacket && actionPacket.RequestPacketId == 36 && !actionPacket.Success)
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() =>
+            {
+                fetchInProgress = false;
+                communityBodyMessage = "Fetch failed: " + (string.IsNullOrWhiteSpace(actionPacket.Message) ? "Unknown error." : actionPacket.Message);
+                ShowFetchButton(true);
+                UpdateBodyText();
+            });
+        }
+    }
+
+    private string BuildCourseListText(string coursesJson)
+    {
+        PublishedCourseSummaryList payload = ParsePublishedCourses(coursesJson);
+        if (payload == null || payload.items == null || payload.items.Length == 0)
+        {
+            return "No published community quizzes were returned.";
+        }
+
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        builder.AppendLine("Community quizzes:");
+        builder.AppendLine();
+
+        for (int i = 0; i < payload.items.Length; i++)
+        {
+            PublishedCourseSummary course = payload.items[i];
+            builder.Append(i + 1);
+            builder.Append(". ");
+            builder.Append(string.IsNullOrWhiteSpace(course.title) ? "Untitled course" : course.title);
+            builder.Append(" | ");
+            builder.Append(string.IsNullOrWhiteSpace(course.language) ? "general" : course.language);
+            builder.Append(" | ");
+            builder.Append(string.IsNullOrWhiteSpace(course.difficulty) ? "beginner" : course.difficulty);
+            builder.Append(" | ");
+            builder.Append(course.questionCount);
+            builder.Append(" questions");
+            builder.Append(" | ");
+            builder.Append(course.pointReward);
+            builder.Append(" pts");
+
+            if (course.completed)
+            {
+                builder.Append(" | completed");
+            }
+
+            if (!string.IsNullOrWhiteSpace(course.summary))
+            {
+                builder.AppendLine();
+                builder.Append("   ");
+                builder.Append(course.summary);
+            }
+
+            if (i < payload.items.Length - 1)
+            {
+                builder.AppendLine();
+                builder.AppendLine();
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private PublishedCourseSummaryList ParsePublishedCourses(string coursesJson)
+    {
+        if (string.IsNullOrWhiteSpace(coursesJson))
+        {
+            return new PublishedCourseSummaryList { items = new PublishedCourseSummary[0] };
+        }
+
+        try
+        {
+            return JsonUtility.FromJson<PublishedCourseSummaryList>("{\"items\":" + coursesJson + "}");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to parse published courses JSON: " + ex.Message);
+            return new PublishedCourseSummaryList { items = new PublishedCourseSummary[0] };
+        }
     }
 
     private IEnumerator FadeImage(Image image, float from, float to, float duration, Color color)
@@ -622,6 +989,28 @@ public class CommunityIslandMenu : MonoBehaviour
     {
         t = Mathf.Clamp01(t);
         return 1f - Mathf.Pow(1f - t, 3f);
+    }
+
+    [System.Serializable]
+    private class PublishedCourseSummaryList
+    {
+        public PublishedCourseSummary[] items;
+    }
+
+    [System.Serializable]
+    private class PublishedCourseSummary
+    {
+        public long id;
+        public string title;
+        public string acronym;
+        public string language;
+        public string difficulty;
+        public string summary;
+        public int pointReward;
+        public bool published;
+        public int questionCount;
+        public bool completed;
+        public string updatedAt;
     }
 }
 
