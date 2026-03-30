@@ -172,6 +172,62 @@ public class LearningProfileService {
         return summary.toString();
     }
 
+    @Transactional(readOnly = true)
+    public String buildAiHelpProfileContext(final Long childId, final String language) {
+        if (childId == null) {
+            return "";
+        }
+
+        Child child = childRepository.findById(childId).orElse(null);
+        if (child == null) {
+            return "";
+        }
+
+        Map<String, Object> gameStats = child.getGameStats();
+        if (gameStats == null) {
+            return "No tracked progress yet.";
+        }
+
+        String profileKey = null;
+        if (language != null) {
+            profileKey = language.equals("cpp") ? "aiProfileCpp" : language.equals("python") ? "aiProfilePython" : null;
+        }
+
+        Map<String, Object> aiProfile = profileKey != null ? safeMap(gameStats.get(profileKey)) : Collections.emptyMap();
+        Map<String, Object> generalProfile = safeMap(gameStats.get("aiProfileGeneral"));
+
+        int specificCorrect = getInt(aiProfile.get("correctCount"));
+        int specificIncorrect = getInt(aiProfile.get("incorrectCount"));
+        int specificTotal = specificCorrect + specificIncorrect;
+        int generalCorrect = getInt(generalProfile.get("correctCount"));
+        int generalIncorrect = getInt(generalProfile.get("incorrectCount"));
+        int generalTotal = generalCorrect + generalIncorrect;
+
+        StringBuilder context = new StringBuilder();
+        context.append("Child: ").append(child.getName() == null || child.getName().isBlank() ? "unknown" : child.getName()).append('\n');
+        context.append("Current track: ").append(language == null ? "general" : language).append('\n');
+        context.append("Track summary: ").append(buildProfileSummary(childId, language)).append('\n');
+        context.append("Track stats: ")
+                .append("correct=").append(specificCorrect)
+                .append(", incorrect=").append(specificIncorrect)
+                .append(", total=").append(specificTotal)
+                .append(", hintsUsed=").append(getInt(aiProfile.get("hintsUsed")))
+                .append(", chatTurns=").append(getInt(aiProfile.get("chatTurns")))
+                .append('\n');
+        context.append("Overall stats: ")
+                .append("correct=").append(generalCorrect)
+                .append(", incorrect=").append(generalIncorrect)
+                .append(", total=").append(generalTotal)
+                .append(", totalInteractions=").append(getInt(generalProfile.get("totalInteractions")))
+                .append('\n');
+        appendListLine(context, "Strengths", topConcepts(aiProfile, false));
+        appendListLine(context, "Struggles", topConcepts(aiProfile, true));
+        appendListLine(context, "Common mistakes", topMistakes(aiProfile));
+        appendListLine(context, "Frequent help topics", topHelpTopics(aiProfile));
+        appendRecentEventsLine(context, aiProfile);
+        return context.toString().trim();
+    }
+
     @Transactional
     public void ensureAiSummaries(final Long childId) {
         if (childId == null) {
@@ -255,7 +311,7 @@ public class LearningProfileService {
         }
 
         String prompt = buildSummaryPrompt(profile, label);
-        io.github.kawase.utility.GeminiAI ai = new io.github.kawase.utility.GeminiAI();
+        io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
         String summary = ai.generate(prompt);
         if (summary == null) {
             return;
@@ -321,6 +377,38 @@ public class LearningProfileService {
             if (results.size() >= 3) break;
         }
         return results;
+    }
+
+    private void appendListLine(final StringBuilder builder, final String label, final List<String> values) {
+        builder.append(label).append(": ");
+        builder.append(values.isEmpty() ? "none yet" : String.join(", ", values));
+        builder.append('\n');
+    }
+
+    private void appendRecentEventsLine(final StringBuilder builder, final Map<String, Object> profile) {
+        Object recentValue = profile.get("recentEvents");
+        if (!(recentValue instanceof List<?> recentEvents) || recentEvents.isEmpty()) {
+            builder.append("Recent events: none yet");
+            return;
+        }
+
+        List<String> compactEvents = new ArrayList<>();
+        int start = Math.max(0, recentEvents.size() - 3);
+        for (int i = start; i < recentEvents.size(); i++) {
+            Object item = recentEvents.get(i);
+            if (!(item instanceof Map<?, ?> rawMap)) {
+                continue;
+            }
+
+            String type = rawMap.get("type") == null ? "unknown" : rawMap.get("type").toString();
+            String topic = rawMap.get("topic") == null ? "general" : rawMap.get("topic").toString();
+            String correctness = rawMap.get("correctness") == null ? "unknown" : rawMap.get("correctness").toString();
+            String detail = rawMap.get("detail") == null ? "" : truncate(rawMap.get("detail").toString(), 80);
+            compactEvents.add(type + " on " + topic + " (" + correctness + ")" + (detail.isBlank() ? "" : ": " + detail));
+        }
+
+        builder.append("Recent events: ");
+        builder.append(compactEvents.isEmpty() ? "none yet" : String.join(" | ", compactEvents));
     }
 
     private String deriveTopic(final String context, final String question) {
