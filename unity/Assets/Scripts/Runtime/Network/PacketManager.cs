@@ -30,6 +30,11 @@ namespace Mentora.Network
                 33 => new RecordLearningEventPacket(),
                 34 => new ExecutePythonCodePacket(),
                 35 => new ExecutePythonCodeResponsePacket(),
+                36 => new FetchPublishedCoursesPacket(),
+                37 => new FetchPublishedCoursesResponsePacket(),
+                38 => new FetchCourseDetailPacket(),
+                39 => new FetchCourseDetailResponsePacket(),
+                40 => new SubmitCourseCompletionPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -260,6 +265,80 @@ namespace Mentora.Network
         {
             Output = ReadString(reader);
             Error = ReadString(reader);
+        }
+    }
+
+    public class FetchPublishedCoursesPacket : Packet
+    {
+        public FetchPublishedCoursesPacket() : base(36) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader) { }
+    }
+
+    public class FetchPublishedCoursesResponsePacket : Packet
+    {
+        public string CoursesJson;
+        public FetchPublishedCoursesResponsePacket() : base(37) { }
+        public FetchPublishedCoursesResponsePacket(string coursesJson) : base(37) { CoursesJson = coursesJson; }
+        protected override void Write(BinaryWriter writer) { PutString(writer, CoursesJson ?? "[]"); }
+        protected override void Read(BinaryReader reader) { CoursesJson = ReadString(reader); }
+    }
+
+    public class FetchCourseDetailPacket : Packet
+    {
+        public long CourseId;
+        public FetchCourseDetailPacket(long courseId) : base(38) { CourseId = courseId; }
+        public FetchCourseDetailPacket() : base(38) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            byte[] bytes = BitConverter.GetBytes(CourseId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            writer.Write(bytes);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] bytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            CourseId = BitConverter.ToInt64(bytes, 0);
+        }
+    }
+
+    public class FetchCourseDetailResponsePacket : Packet
+    {
+        public string CourseJson;
+        public FetchCourseDetailResponsePacket() : base(39) { }
+        public FetchCourseDetailResponsePacket(string courseJson) : base(39) { CourseJson = courseJson; }
+        protected override void Write(BinaryWriter writer) { PutString(writer, CourseJson ?? "{}"); }
+        protected override void Read(BinaryReader reader) { CourseJson = ReadString(reader); }
+    }
+
+    public class SubmitCourseCompletionPacket : Packet
+    {
+        public long CourseId;
+        public int Score;
+        public int TotalQuestions;
+        public SubmitCourseCompletionPacket() : base(40) { }
+        public SubmitCourseCompletionPacket(long courseId, int score, int totalQuestions) : base(40)
+        {
+            CourseId = courseId;
+            Score = score;
+            TotalQuestions = totalQuestions;
+        }
+        protected override void Write(BinaryWriter writer)
+        {
+            byte[] bytes = BitConverter.GetBytes(CourseId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            writer.Write(bytes);
+            WriteInt32BigEndian(writer, Score);
+            WriteInt32BigEndian(writer, TotalQuestions);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] bytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            CourseId = BitConverter.ToInt64(bytes, 0);
+            Score = ReadInt32BigEndian(reader);
+            TotalQuestions = ReadInt32BigEndian(reader);
         }
     }
 

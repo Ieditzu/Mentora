@@ -7,6 +7,11 @@ import io.github.kawase.packet.impl.ai.AiResponsePacket;
 import io.github.kawase.packet.impl.ai.AskAiPacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
+import io.github.kawase.packet.impl.course.FetchCourseDetailPacket;
+import io.github.kawase.packet.impl.course.FetchCourseDetailResponsePacket;
+import io.github.kawase.packet.impl.course.FetchPublishedCoursesPacket;
+import io.github.kawase.packet.impl.course.FetchPublishedCoursesResponsePacket;
+import io.github.kawase.packet.impl.course.SubmitCourseCompletionPacket;
 import io.github.kawase.packet.impl.core.*;
 import io.github.kawase.packet.impl.game.*;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodePacket;
@@ -188,6 +193,39 @@ public class ClientHandler {
                         dtos.add(new FetchTasksResponsePacket.TaskDto(task.getId(), task.getTitle(), task.getPointValue()));
                     }
                     connection.send(new FetchTasksResponsePacket(dtos).encode());
+                }
+
+                case FetchPublishedCoursesPacket fetchPublishedCoursesPacket -> {
+                    final var courses = Server.getInstance().getCourseService().getPublishedCoursesForChild(client.getChildId());
+                    String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(courses);
+                    connection.send(new FetchPublishedCoursesResponsePacket(json).encode());
+                }
+
+                case FetchCourseDetailPacket fetchCourseDetailPacket -> {
+                    final var course = Server.getInstance().getCourseService()
+                            .getPublishedCourseDetail(fetchCourseDetailPacket.getCourseId(), client.getChildId());
+                    String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(course);
+                    connection.send(new FetchCourseDetailResponsePacket(json).encode());
+                }
+
+                case SubmitCourseCompletionPacket submitCourseCompletionPacket -> {
+                    if (client.getChildId() == null) {
+                        throw new RuntimeException("Not logged in as a child.");
+                    }
+
+                    final var progress = Server.getInstance().getCourseService().recordCourseCompletion(
+                            client.getChildId(),
+                            submitCourseCompletionPacket.getCourseId(),
+                            submitCourseCompletionPacket.getScore(),
+                            submitCourseCompletionPacket.getTotalQuestions()
+                    );
+
+                    connection.send(new ActionResponsePacket(
+                            packet.getId(),
+                            true,
+                            "Course progress saved",
+                            progress.getId() == null ? -1 : progress.getId()
+                    ).encode());
                 }
 
                 case FetchChildStatsPacket fetchChildStatsPacket -> {

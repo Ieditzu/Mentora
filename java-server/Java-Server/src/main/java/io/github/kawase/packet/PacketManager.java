@@ -5,6 +5,11 @@ import io.github.kawase.packet.impl.ai.AiResponsePacket;
 import io.github.kawase.packet.impl.ai.AskAiPacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
+import io.github.kawase.packet.impl.course.FetchCourseDetailPacket;
+import io.github.kawase.packet.impl.course.FetchCourseDetailResponsePacket;
+import io.github.kawase.packet.impl.course.FetchPublishedCoursesPacket;
+import io.github.kawase.packet.impl.course.FetchPublishedCoursesResponsePacket;
+import io.github.kawase.packet.impl.course.SubmitCourseCompletionPacket;
 import io.github.kawase.packet.impl.core.*;
 import io.github.kawase.packet.impl.game.*;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodePacket;
@@ -49,6 +54,11 @@ public class PacketManager {
             case 33 -> new RecordLearningEventPacket();
             case 34 -> new ExecutePythonCodePacket();
             case 35 -> new ExecutePythonCodeResponsePacket();
+            case 36 -> new FetchPublishedCoursesPacket();
+            case 37 -> new FetchPublishedCoursesResponsePacket();
+            case 38 -> new FetchCourseDetailPacket();
+            case 39 -> new FetchCourseDetailResponsePacket();
+            case 40 -> new SubmitCourseCompletionPacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };
