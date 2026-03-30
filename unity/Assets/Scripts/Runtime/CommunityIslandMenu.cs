@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -40,6 +41,9 @@ public class CommunityIslandMenu : MonoBehaviour
     private bool running;
     private bool leaveRequested;
     private bool overlayInteractionActive;
+    private bool requireExitBeforeReopen;
+    private float reenterBlockedUntil;
+    private readonly HashSet<Collider> overlappingPlayerColliders = new HashSet<Collider>();
 
     private void Awake()
     {
@@ -189,17 +193,38 @@ public class CommunityIslandMenu : MonoBehaviour
 
     public void HandleTriggerEnter(Collider other)
     {
-        if (running)
-        {
-            return;
-        }
-
         if (!TryGetPlayer(other, out BeanController sphere, out FirstPersonControllerSimple fps))
         {
             return;
         }
 
+        overlappingPlayerColliders.Add(other);
+
+        if (running)
+        {
+            return;
+        }
+
+        if (requireExitBeforeReopen || Time.time < reenterBlockedUntil)
+        {
+            return;
+        }
+
         StartCoroutine(PlaySequence(sphere, fps));
+    }
+
+    public void HandleTriggerExit(Collider other)
+    {
+        if (!TryGetPlayer(other, out _, out _))
+        {
+            return;
+        }
+
+        overlappingPlayerColliders.Remove(other);
+        if (overlappingPlayerColliders.Count == 0)
+        {
+            requireExitBeforeReopen = false;
+        }
     }
 
     private IEnumerator PlaySequence(BeanController sphere, FirstPersonControllerSimple fps)
@@ -245,10 +270,13 @@ public class CommunityIslandMenu : MonoBehaviour
     private IEnumerator ReenableTriggerAfterDelay()
     {
         yield return new WaitForSeconds(reenterCooldown);
+        requireExitBeforeReopen = overlappingPlayerColliders.Count > 0;
+
         if (triggerVolume != null)
         {
             triggerVolume.enabled = true;
         }
+
         running = false;
     }
 
@@ -411,6 +439,7 @@ public class CommunityIslandMenu : MonoBehaviour
 
     private void OnLeaveClicked()
     {
+        reenterBlockedUntil = Time.time + reenterCooldown;
         leaveRequested = true;
     }
 
@@ -709,6 +738,14 @@ public class CommunityIslandMenuTriggerRelay : MonoBehaviour
         if (owner != null)
         {
             owner.HandleTriggerEnter(other);
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (owner != null)
+        {
+            owner.HandleTriggerExit(other);
         }
     }
 }
