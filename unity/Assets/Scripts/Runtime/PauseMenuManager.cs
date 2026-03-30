@@ -34,6 +34,7 @@ public class PauseMenuManager : MonoBehaviour
     private Text qrStatusText;
     private RawImage qrCodeImage;
     private Button qrButton;
+    private Button logoutButton;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
@@ -154,7 +155,7 @@ public class PauseMenuManager : MonoBehaviour
                     _ = GameClient.Instance.SendPacket(new FetchTasksPacket());
                     _ = GameClient.Instance.SendPacket(new FetchGoalsPacket(-1));
 
-                    if (qrButton != null) qrButton.interactable = false;
+                    RefreshLoginButtons();
                     if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
                 }
                 else
@@ -362,11 +363,11 @@ public class PauseMenuManager : MonoBehaviour
         qrButton = CreateButton(qrSection.transform, "QrButton", "Generate QR Login", new Vector2(0f, -90f), new Color(0.4f, 0.2f, 0.8f, 1f));
         qrButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 36f);
         qrButton.onClick.AddListener(GenerateQrLogin);
-        if (loggedInChildId != -1) qrButton.interactable = false;
 
-        Button logoutButton = CreateButton(qrSection.transform, "LogoutButton", "Log Out", new Vector2(0f, -140f), new Color(0.65f, 0.22f, 0.22f, 1f));
+        logoutButton = CreateButton(qrSection.transform, "LogoutButton", "Log Out", new Vector2(0f, -140f), new Color(0.65f, 0.22f, 0.22f, 1f));
         logoutButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 36f);
         logoutButton.onClick.AddListener(LogoutAccount);
+        RefreshLoginButtons();
 
         // Progress bar + streak row (bottom of main panel)
         GameObject bottomBar = CreateUiObject("BottomBar", mainPanel.transform);
@@ -674,7 +675,7 @@ public class PauseMenuManager : MonoBehaviour
             qrCodeImage.texture = null;
             qrCodeImage.gameObject.SetActive(false);
         }
-        if (qrButton != null) qrButton.interactable = true;
+        RefreshLoginButtons();
         try
         {
             if (File.Exists(SessionFilePath)) File.Delete(SessionFilePath);
@@ -801,6 +802,23 @@ public class PauseMenuManager : MonoBehaviour
         }
         if (sensitivitySlider != null) return Mathf.Clamp(sensitivitySlider.value, 0.2f, 6f);
         return PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f);
+    }
+
+    private void RefreshLoginButtons()
+    {
+        bool isLoggedIn = loggedInChildId != -1;
+
+        if (qrButton != null)
+        {
+            qrButton.gameObject.SetActive(!isLoggedIn);
+            qrButton.interactable = !isLoggedIn;
+        }
+
+        if (logoutButton != null)
+        {
+            logoutButton.gameObject.SetActive(isLoggedIn);
+            logoutButton.interactable = isLoggedIn;
+        }
     }
 
     private void UpdateSensitivityLabel(float v) { if (sensitivityValueText != null) sensitivityValueText.text = v.ToString("0.00"); }

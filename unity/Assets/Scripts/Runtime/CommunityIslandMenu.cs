@@ -304,17 +304,14 @@ public class CommunityIslandMenu : MonoBehaviour
 
         panelImage = EnsureImage(canvasObject.transform, "CommunityPanel", panelColor);
         RectTransform panelRect = panelImage.rectTransform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(860f, 520f);
+        StretchFullscreen(panelRect);
 
         Outline panelOutline = panelImage.GetComponent<Outline>() ?? panelImage.gameObject.AddComponent<Outline>();
         panelOutline.effectColor = new Color(accentColor.r, accentColor.g, accentColor.b, 0.16f);
         panelOutline.effectDistance = new Vector2(3f, -3f);
 
-        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.71f), new Vector2(720f, 84f), 42, FontStyle.Bold, textColor);
-        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.5f), new Vector2(720f, 120f), 24, FontStyle.Normal, secondaryTextColor);
+        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.82f), new Vector2(900f, 100f), 42, FontStyle.Bold, textColor);
+        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.55f), new Vector2(1100f, 160f), 24, FontStyle.Normal, secondaryTextColor);
         bodyText.alignment = TextAnchor.MiddleCenter;
 
         leaveButton = EnsureButton(canvasObject.transform, "LeaveButton", new Vector2(0.11f, 0.11f), new Vector2(180f, 56f), buttonColor, "Leave", 24);
