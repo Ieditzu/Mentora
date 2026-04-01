@@ -1,6 +1,6 @@
 import "./styles.css";
 
-const API_BASE = (import.meta.env.VITE_API_BASE || "https://neurokey.serenityutils.club").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE || "https://neuro.serenityutils.club").replace(/\/$/, "");
 
 const state = {
   token: localStorage.getItem("mentora_creator_token") || "",
