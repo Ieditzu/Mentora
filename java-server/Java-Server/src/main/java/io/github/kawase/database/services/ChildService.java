@@ -12,6 +12,8 @@ import java.time.LocalDate;
 @Service
 @RequiredArgsConstructor
 public class ChildService {
+    private static final String DEV_PARENT_EMAIL = "mentora-dev-profiles@local";
+    private static final String DEV_PARENT_PASSWORD_HASH = "dev-profiles";
 
     private final ChildRepository childRepository;
     private final ParentRepository parentRepository;
@@ -30,6 +32,26 @@ public class ChildService {
 
     public java.util.Optional<Child> findById(final Long id) {
         return childRepository.findById(id);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<Child> findAllChildren() {
+        return childRepository.findAll();
+    }
+
+    @Transactional
+    public Child createDevChildProfile(final String childName) {
+        Parent parent = parentRepository.findByEmail(DEV_PARENT_EMAIL).orElseGet(() -> {
+            Parent created = new Parent();
+            created.setEmail(DEV_PARENT_EMAIL);
+            created.setPasswordHash(DEV_PARENT_PASSWORD_HASH);
+            return parentRepository.save(created);
+        });
+
+        Child newChild = new Child();
+        newChild.setName(childName);
+        newChild.setParent(parent);
+        return childRepository.save(newChild);
     }
 
     @Transactional(readOnly = true)

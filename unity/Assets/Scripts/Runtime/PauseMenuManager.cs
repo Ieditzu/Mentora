@@ -38,12 +38,14 @@ public class PauseMenuManager : MonoBehaviour
     private Button qrButton;
     private Button logoutButton;
     private Button devOptionsButton;
+    private Text devAuthStatusText;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
 
     private GameObject taskListContainer;
     private List<FetchTasksResponsePacket.TaskDto> availableTasks = new List<FetchTasksResponsePacket.TaskDto>();
+    private List<FetchChildrenResponsePacket.ChildDto> availableProfiles = new List<FetchChildrenResponsePacket.ChildDto>();
 
     private GameObject goalListContainer;
     private List<FetchGoalsResponsePacket.GoalDto> childGoals = new List<FetchGoalsResponsePacket.GoalDto>();
@@ -58,6 +60,7 @@ public class PauseMenuManager : MonoBehaviour
     private int serverTotalTaskCount;
     private bool devOptionsUnlocked;
     private int devUnlockProgress;
+    private int devProfileCounter = 1;
 
     private string SessionFilePath => Path.Combine(Application.persistentDataPath, "session.json");
 
@@ -190,8 +193,25 @@ public class PauseMenuManager : MonoBehaviour
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() => {
                 availableTasks = tasksResp.Tasks;
-                RebuildTaskList();
                 UpdateProgressBar();
+            });
+        }
+        else if (packet is FetchAllChildrenResponsePacket childrenResp)
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                availableProfiles = new List<FetchChildrenResponsePacket.ChildDto>();
+                foreach (var child in childrenResp.Children)
+                {
+                    availableProfiles.Add(new FetchChildrenResponsePacket.ChildDto
+                    {
+                        Id = child.Id,
+                        Name = child.Name,
+                        TotalPoints = child.TotalPoints,
+                        IsOnline = child.IsOnline,
+                        ProfilePicture = child.ProfilePicture
+                    });
+                }
+                RebuildTaskList();
             });
         }
         else if (packet is FetchGoalsResponsePacket goalsResp)
@@ -203,6 +223,19 @@ public class PauseMenuManager : MonoBehaviour
         }
         else if (packet is ActionResponsePacket actionResp)
         {
+            if (actionResp.RequestPacketId == 4 && actionResp.Success)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                    FetchProfilesForDevOptions();
+                });
+            }
+            else if (actionResp.RequestPacketId == 44 && actionResp.Success)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                    FetchProfilesForDevOptions();
+                });
+            }
+
             if (actionResp.RequestPacketId == 8 && actionResp.Success)
             {
                 UnityMainThreadDispatcher.Instance().Enqueue(() => {
@@ -460,7 +493,20 @@ public class PauseMenuManager : MonoBehaviour
 
         CreateText("TasksTitle", tasksPanel.transform, "DEV OPTIONS", 26, FontStyle.Bold, TextAnchor.MiddleCenter, Color.cyan, new Vector2(0, 190), new Vector2(360, 48));
 
-        taskListContainer = CreateScrollableList("TaskScroll", tasksPanel.transform, new Vector2(520, 310), new Vector2(0, -10));
+        devAuthStatusText = CreateText("DevAuthStatus", tasksPanel.transform, "Browse and enter any child profile from the server", 13, FontStyle.Italic, TextAnchor.MiddleCenter,
+            new Color(0.8f, 0.9f, 1f), new Vector2(0, 152), new Vector2(420, 24));
+
+        Button createProfileBtn = CreateButton(tasksPanel.transform, "CreateProfileBtn", "Create Profile", new Vector2(-130, 92), new Color(0.18f, 0.55f, 0.80f, 1f));
+        createProfileBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 36);
+        createProfileBtn.GetComponentInChildren<Text>().fontSize = 14;
+        createProfileBtn.onClick.AddListener(CreateDevProfile);
+
+        Button refreshProfilesBtn = CreateButton(tasksPanel.transform, "RefreshProfilesBtn", "Refresh", new Vector2(130, 92), new Color(0.28f, 0.42f, 0.62f, 1f));
+        refreshProfilesBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(140, 36);
+        refreshProfilesBtn.GetComponentInChildren<Text>().fontSize = 14;
+        refreshProfilesBtn.onClick.AddListener(FetchProfilesForDevOptions);
+
+        taskListContainer = CreateScrollableList("TaskScroll", tasksPanel.transform, new Vector2(520, 250), new Vector2(0, -20));
 
         Button backBtn = CreateButton(tasksPanel.transform, "BackBtn", "Back", new Vector2(0, -190), new Color(0.4f, 0.4f, 0.4f));
         backBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180, 38);
@@ -504,6 +550,10 @@ public class PauseMenuManager : MonoBehaviour
         if (tasksPanel != null) tasksPanel.SetActive(false);
         if (goalsPanel != null) goalsPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
+        if (panel == tasksPanel)
+        {
+            FetchProfilesForDevOptions();
+        }
     }
 
     private void RebuildTaskList()
@@ -511,46 +561,47 @@ public class PauseMenuManager : MonoBehaviour
         if (taskListContainer == null) return;
         foreach (Transform child in taskListContainer.transform) Destroy(child.gameObject);
 
-        float itemHeight = 50f;
+        float itemHeight = 56f;
         float spacing = 4f;
-        float totalHeight = availableTasks.Count * (itemHeight + spacing);
+        if (availableProfiles.Count == 0)
+        {
+            RectTransform emptyRect = taskListContainer.GetComponent<RectTransform>();
+            emptyRect.sizeDelta = new Vector2(emptyRect.sizeDelta.x, 70f);
+            CreateText("EmptyProfiles", taskListContainer.transform, "No child profiles found on the server.", 15, FontStyle.Italic, TextAnchor.MiddleCenter,
+                new Color(1f, 1f, 1f, 0.65f), new Vector2(0f, -24f), new Vector2(420f, 32f));
+            return;
+        }
+
+        float totalHeight = availableProfiles.Count * (itemHeight + spacing);
         RectTransform contentRect = taskListContainer.GetComponent<RectTransform>();
         contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, totalHeight);
 
         float y = -spacing;
-        foreach (var task in availableTasks)
+        foreach (var profile in availableProfiles)
         {
-            bool isCompleted = completedTaskTitles.Contains(task.Title);
-
-            GameObject item = CreateUiObject("TaskItem_" + task.Id, taskListContainer.transform);
+            bool isCurrent = profile.Id == loggedInChildId;
+            GameObject item = CreateUiObject("TaskItem_" + profile.Id, taskListContainer.transform);
             RectTransform iRect = item.GetComponent<RectTransform>();
             iRect.anchorMin = new Vector2(0, 1); iRect.anchorMax = new Vector2(1, 1);
             iRect.pivot = new Vector2(0.5f, 1);
             iRect.sizeDelta = new Vector2(-20, itemHeight);
             iRect.anchoredPosition = new Vector2(0, y);
-            item.AddComponent<Image>().color = isCompleted
+            item.AddComponent<Image>().color = isCurrent
                 ? new Color(0.15f, 0.35f, 0.15f, 0.35f)
-                : new Color(1, 1, 1, 0.05f);
+                : new Color(1f, 1f, 1f, 0.05f);
 
-            string label = (isCompleted ? "[DONE] " : "") + task.Title + " (" + task.Points + " pts)";
-            CreateText("Label", item.transform, label, 14, FontStyle.Normal, TextAnchor.MiddleLeft,
-                isCompleted ? new Color(0.6f, 1f, 0.6f) : Color.white, new Vector2(-50, 0), new Vector2(340, 40));
+            string stateLabel = isCurrent ? "[CURRENT] " : profile.IsOnline ? "[ONLINE] " : string.Empty;
+            CreateText("Label", item.transform, stateLabel + profile.Name, 14, FontStyle.Bold, TextAnchor.MiddleLeft,
+                isCurrent ? new Color(0.6f, 1f, 0.6f) : Color.white, new Vector2(-120, 10), new Vector2(300, 24));
+            CreateText("Points", item.transform, profile.TotalPoints + " pts", 12, FontStyle.Italic, TextAnchor.MiddleLeft,
+                new Color(0.8f, 0.9f, 1f), new Vector2(-120, -12), new Vector2(220, 20));
 
-            if (!isCompleted)
-            {
-                Button completeBtn = CreateButton(item.transform, "Btn", "Complete", new Vector2(200, 0), new Color(0.2f, 0.6f, 0.3f));
-                completeBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 34);
-                completeBtn.GetComponentInChildren<Text>().fontSize = 13;
-                long tid = task.Id;
-                string tTitle = task.Title;
-                completeBtn.onClick.AddListener(() => {
-                    if (loggedInChildId != -1)
-                    {
-                        completedTaskTitles.Add(tTitle);
-                        _ = GameClient.Instance.SendPacket(new CompleteTaskPacket(loggedInChildId, tid));
-                    }
-                });
-            }
+            Button enterBtn = CreateButton(item.transform, "EnterBtn", isCurrent ? "Current" : "Enter", new Vector2(180, 0), isCurrent ? new Color(0.25f, 0.45f, 0.28f) : new Color(0.2f, 0.6f, 0.3f));
+            enterBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(100, 34);
+            enterBtn.GetComponentInChildren<Text>().fontSize = 13;
+            enterBtn.interactable = !isCurrent;
+            long profileId = profile.Id;
+            enterBtn.onClick.AddListener(() => SwitchToProfile(profileId));
             y -= (itemHeight + spacing);
         }
     }
@@ -708,6 +759,7 @@ public class PauseMenuManager : MonoBehaviour
             canvas.gameObject.SetActive(true);
             ShowPanel(mainPanel);
             RefreshDevOptionsVisibility();
+            devUnlockProgress = 0;
             if (qrCodeImage != null && qrCodeImage.texture != null && loggedInChildId == -1) qrCodeImage.gameObject.SetActive(true);
             PlayMenuAnimation(true);
         }
@@ -912,6 +964,42 @@ public class PauseMenuManager : MonoBehaviour
         }
     }
 
+    private void CreateDevProfile()
+    {
+        if (GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            return;
+        }
+
+        string profileName = "DevKid " + devProfileCounter.ToString("000");
+        devProfileCounter++;
+        _ = GameClient.Instance.SendPacket(new DevCreateChildProfilePacket(profileName));
+    }
+
+    private void FetchProfilesForDevOptions()
+    {
+        if (!devOptionsUnlocked || !IsGamePaused || GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            return;
+        }
+
+        _ = GameClient.Instance.SendPacket(new FetchAllChildrenPacket());
+    }
+
+    private void SwitchToProfile(long childId)
+    {
+        if (GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            return;
+        }
+
+        if (devAuthStatusText != null)
+        {
+            devAuthStatusText.text = "Switching profile...";
+        }
+        _ = GameClient.Instance.SendPacket(new DevLoginAsChildPacket(childId));
+    }
+
     private static void EnsureEventSystem()
     {
         if (FindObjectOfType<EventSystem>() != null) return;
@@ -987,4 +1075,5 @@ public class PauseMenuManager : MonoBehaviour
         CreateText(name + "L", obj.transform, label, 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(360, 36));
         return b;
     }
+
 }

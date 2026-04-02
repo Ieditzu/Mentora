@@ -299,6 +299,56 @@ public class ClientHandler {
                     connection.send(new FetchChildrenResponsePacket(dtos).encode());
                 }
 
+                case FetchAllChildrenPacket fetchAllChildrenPacket -> {
+                    System.out.println("Fetch All Children");
+                    final var children = Server.getInstance().getChildService().findAllChildren();
+                    final var dtos = new java.util.ArrayList<FetchAllChildrenResponsePacket.ChildDto>();
+
+                    java.util.Set<Long> onlineChildIds = new java.util.HashSet<>();
+                    for (var entry : Server.getInstance().getActiveConnections().keySet()) {
+                        if (entry.getChildId() != null) {
+                            onlineChildIds.add(entry.getChildId());
+                        }
+                    }
+
+                    for (final var child : children) {
+                        boolean isOnline = onlineChildIds.contains(child.getId());
+                        dtos.add(new FetchAllChildrenResponsePacket.ChildDto(
+                                child.getId(),
+                                child.getName(),
+                                child.getTotalPoints(),
+                                isOnline,
+                                child.getProfilePicture()
+                        ));
+                    }
+
+                    connection.send(new FetchAllChildrenResponsePacket(dtos).encode());
+                }
+
+                case DevCreateChildProfilePacket devCreateChildProfilePacket -> {
+                    final String requestedName = devCreateChildProfilePacket.getChildName() == null ? "" : devCreateChildProfilePacket.getChildName().trim();
+                    final String safeName = requestedName.isEmpty() ? "DevKid" : requestedName;
+                    final var child = Server.getInstance().getChildService().createDevChildProfile(safeName);
+                    connection.send(new ActionResponsePacket(packet.getId(), true, "Dev child profile created", child.getId()).encode());
+                }
+
+                case DevLoginAsChildPacket devLoginAsChildPacket -> {
+                    final var childOpt = Server.getInstance().getChildService().findById(devLoginAsChildPacket.getChildId());
+                    if (childOpt.isPresent()) {
+                        final var child = childOpt.get();
+                        final String sessionToken = java.util.UUID.randomUUID().toString();
+                        Server.getInstance().getGameSessionService().createOrUpdateSession(child.getId(), sessionToken);
+
+                        client.setAuth(true);
+                        client.setChildId(child.getId());
+                        client.setParentId(child.getParent() != null ? child.getParent().getId() : null);
+
+                        connection.send(new ChildAuthResponsePacket(true, child.getId(), child.getName(), sessionToken).encode());
+                    } else {
+                        connection.send(new ChildAuthResponsePacket(false, -1, "", "").encode());
+                    }
+                }
+
                 case FetchGoalsPacket fetchGoalsPacket -> {
                     long targetChildId = fetchGoalsPacket.getChildId();
 

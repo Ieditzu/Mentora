@@ -11,12 +11,18 @@ namespace Mentora.Network
             return id switch
             {
                 1 => new HandShakePacket(),
+                2 => new AuthPacket(),
+                4 => new AddChildPacket(),
                 8 => new CompleteTaskPacket(),
                 9 => new ActionResponsePacket(),
+                10 => new AuthResponsePacket(),
                 11 => new FetchTasksPacket(),
                 12 => new FetchTasksResponsePacket(),
+                15 => new FetchChildrenPacket(),
+                16 => new FetchChildrenResponsePacket(),
                 19 => new GenerateQRLoginPacket(),
                 20 => new QRLoginResponsePacket(),
+                21 => new ClaimQRLoginPacket(),
                 22 => new ChildAuthResponsePacket(),
                 23 => new FetchChildStatsPacket(),
                 24 => new FetchChildStatsResponsePacket(),
@@ -35,6 +41,10 @@ namespace Mentora.Network
                 38 => new FetchCourseDetailPacket(),
                 39 => new FetchCourseDetailResponsePacket(),
                 40 => new SubmitCourseCompletionPacket(),
+                41 => new FetchAllChildrenPacket(),
+                42 => new FetchAllChildrenResponsePacket(),
+                43 => new DevLoginAsChildPacket(),
+                44 => new DevCreateChildProfilePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -49,11 +59,51 @@ namespace Mentora.Network
         protected override void Read(BinaryReader reader) { HostId = ReadString(reader); }
     }
 
+    public class AuthPacket : Packet
+    {
+        public string EmailHash;
+        public string PasswordHash;
+        public AuthPacket(string emailHash, string passwordHash) : base(2) { EmailHash = emailHash; PasswordHash = passwordHash; }
+        public AuthPacket() : base(2) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, EmailHash ?? string.Empty);
+            PutString(writer, PasswordHash ?? string.Empty);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            EmailHash = ReadString(reader);
+            PasswordHash = ReadString(reader);
+        }
+    }
+
     public class GenerateQRLoginPacket : Packet
     {
         public GenerateQRLoginPacket() : base(19) { }
         protected override void Write(BinaryWriter writer) { }
         protected override void Read(BinaryReader reader) { }
+    }
+
+    public class ClaimQRLoginPacket : Packet
+    {
+        public string Token;
+        public long ChildId;
+        public ClaimQRLoginPacket(string token, long childId) : base(21) { Token = token; ChildId = childId; }
+        public ClaimQRLoginPacket() : base(21) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, Token ?? string.Empty);
+            byte[] childBytes = BitConverter.GetBytes(ChildId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            writer.Write(childBytes);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            Token = ReadString(reader);
+            byte[] childBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            ChildId = BitConverter.ToInt64(childBytes, 0);
+        }
     }
 
     public class QRLoginResponsePacket : Packet
@@ -88,6 +138,33 @@ namespace Mentora.Network
             ChildId = BitConverter.ToInt64(longBytes, 0);
             ChildName = ReadString(reader);
             SessionToken = ReadString(reader);
+        }
+    }
+
+    public class AuthResponsePacket : Packet
+    {
+        public bool Success;
+        public long ParentId;
+        public string Message;
+        public string ParentPfp;
+        public AuthResponsePacket() : base(10) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            writer.Write((byte)(Success ? 1 : 0));
+            byte[] longBytes = BitConverter.GetBytes(ParentId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(longBytes);
+            writer.Write(longBytes);
+            PutString(writer, Message);
+            PutString(writer, ParentPfp);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            Success = reader.ReadByte() == 1;
+            byte[] longBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(longBytes);
+            ParentId = BitConverter.ToInt64(longBytes, 0);
+            Message = ReadString(reader);
+            ParentPfp = ReadString(reader);
         }
     }
 
@@ -139,6 +216,15 @@ namespace Mentora.Network
         }
     }
 
+    public class AddChildPacket : Packet
+    {
+        public string ChildName;
+        public AddChildPacket(string childName) : base(4) { ChildName = childName; }
+        public AddChildPacket() : base(4) { }
+        protected override void Write(BinaryWriter writer) { PutString(writer, ChildName ?? string.Empty); }
+        protected override void Read(BinaryReader reader) { ChildName = ReadString(reader); }
+    }
+
     public class ActionResponsePacket : Packet
     {
         public int RequestPacketId;
@@ -163,6 +249,51 @@ namespace Mentora.Network
         public FetchTasksPacket() : base(11) { }
         protected override void Write(BinaryWriter writer) { }
         protected override void Read(BinaryReader reader) { }
+    }
+
+    public class FetchChildrenPacket : Packet
+    {
+        public FetchChildrenPacket() : base(15) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader) { }
+    }
+
+    public class FetchChildrenResponsePacket : Packet
+    {
+        public struct ChildDto
+        {
+            public long Id;
+            public string Name;
+            public int TotalPoints;
+            public bool IsOnline;
+            public string ProfilePicture;
+        }
+
+        public List<ChildDto> Children = new List<ChildDto>();
+        public FetchChildrenResponsePacket() : base(16) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader)
+        {
+            int size = ReadInt32BigEndian(reader);
+            for (int i = 0; i < size; i++)
+            {
+                byte[] idBytes = reader.ReadBytes(8);
+                if (BitConverter.IsLittleEndian) Array.Reverse(idBytes);
+                long id = BitConverter.ToInt64(idBytes, 0);
+                string name = ReadString(reader);
+                int totalPoints = ReadInt32BigEndian(reader);
+                bool isOnline = reader.ReadByte() == 1;
+                string profilePicture = ReadString(reader);
+                Children.Add(new ChildDto
+                {
+                    Id = id,
+                    Name = name,
+                    TotalPoints = totalPoints,
+                    IsOnline = isOnline,
+                    ProfilePicture = profilePicture
+                });
+            }
+        }
     }
 
     public class FetchTasksResponsePacket : Packet
@@ -340,6 +471,79 @@ namespace Mentora.Network
             Score = ReadInt32BigEndian(reader);
             TotalQuestions = ReadInt32BigEndian(reader);
         }
+    }
+
+    public class FetchAllChildrenPacket : Packet
+    {
+        public FetchAllChildrenPacket() : base(41) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader) { }
+    }
+
+    public class FetchAllChildrenResponsePacket : Packet
+    {
+        public struct ChildDto
+        {
+            public long Id;
+            public string Name;
+            public int TotalPoints;
+            public bool IsOnline;
+            public string ProfilePicture;
+        }
+
+        public List<ChildDto> Children = new List<ChildDto>();
+        public FetchAllChildrenResponsePacket() : base(42) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader)
+        {
+            int size = ReadInt32BigEndian(reader);
+            for (int i = 0; i < size; i++)
+            {
+                byte[] idBytes = reader.ReadBytes(8);
+                if (BitConverter.IsLittleEndian) Array.Reverse(idBytes);
+                long id = BitConverter.ToInt64(idBytes, 0);
+                string name = ReadString(reader);
+                int totalPoints = ReadInt32BigEndian(reader);
+                bool isOnline = reader.ReadByte() == 1;
+                string profilePicture = ReadString(reader);
+                Children.Add(new ChildDto
+                {
+                    Id = id,
+                    Name = name,
+                    TotalPoints = totalPoints,
+                    IsOnline = isOnline,
+                    ProfilePicture = profilePicture
+                });
+            }
+        }
+    }
+
+    public class DevLoginAsChildPacket : Packet
+    {
+        public long ChildId;
+        public DevLoginAsChildPacket(long childId) : base(43) { ChildId = childId; }
+        public DevLoginAsChildPacket() : base(43) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            byte[] bytes = BitConverter.GetBytes(ChildId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            writer.Write(bytes);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] bytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(bytes);
+            ChildId = BitConverter.ToInt64(bytes, 0);
+        }
+    }
+
+    public class DevCreateChildProfilePacket : Packet
+    {
+        public string ChildName;
+        public DevCreateChildProfilePacket(string childName) : base(44) { ChildName = childName; }
+        public DevCreateChildProfilePacket() : base(44) { }
+        protected override void Write(BinaryWriter writer) { PutString(writer, ChildName ?? string.Empty); }
+        protected override void Read(BinaryReader reader) { ChildName = ReadString(reader); }
     }
 
     public class AskAiPacket : Packet

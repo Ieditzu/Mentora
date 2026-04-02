@@ -59,6 +59,10 @@ public class PacketManager {
             case 38 -> new FetchCourseDetailPacket();
             case 39 -> new FetchCourseDetailResponsePacket();
             case 40 -> new SubmitCourseCompletionPacket();
+            case 41 -> new FetchAllChildrenPacket();
+            case 42 -> new FetchAllChildrenResponsePacket();
+            case 43 -> new DevLoginAsChildPacket();
+            case 44 -> new DevCreateChildProfilePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };
