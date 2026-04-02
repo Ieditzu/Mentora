@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -11,6 +12,7 @@ using System.IO;
 public class PauseMenuManager : MonoBehaviour
 {
     private const string MouseSensitivityPrefKey = "MouseSensitivity";
+    private const string DevUnlockCode = "dvlp";
     private static PauseMenuManager instance;
 
     public static bool IsGamePaused { get; private set; }
@@ -35,6 +37,7 @@ public class PauseMenuManager : MonoBehaviour
     private RawImage qrCodeImage;
     private Button qrButton;
     private Button logoutButton;
+    private Button devOptionsButton;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
@@ -53,6 +56,8 @@ public class PauseMenuManager : MonoBehaviour
     private int serverStreak;
     private int serverCompletedTaskCount;
     private int serverTotalTaskCount;
+    private bool devOptionsUnlocked;
+    private int devUnlockProgress;
 
     private string SessionFilePath => Path.Combine(Application.persistentDataPath, "session.json");
 
@@ -260,6 +265,10 @@ public class PauseMenuManager : MonoBehaviour
     private void Update()
     {
         ReacquireControllerIfNeeded();
+        if (IsGamePaused)
+        {
+            HandleDevUnlockInput();
+        }
         if (IsEscapePressed())
         {
             if (IsGamePaused) ResumeGame();
@@ -420,14 +429,7 @@ public class PauseMenuManager : MonoBehaviour
         resumeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         resumeButton.onClick.AddListener(ResumeGame);
 
-        Button tasksBtn = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, 0f), new Color(0.45f, 0.45f, 0.5f, 1f));
-        tasksBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
-        tasksBtn.onClick.AddListener(() => {
-            if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
-            ShowPanel(tasksPanel);
-        });
-
-        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, -55f), new Color(0.6f, 0.4f, 0.8f, 1f));
+        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, 0f), new Color(0.6f, 0.4f, 0.8f, 1f));
         goalsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         goalsBtn.onClick.AddListener(() => {
             if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
@@ -436,9 +438,17 @@ public class PauseMenuManager : MonoBehaviour
             ShowPanel(goalsPanel);
         });
 
-        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -110f), new Color(0.72f, 0.24f, 0.26f, 1f));
+        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -55f), new Color(0.72f, 0.24f, 0.26f, 1f));
         quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         quitButton.onClick.AddListener(QuitGame);
+
+        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -110f), new Color(0.45f, 0.45f, 0.5f, 1f));
+        devOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        devOptionsButton.onClick.AddListener(() => {
+            if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
+            ShowPanel(tasksPanel);
+        });
+        RefreshDevOptionsVisibility();
 
         // TASKS PANEL
         tasksPanel = CreateUiObject("TasksPanel", canvas.transform);
@@ -697,6 +707,7 @@ public class PauseMenuManager : MonoBehaviour
         {
             canvas.gameObject.SetActive(true);
             ShowPanel(mainPanel);
+            RefreshDevOptionsVisibility();
             if (qrCodeImage != null && qrCodeImage.texture != null && loggedInChildId == -1) qrCodeImage.gameObject.SetActive(true);
             PlayMenuAnimation(true);
         }
@@ -831,6 +842,74 @@ public class PauseMenuManager : MonoBehaviour
         if (sensitivitySlider != null) sensitivitySlider.SetValueWithoutNotify(v);
         if (sensitivityInput != null) sensitivityInput.SetTextWithoutNotify(v.ToString("0.00"));
         SetSensitivityValue(v, syncInput: false);
+    }
+
+    private void HandleDevUnlockInput()
+    {
+        if (devOptionsUnlocked || Keyboard.current == null)
+        {
+            return;
+        }
+
+        KeyControl pressedKey = GetLetterKeyPressedThisFrame();
+        if (pressedKey == null)
+        {
+            return;
+        }
+
+        char expected = DevUnlockCode[devUnlockProgress];
+        char typed = char.ToLowerInvariant(pressedKey.displayName.Length > 0 ? pressedKey.displayName[0] : '\0');
+
+        if (typed == expected)
+        {
+            devUnlockProgress++;
+            if (devUnlockProgress >= DevUnlockCode.Length)
+            {
+                devOptionsUnlocked = true;
+                devUnlockProgress = 0;
+                RefreshDevOptionsVisibility();
+            }
+            return;
+        }
+
+        devUnlockProgress = typed == DevUnlockCode[0] ? 1 : 0;
+    }
+
+    private static KeyControl GetLetterKeyPressedThisFrame()
+    {
+        if (Keyboard.current == null)
+        {
+            return null;
+        }
+
+        KeyControl[] keys =
+        {
+            Keyboard.current.aKey, Keyboard.current.bKey, Keyboard.current.cKey, Keyboard.current.dKey,
+            Keyboard.current.eKey, Keyboard.current.fKey, Keyboard.current.gKey, Keyboard.current.hKey,
+            Keyboard.current.iKey, Keyboard.current.jKey, Keyboard.current.kKey, Keyboard.current.lKey,
+            Keyboard.current.mKey, Keyboard.current.nKey, Keyboard.current.oKey, Keyboard.current.pKey,
+            Keyboard.current.qKey, Keyboard.current.rKey, Keyboard.current.sKey, Keyboard.current.tKey,
+            Keyboard.current.uKey, Keyboard.current.vKey, Keyboard.current.wKey, Keyboard.current.xKey,
+            Keyboard.current.yKey, Keyboard.current.zKey
+        };
+
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (keys[i] != null && keys[i].wasPressedThisFrame)
+            {
+                return keys[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void RefreshDevOptionsVisibility()
+    {
+        if (devOptionsButton != null)
+        {
+            devOptionsButton.gameObject.SetActive(devOptionsUnlocked);
+        }
     }
 
     private static void EnsureEventSystem()
