@@ -41,7 +41,15 @@ public class ClientHandler {
 
             // Handshake and Registration/Auth/QR Login/Verify Session are the only ones allowed before auth
             // we should prob not hard code this but oh well.
-            if (currentPacketId != 1 && currentPacketId != 2 && currentPacketId != 3 && currentPacketId != 19 && currentPacketId != 25 && !client.isAuth()) {
+            if (currentPacketId != 1
+                    && currentPacketId != 2
+                    && currentPacketId != 3
+                    && currentPacketId != 19
+                    && currentPacketId != 25
+                    && currentPacketId != 41
+                    && currentPacketId != 43
+                    && currentPacketId != 44
+                    && !client.isAuth()) {
                 connection.send(new ActionResponsePacket(currentPacketId, false, "Unauthorized. Please log in first.", -1).encode());
                 return;
             }

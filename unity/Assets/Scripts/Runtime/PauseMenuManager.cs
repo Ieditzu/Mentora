@@ -211,6 +211,10 @@ public class PauseMenuManager : MonoBehaviour
                         ProfilePicture = child.ProfilePicture
                     });
                 }
+                if (devAuthStatusText != null)
+                {
+                    devAuthStatusText.text = "Loaded " + availableProfiles.Count + " profiles";
+                }
                 RebuildTaskList();
             });
         }
@@ -232,7 +236,29 @@ public class PauseMenuManager : MonoBehaviour
             else if (actionResp.RequestPacketId == 44 && actionResp.Success)
             {
                 UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                    if (devAuthStatusText != null)
+                    {
+                        devAuthStatusText.text = "Created profile. Refreshing...";
+                    }
                     FetchProfilesForDevOptions();
+                });
+            }
+            else if (actionResp.RequestPacketId == 41)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                    if (devAuthStatusText != null)
+                    {
+                        devAuthStatusText.text = actionResp.Success ? "Fetch request accepted" : ("Fetch failed: " + actionResp.Message);
+                    }
+                });
+            }
+            else if (actionResp.RequestPacketId == 43)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                    if (devAuthStatusText != null && !actionResp.Success)
+                    {
+                        devAuthStatusText.text = "Switch failed: " + actionResp.Message;
+                    }
                 });
             }
 
@@ -983,6 +1009,10 @@ public class PauseMenuManager : MonoBehaviour
             return;
         }
 
+        if (devAuthStatusText != null)
+        {
+            devAuthStatusText.text = "Loading profiles...";
+        }
         _ = GameClient.Instance.SendPacket(new FetchAllChildrenPacket());
     }
 
