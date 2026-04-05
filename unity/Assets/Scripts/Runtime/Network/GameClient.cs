@@ -21,6 +21,8 @@ namespace Mentora.Network
         [SerializeField] private string serverUrl = "wss://neuro.serenityutils.club";
         [SerializeField] private float connectTimeoutSeconds = 8f;
 
+        public string ServerUrl => serverUrl;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -94,6 +96,19 @@ namespace Mentora.Network
             } catch (Exception e) {
                 Debug.LogError("Send error: " + e.Message);
             }
+        }
+
+        public async Task SwitchServer(string newServerUrl)
+        {
+            if (string.IsNullOrWhiteSpace(newServerUrl))
+            {
+                Debug.LogError("Switch server failed: empty URL");
+                return;
+            }
+
+            serverUrl = newServerUrl.Trim();
+            CleanupSocket();
+            await Connect();
         }
 
         private async Task ReceiveLoop()

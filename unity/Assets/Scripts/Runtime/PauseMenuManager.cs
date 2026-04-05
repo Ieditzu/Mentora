@@ -13,6 +13,7 @@ public class PauseMenuManager : MonoBehaviour
 {
     private const string MouseSensitivityPrefKey = "MouseSensitivity";
     private const string DevUnlockCode = "dvlp";
+    private const string OfficialServerUrl = "wss://neuro.serenityutils.club";
     private static PauseMenuManager instance;
 
     public static bool IsGamePaused { get; private set; }
@@ -21,6 +22,7 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject mainPanel;
     private GameObject tasksPanel;
     private GameObject goalsPanel;
+    private GameObject serverPanel;
 
     private CanvasGroup menuGroup;
     private Coroutine menuAnim;
@@ -39,6 +41,8 @@ public class PauseMenuManager : MonoBehaviour
     private Button logoutButton;
     private Button devOptionsButton;
     private Text devAuthStatusText;
+    private Text serverStatusText;
+    private InputField localPortInput;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
@@ -196,13 +200,25 @@ public class PauseMenuManager : MonoBehaviour
                 UpdateProgressBar();
             });
         }
+        else if (packet is FetchChildrenResponsePacket childrenByParentResp)
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                MergeProfileList(childrenByParentResp.Children);
+                if (devAuthStatusText != null)
+                {
+                    devAuthStatusText.text = "Loaded " + availableProfiles.Count + " profiles";
+                }
+                RebuildTaskList();
+            });
+        }
         else if (packet is FetchAllChildrenResponsePacket childrenResp)
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() => {
                 availableProfiles = new List<FetchChildrenResponsePacket.ChildDto>();
+                List<FetchChildrenResponsePacket.ChildDto> normalizedProfiles = new List<FetchChildrenResponsePacket.ChildDto>();
                 foreach (var child in childrenResp.Children)
                 {
-                    availableProfiles.Add(new FetchChildrenResponsePacket.ChildDto
+                    normalizedProfiles.Add(new FetchChildrenResponsePacket.ChildDto
                     {
                         Id = child.Id,
                         Name = child.Name,
@@ -211,6 +227,7 @@ public class PauseMenuManager : MonoBehaviour
                         ProfilePicture = child.ProfilePicture
                     });
                 }
+                MergeProfileList(normalizedProfiles);
                 if (devAuthStatusText != null)
                 {
                     devAuthStatusText.text = "Loaded " + availableProfiles.Count + " profiles";
@@ -522,17 +539,22 @@ public class PauseMenuManager : MonoBehaviour
         devAuthStatusText = CreateText("DevAuthStatus", tasksPanel.transform, "Browse and enter any child profile from the server", 13, FontStyle.Italic, TextAnchor.MiddleCenter,
             new Color(0.8f, 0.9f, 1f), new Vector2(0, 152), new Vector2(420, 24));
 
-        Button createProfileBtn = CreateButton(tasksPanel.transform, "CreateProfileBtn", "Create Profile", new Vector2(-130, 92), new Color(0.18f, 0.55f, 0.80f, 1f));
+        Button serverBtn = CreateButton(tasksPanel.transform, "ServerBtn", "Server", new Vector2(0, 92), new Color(0.40f, 0.48f, 0.72f, 1f));
+        serverBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180, 34);
+        serverBtn.GetComponentInChildren<Text>().fontSize = 13;
+        serverBtn.onClick.AddListener(() => ShowPanel(serverPanel));
+
+        Button createProfileBtn = CreateButton(tasksPanel.transform, "CreateProfileBtn", "Create Profile", new Vector2(-130, 50), new Color(0.18f, 0.55f, 0.80f, 1f));
         createProfileBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 36);
         createProfileBtn.GetComponentInChildren<Text>().fontSize = 14;
         createProfileBtn.onClick.AddListener(CreateDevProfile);
 
-        Button refreshProfilesBtn = CreateButton(tasksPanel.transform, "RefreshProfilesBtn", "Refresh", new Vector2(130, 92), new Color(0.28f, 0.42f, 0.62f, 1f));
+        Button refreshProfilesBtn = CreateButton(tasksPanel.transform, "RefreshProfilesBtn", "Refresh", new Vector2(130, 50), new Color(0.28f, 0.42f, 0.62f, 1f));
         refreshProfilesBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(140, 36);
         refreshProfilesBtn.GetComponentInChildren<Text>().fontSize = 14;
         refreshProfilesBtn.onClick.AddListener(FetchProfilesForDevOptions);
 
-        taskListContainer = CreateScrollableList("TaskScroll", tasksPanel.transform, new Vector2(520, 250), new Vector2(0, -20));
+        taskListContainer = CreateScrollableList("TaskScroll", tasksPanel.transform, new Vector2(520, 230), new Vector2(0, -32));
 
         Button backBtn = CreateButton(tasksPanel.transform, "BackBtn", "Back", new Vector2(0, -190), new Color(0.4f, 0.4f, 0.4f));
         backBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180, 38);
@@ -542,6 +564,35 @@ public class PauseMenuManager : MonoBehaviour
         });
 
         tasksPanel.SetActive(false);
+
+        // SERVER PANEL
+        serverPanel = CreateUiObject("ServerPanel", canvas.transform);
+        RectTransform serverRect = serverPanel.GetComponent<RectTransform>();
+        serverRect.sizeDelta = new Vector2(620f, 460f);
+        serverRect.anchoredPosition = Vector2.zero;
+        serverPanel.AddComponent<Image>().color = new Color(0.05f, 0.1f, 0.2f, 0.98f);
+        serverPanel.AddComponent<Outline>().effectColor = new Color(0.55f, 0.8f, 1f, 0.8f);
+
+        CreateText("ServerTitle", serverPanel.transform, "SERVER", 26, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.92f, 1f), new Vector2(0, 190), new Vector2(360, 48));
+        serverStatusText = CreateText("ServerStatus", serverPanel.transform, "", 14, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.85f, 0.92f, 1f), new Vector2(0, 145), new Vector2(500, 24));
+
+        CreateText("PortLabel", serverPanel.transform, "Port", 15, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(-120, 88), new Vector2(80, 24));
+        localPortInput = CreateInputField(serverPanel.transform, "LocalPortInput", "8080", new Vector2(10, 88), new Vector2(160, 34), false);
+        localPortInput.SetTextWithoutNotify("8080");
+
+        Button officialServerBtn = CreateButton(serverPanel.transform, "OfficialServerBtn", "Official", new Vector2(0, 28), new Color(0.18f, 0.55f, 0.80f, 1f));
+        officialServerBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 40);
+        officialServerBtn.onClick.AddListener(() => SwitchGameServer(OfficialServerUrl));
+
+        Button localServerBtn = CreateButton(serverPanel.transform, "LocalServerBtn", "Local", new Vector2(0, -28), new Color(0.24f, 0.62f, 0.36f, 1f));
+        localServerBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200, 40);
+        localServerBtn.onClick.AddListener(SwitchToLocalServer);
+
+        Button serverBackBtn = CreateButton(serverPanel.transform, "ServerBackBtn", "Back", new Vector2(0, -190), new Color(0.4f, 0.4f, 0.4f));
+        serverBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180, 38);
+        serverBackBtn.onClick.AddListener(() => ShowPanel(tasksPanel));
+
+        serverPanel.SetActive(false);
 
         // GOALS PANEL
         goalsPanel = CreateUiObject("GoalsPanel", canvas.transform);
@@ -575,10 +626,15 @@ public class PauseMenuManager : MonoBehaviour
         if (mainPanel != null) mainPanel.SetActive(false);
         if (tasksPanel != null) tasksPanel.SetActive(false);
         if (goalsPanel != null) goalsPanel.SetActive(false);
+        if (serverPanel != null) serverPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
         if (panel == tasksPanel)
         {
             FetchProfilesForDevOptions();
+        }
+        else if (panel == serverPanel)
+        {
+            RefreshServerStatusLabel();
         }
     }
 
@@ -1014,6 +1070,10 @@ public class PauseMenuManager : MonoBehaviour
             devAuthStatusText.text = "Loading profiles...";
         }
         _ = GameClient.Instance.SendPacket(new FetchAllChildrenPacket());
+        if (loggedInChildId != -1)
+        {
+            _ = GameClient.Instance.SendPacket(new FetchChildrenPacket());
+        }
     }
 
     private void SwitchToProfile(long childId)
@@ -1028,6 +1088,60 @@ public class PauseMenuManager : MonoBehaviour
             devAuthStatusText.text = "Switching profile...";
         }
         _ = GameClient.Instance.SendPacket(new DevLoginAsChildPacket(childId));
+    }
+
+    private async void SwitchGameServer(string url)
+    {
+        if (GameClient.Instance == null)
+        {
+            return;
+        }
+
+        if (serverStatusText != null)
+        {
+            serverStatusText.text = "Switching...";
+        }
+
+        await GameClient.Instance.SwitchServer(url);
+        RefreshServerStatusLabel();
+    }
+
+    private void SwitchToLocalServer()
+    {
+        string port = localPortInput != null && !string.IsNullOrWhiteSpace(localPortInput.text) ? localPortInput.text.Trim() : "8080";
+        SwitchGameServer("ws://127.0.0.1:" + port);
+    }
+
+    private void RefreshServerStatusLabel()
+    {
+        if (serverStatusText == null || GameClient.Instance == null)
+        {
+            return;
+        }
+
+        serverStatusText.text = "Current: " + GameClient.Instance.ServerUrl;
+    }
+
+    private void MergeProfileList(IEnumerable<FetchChildrenResponsePacket.ChildDto> incomingProfiles)
+    {
+        if (incomingProfiles == null)
+        {
+            return;
+        }
+
+        Dictionary<long, FetchChildrenResponsePacket.ChildDto> merged = new Dictionary<long, FetchChildrenResponsePacket.ChildDto>();
+        for (int i = 0; i < availableProfiles.Count; i++)
+        {
+            merged[availableProfiles[i].Id] = availableProfiles[i];
+        }
+
+        foreach (var profile in incomingProfiles)
+        {
+            merged[profile.Id] = profile;
+        }
+
+        availableProfiles = new List<FetchChildrenResponsePacket.ChildDto>(merged.Values);
+        availableProfiles.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.OrdinalIgnoreCase));
     }
 
     private static void EnsureEventSystem()
@@ -1104,6 +1218,46 @@ public class PauseMenuManager : MonoBehaviour
         Button b = obj.AddComponent<Button>(); b.targetGraphic = img;
         CreateText(name + "L", obj.transform, label, 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(360, 36));
         return b;
+    }
+
+    private static InputField CreateInputField(Transform parent, string name, string placeholder, Vector2 pos, Vector2 size, bool multiLine)
+    {
+        GameObject obj = CreateUiObject(name, parent);
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        rect.sizeDelta = size;
+        rect.anchoredPosition = pos;
+
+        Image bg = obj.AddComponent<Image>();
+        bg.color = new Color(0.13f, 0.17f, 0.24f, 0.98f);
+
+        Outline outline = obj.AddComponent<Outline>();
+        outline.effectColor = new Color(0.35f, 0.72f, 0.95f, 0.55f);
+        outline.effectDistance = new Vector2(1f, -1f);
+
+        InputField input = obj.AddComponent<InputField>();
+        input.lineType = multiLine ? InputField.LineType.MultiLineNewline : InputField.LineType.SingleLine;
+        input.contentType = InputField.ContentType.Standard;
+
+        Text text = CreateText(name + "Text", obj.transform, string.Empty, 16, FontStyle.Normal, TextAnchor.MiddleCenter, Color.white, Vector2.zero, size);
+        RectTransform textRect = text.rectTransform;
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(10f, 6f);
+        textRect.offsetMax = new Vector2(-10f, -6f);
+        text.alignment = multiLine ? TextAnchor.UpperLeft : TextAnchor.MiddleCenter;
+        text.supportRichText = false;
+
+        Text hint = CreateText(name + "Placeholder", obj.transform, placeholder, 16, FontStyle.Italic, text.alignment, new Color(1f, 1f, 1f, 0.35f), Vector2.zero, size);
+        RectTransform hintRect = hint.rectTransform;
+        hintRect.anchorMin = Vector2.zero;
+        hintRect.anchorMax = Vector2.one;
+        hintRect.offsetMin = new Vector2(10f, 6f);
+        hintRect.offsetMax = new Vector2(-10f, -6f);
+        hint.supportRichText = false;
+
+        input.textComponent = text;
+        input.placeholder = hint;
+        return input;
     }
 
 }
