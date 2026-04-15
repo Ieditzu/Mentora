@@ -180,7 +180,6 @@ MonoBehaviour:
   - {fileID: -7677896741062595662}
   - {fileID: 5489360443788678389}
   - {fileID: 4108217720008215545}
-  - {fileID: -58243574720677099}
   - {fileID: 3800493048305133959}
   - {fileID: -8507094863042841499}
   - {fileID: -4064871804744927772}
@@ -188,15 +187,8 @@ MonoBehaviour:
   - {fileID: 619281157721905147}
   - {fileID: 5331130986208145443}
   - {fileID: 7982447433212009211}
-  - {fileID: 3364613216736487443}
   m_renderMode: 1
-  m_autoColorSubmissionMode: 1
-  m_colorSubmissionModes:
-    m_List: 00000000
   m_depthSubmissionMode: 0
-  m_spacewarpMotionVectorTextureFormat: 0
-  m_optimizeBufferDiscards: 0
-  m_symmetricProjection: 0
 --- !u!114 &-5602166322755513576
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -323,7 +315,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2b7365b139f7aec43b23d26b7a48b5a6, type: 3}
   m_Name: MetaQuestTouchPlusControllerProfile Android
   m_EditorClassIdentifier: 
-  m_enabled: 0
+  m_enabled: 1
   nameUi: Meta Quest Touch Plus Controller Profile
   version: 0.0.1
   featureIdInternal: com.unity.openxr.feature.input.metaquestplus
@@ -400,7 +392,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: feeef8d85de8db242bdda70cc7ff5acd, type: 3}
   m_Name: OculusTouchControllerProfile Android
   m_EditorClassIdentifier: 
-  m_enabled: 0
+  m_enabled: 1
   nameUi: Oculus Touch Controller Profile
   version: 0.0.1
   featureIdInternal: com.unity.openxr.feature.input.oculustouch
@@ -504,7 +496,6 @@ MonoBehaviour:
   - {fileID: 5714534617702324372}
   - {fileID: -6334176327454936456}
   - {fileID: 4011951814260570944}
-  - {fileID: -4886891760707824875}
   - {fileID: 2868720611925096291}
   - {fileID: 4797914170350048418}
   - {fileID: 912268214319245192}
@@ -513,15 +504,8 @@ MonoBehaviour:
   - {fileID: -2908685386716372070}
   - {fileID: 8761798777000206601}
   - {fileID: 535400409202701764}
-  - {fileID: -5602166322755513576}
   m_renderMode: 1
-  m_autoColorSubmissionMode: 1
-  m_colorSubmissionModes:
-    m_List: 00000000
   m_depthSubmissionMode: 0
-  m_spacewarpMotionVectorTextureFormat: 0
-  m_optimizeBufferDiscards: 0
-  m_symmetricProjection: 0
 --- !u!114 &2868720611925096291
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -634,7 +618,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f647cc0545697264a9878224faada6d5, type: 3}
   m_Name: MetaQuestFeature Android
   m_EditorClassIdentifier: 
-  m_enabled: 0
+  m_enabled: 1
   nameUi: Meta Quest Support
   version: 1.0.0
   featureIdInternal: com.unity.openxr.feature.metaquest
@@ -658,15 +642,7 @@ MonoBehaviour:
   - visibleName: Quest 3S
     manifestName: quest3s
     enabled: 1
-  forceRemoveInternetPermission: 0
-  symmetricProjection: 0
-  foveatedRenderingApi: 0
-  systemSplashScreen: {fileID: 0}
-  optimizeBufferDiscards: 1
-  lateLatchingMode: 0
-  lateLatchingDebug: 0
-  optimizeMultiviewRenderRegions: 0
-  spacewarpMotionVectorTextureFormat: 0
+  forceRemoveInternetPermission: 1
 --- !u!114 &4797914170350048418
 MonoBehaviour:
   m_ObjectHideFlags: 0

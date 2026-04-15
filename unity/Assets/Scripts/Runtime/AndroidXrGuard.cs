@@ -12,10 +12,22 @@ public static class AndroidXrGuard
     private static void MaybeDisableXr()
     {
 #if UNITY_ANDROID && UNITY_XR_MANAGEMENT
-        // Heuristic: keep XR only on Quest/Meta devices.
-        string model = SystemInfo.deviceModel.ToLowerInvariant();
-        bool looksLikeQuest = model.Contains("quest") || model.Contains("meta quest");
-        bool looksLikePico = model.Contains("pico");
+        // Prefer manufacturer/vendor detection over model-only matching.
+        // Quest device models are not consistently reported as "Quest" across OS versions.
+        string model = (SystemInfo.deviceModel ?? string.Empty).ToLowerInvariant();
+        string deviceName = (SystemInfo.deviceName ?? string.Empty).ToLowerInvariant();
+        string manufacturer = GetAndroidBuildField("MANUFACTURER");
+
+        bool looksLikeQuest =
+            model.Contains("quest") ||
+            deviceName.Contains("quest") ||
+            manufacturer.Contains("meta") ||
+            manufacturer.Contains("oculus");
+
+        bool looksLikePico =
+            model.Contains("pico") ||
+            deviceName.Contains("pico") ||
+            manufacturer.Contains("pico");
 
         var settings = XRGeneralSettings.Instance;
         var manager = settings != null ? settings.Manager : null;
@@ -42,4 +54,21 @@ public static class AndroidXrGuard
         }
 #endif
     }
+
+#if UNITY_ANDROID
+    private static string GetAndroidBuildField(string fieldName)
+    {
+        try
+        {
+            using (var buildClass = new AndroidJavaClass("android.os.Build"))
+            {
+                return (buildClass.GetStatic<string>(fieldName) ?? string.Empty).ToLowerInvariant();
+            }
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+#endif
 }

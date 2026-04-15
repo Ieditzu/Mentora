@@ -38,6 +38,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     [SerializeField] private float bodyVisualScale = 8f;
     [SerializeField] private float baseControllerHeight = 1.8f;
     [SerializeField] private float vrHeightScale = 1.35f;
+    [SerializeField] private float vrMoveDeadzone = 0.15f;
     [SerializeField] private float vrTurnSpeed = 180f; // degrees per second using right stick X
     [SerializeField] private float vrTurnDeadzone = 0.18f;
 
@@ -278,6 +279,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
             h = touchMove.x;
             v = touchMove.y;
         }
+        else if (IsVrActive() && TryGetVrMoveAxis(out Vector2 vrMove))
+        {
+            h = vrMove.x;
+            v = vrMove.y;
+        }
+
         Vector3 input = (transform.right * h + transform.forward * v).normalized;
         if (IsVrActive() && camTransform != null)
         {
@@ -778,6 +785,30 @@ public class FirstPersonControllerSimple : MonoBehaviour
     {
         var display = GetActiveDisplay();
         return display != null && display.running;
+    }
+
+    private bool TryGetVrMoveAxis(out Vector2 axis)
+    {
+        axis = Vector2.zero;
+
+        XRInputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (!leftHand.isValid)
+        {
+            return false;
+        }
+
+        if (!leftHand.TryGetFeatureValue(XRCommonUsages.primary2DAxis, out axis))
+        {
+            return false;
+        }
+
+        if (axis.sqrMagnitude < vrMoveDeadzone * vrMoveDeadzone)
+        {
+            axis = Vector2.zero;
+            return false;
+        }
+
+        return true;
     }
 
     private void ApplyVrStickTurn()
