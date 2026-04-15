@@ -70,9 +70,10 @@ The backbone of the entire platform. Built with **Spring Boot 3.2** on **Java 21
 - Exposes a REST API on port **8085** exclusively for the web course creator
 - Persists all data (children, parents, courses, tasks, goals) to **PostgreSQL** via Spring Data JPA
 - Maintains per-child AI learning profiles as **JSONB** columns, updated after every code run, hint request, and AI chat turn
-- **Executes student-submitted Python and C++ code server-side** via `PythonExecutor` and `CppExecutor` (Java process spawning), returning real program output to the game client
-- AI-grades the output in real time and records correctness against the student's profile
+- **Executes student-submitted Python and C++ code server-side** via `PythonExecutor` and `CppExecutor` inside sandboxed Linux environments — network isolation via `unshare`, strict `ulimit` constraints (256 MB memory cap, CPU time limit, 64 max processes to prevent fork bombs, 2 MB file size limit)
+- **AI-verifies code output** — there are no hardcoded expected answers; the AI reads the task description, the student's code, and the actual program output to judge correctness, so creative solutions that produce the right result are accepted
 - Calls the **Groq AI API** (LLaMA-3.3-70B) for adaptive tutoring responses, hint generation, and parent-facing progress summaries
+- Response caching with a configurable TTL and per-model rate-limit cooldown timers prevent redundant API calls
 
 **Server bootstrap:**
 
@@ -91,16 +92,36 @@ The `Server` class is a singleton that holds references to all Spring services a
 
 **Location:** `unity/Assets/Scripts/`
 
-A 3D game environment built in **Unity** with the **High Definition Render Pipeline (HDRP)**. Students navigate an interactive world with dedicated coding pads for Python and C++, a community island with published courses, and AI mentor interactions.
+A 3D game environment built in **Unity** with the **High Definition Render Pipeline (HDRP)**. Students explore an interactive island world containing dedicated coding pads for Python and C++, a community island with published courses, and an AI mentor they can chat with at any point during a challenge.
+
+**What students do in the game:**
+- Work through **22 progressive tasks** across three tiers (see [Task & Goal System](#task--goal-system) for the full list)
+- Write and run real Python and C++ code directly in-game — output comes back from the server live; the AI then evaluates whether the result is correct (no hardcoded expected outputs)
+- Solve **interactive logic puzzles** where they manipulate in-game variables (e.g. `jumpVelocity`, `islandVisible`, `boxRigidbody`) through a real-time variable editor to unlock new areas — requires lateral thinking, not rote answers
+- Take a **5-question C++ multiple choice quiz** (bilingual Romanian/English) with a portal cinematic entry sequence
+- Ask the AI mentor for hints at any challenge via a chat panel — the AI knows the current task, the student's code, and their full learning profile
+- Track daily login streaks and a real-time progress bar showing overall task completion
+- Set a custom server URL via the pause menu (for dev/local testing) without rebuilding
+
+**Python code verification flow:**
+
+Python challenges use a two-step AI evaluation that is intentionally separate from the learning profile's hint/chat counters:
+
+1. Student submits code → `ExecutePythonCodePacket` → server runs it → stdout back to client
+2. Client sends `AskAiPacket` with context `"python_eval"` — Groq reads the task, the code, and the output to return `CORRECT` or `INCORRECT`
+3. Server-side `recordAiInteraction` skips the `"eval"` context, so AI evaluation calls do **not** inflate the student's hint or chat turn counts in their learning profile
+4. A fallback `IsChallengeCorrect` heuristic (string comparison + `CompactCode` normalisation per `ValidationId`) handles cases where Groq is unavailable
 
 **Key scripts:**
 
 | Script | Purpose |
 |--------|---------|
-| `GameClient.cs` | Singleton WebSocket client; connects to `wss://neuro.serenityutils.club` by default, serialises/deserialises all binary packets |
-| `PythonDebugPadCinematic.cs` | Handles the Python coding challenge pad; sends `RecordLearningEventPacket` on run and `AskAiPacket` when the student asks for help |
-| `CppQuestionPadCinematic.cs` | Same flow for C++ challenges |
-| `CommunityIslandMenu.cs` | Loads published courses from the server via `FetchPublishedCoursesPacket` |
+| `GameClient.cs` | Singleton WebSocket client; connects to `wss://neuro.serenityutils.club` by default, handles all binary packet send/receive |
+| `PauseMenuManager.cs` | Central in-game UI hub — QR code generation and display, `session.json` auto-login on startup, `VerifySessionPacket` resume, task/goal/children lists, `CompleteTaskByTitle`, streak display, dev unlock via code `dvlp`, server URL override |
+| `PythonDebugPadCinematic.cs` | Python coding pads (medium + hard modes); runs code, AI-evaluates output, records learning events, provides AI hint chat |
+| `CppQuestionPadCinematic.cs` | 5-question bilingual C++ MCQ; records per-answer learning events, AI hint chat, awards task on perfect score |
+| `CommunityIslandMenu.cs` | Loads and displays published community courses via `FetchPublishedCoursesPacket` |
+| `Network/EncryptionUtility.cs` | Client-side AES-256-CBC encryption matching the server's per-packet dynamic seed scheme |
 
 The Unity client exclusively uses the binary WebSocket protocol — it never calls the HTTP REST API.
 
@@ -112,13 +133,25 @@ The Unity client exclusively uses the binary WebSocket protocol — it never cal
 
 A **Jetpack Compose** Android application (target SDK 36) used by **parents** to monitor their child's learning progress and manage goals. It mirrors the same binary WebSocket protocol as the Unity client.
 
+**Screens:**
+
+| Screen | What it shows |
+|--------|--------------|
+| **Home** | List of parent's children with total points, **live online dot** (whether the child is currently connected to the game server), QR link action, and tap-through to goals |
+| **History** | Completed tasks grouped by date with daily totals and task point values |
+| **Goals / AI Insights** | Per-child goals (locked/completed state) plus expandable **AI Insights cards** for C++, Python, and General — each card shows the one-line AI summary; tapping opens a `ProfileDetailDialog` with the full three-line breakdown and raw stats |
+| **Settings** | Parent profile picture, dark mode toggle, colour theme selection, add/remove children, **dev "Force Game Login"** (manually enter child id + session token for testing), logout |
+
 **Key features:**
-- Parent authentication and child profile management
-- Real-time progress dashboards: tasks completed, total points, streaks, last active
-- **Per-language AI summaries** — the app displays AI-generated one-line and three-line narratives of what the child is strong at in Python vs C++, regenerated automatically as the profile evolves
-- **Custom goal setting** — parents define goals (point thresholds or specific task completions) with a reward message; children see goals in-game as motivation targets
-- **QR code scanning** (via **ML Kit** barcode scanning + **CameraX**) to securely link a child's game account without the child needing to type credentials
-- Image loading via **Coil**
+- **Per-language AI summaries** — AI-generated one-line → three-line → full stats, refreshed automatically as the child's profile evolves (throttled to once per 5 minutes)
+- **Live online presence** — the home screen shows which children are currently active in the game in real time
+- **Custom goal setting** — parents define point-threshold or task-completion goals with a reward message; the server pushes a live completion event to the app the moment the child hits the target
+- **System notifications** (Android Tiramisu+ permission requested at launch) — the app is notified in real time when a child completes a task
+- **Task completion history** grouped by date with daily stats
+- **QR code scanning** (via **ML Kit** barcode + **CameraX**) to link a child's game account without the child typing credentials
+- **Profile pictures** for both parents and children, stored as Base64 on the server
+- Dark mode and colour theme customisation
+- Auth state and server token persisted across app restarts
 
 ---
 
@@ -180,7 +213,14 @@ Each profile tracks the following counters:
 2. **AI chat interactions** — every question asked to the tutor is logged via `recordAiInteraction`
 3. **Course quiz submissions** — `SubmitCourseCompletionPacket` triggers `recordLearningEvent` with a synthetic topic like `python_course:FUNCBASICS`
 
-**LLM-generated narrative summaries** (`summaryText`, `summaryOneLine`, `summaryThreeLine`) are regenerated by calling Groq when stats change, but are throttled — no more than once every 300 seconds — to avoid excessive API usage.
+**Skill level classification** — `buildProfileSummary` classifies each student into a level based on their accuracy and interaction count:
+- **Beginner** — fewer than 10 total interactions or accuracy below 40%
+- **Intermediate** — accuracy 40–70%
+- **Advanced** — accuracy above 70%
+
+This level label is included in every AI prompt context so the tutor never pitches explanations too high or too low.
+
+**LLM-generated narrative summaries** (`summaryText`, `summaryOneLine`, `summaryThreeLine`) are regenerated by calling Groq when stats change, but are throttled — no more than once every 300 seconds — to avoid excessive API usage. The summary prompt instructs Groq to produce both `ONE:` (single line) and `THREE:` (three-line) responses in one call, which are split and stored separately for the different UI detail levels.
 
 ---
 
@@ -217,7 +257,9 @@ This means the AI *knows* whether the student has been struggling with a specifi
 
 **Parent-facing summaries** are generated with a separate structured prompt that produces `ONE:` (one-line) and `THREE:` (three-line) narrative summaries of the child's progress, intended for display in the Android parent dashboard.
 
-**Rate limiting and caching** are handled inside `GroqAI.java` with a configurable cooldown to prevent redundant calls when the same question is asked in quick succession.
+**AI-verified code submissions** — when a student submits code, the server doesn't check against a hardcoded expected output. Instead, the AI receives the task description, the student's full code, and the actual program output, then responds with `CORRECT` or `INCORRECT` and a short explanation. This means creative solutions that produce the right result through a different approach are accepted.
+
+**Rate limiting and caching** are handled inside `GroqAI.java` with a configurable LRU cache (200 entries, 5-minute TTL) and independent cooldown timers per model after rate limits are hit.
 
 ---
 
@@ -225,33 +267,51 @@ This means the AI *knows* whether the student has been struggling with a specifi
 
 All game and mobile communication uses a **custom binary packet protocol** over WebSocket (port 49154). This avoids JSON serialisation overhead and allows tight control over the message format.
 
+**Encryption**
+
+Every packet is encrypted with **AES-256-CBC** using a dynamic per-packet seed system. Each message generates a unique seed from `System.nanoTime()`, encrypts that seed with a shared base key, then encrypts the actual payload using the seed as the encryption key. This means every single packet uses a different encryption key — replay attacks and traffic analysis are impractical. The seed length is validated server-side to prevent out-of-memory attacks.
+
 **Packet lifecycle:**
 
-1. Client sends a binary frame; the first byte is the **packet ID**
+1. Client sends an encrypted binary frame; after decryption the first byte is the **packet ID**
 2. `ClientHandler.onMessage` reads the ID, delegates to `PacketManager.createPacket(id)` to deserialise the payload
 3. A large `switch` expression dispatches on the concrete packet type
-4. The handler checks authorisation (most packets require an authenticated session), processes business logic, then optionally writes a response packet back to the same client or broadcasts to related clients
+4. The handler checks authorisation (most packets require an authenticated session), processes business logic, then optionally writes a response packet back to the same client or broadcasts to related clients (e.g. goal completions are pushed to the connected parent app in real time)
 
-**Key packet IDs:**
+**Complete packet table (IDs 1–44):**
 
-| ID | Packet | Direction |
-|----|--------|-----------|
-| 1 | `HandShakePacket` | Client → Server |
-| 2 | `AuthPacket` | Client → Server |
-| 3 | `RegisterParentPacket` | Client → Server |
-| 4 | `AddChildPacket` | Client → Server |
-| 5 | `AddGoalPacket` | Client → Server |
-| 8 | `CompleteTaskPacket` | Client → Server |
-| 30 | `AskAiPacket` | Client → Server |
-| 31 | `AiResponsePacket` | Server → Client |
-| 33 | `RecordLearningEventPacket` | Client → Server |
-| 36 | `FetchPublishedCoursesPacket` | Client → Server |
-| 37 | `FetchPublishedCoursesResponsePacket` | Server → Client |
-| 38 | `FetchCourseDetailPacket` | Client → Server |
-| 39 | `FetchCourseDetailResponsePacket` | Server → Client |
-| 40 | `SubmitCourseCompletionPacket` | Client → Server |
+| ID | Packet(s) | Direction | Purpose |
+|----|-----------|-----------|---------|
+| 1 | `HandShakePacket` | C→S | Connection init; client identifies itself (`unity_game`, `android_client`, etc.) |
+| 2 / 10 | `AuthPacket` / `AuthResponsePacket` | C→S / S→C | Parent login with hashed email + password |
+| 3 | `RegisterParentPacket` | C→S | New parent registration; auto-authenticates on success |
+| 4 | `AddChildPacket` | C→S | Parent adds a child by name |
+| 5 | `AddGoalPacket` | C→S | Create a task-linked or points-threshold goal; optionally pushed live to connected child |
+| 8 / 9 | `CompleteTaskPacket` / `ActionResponsePacket` | C→S / S→C | Mark task complete; notifies connected parent |
+| 11 / 12 | `FetchTasksPacket` / `FetchTasksResponsePacket` | C→S / S→C | Full global task catalog |
+| 13 / 14 | `FetchGoalsPacket` / `FetchGoalsResponsePacket` | C→S / S→C | Goals for a child (self or parent-fetched) |
+| 15 / 16 | `FetchChildrenPacket` / `FetchChildrenResponsePacket` | C→S / S→C | Parent's children + **live online flag** per child |
+| 17 / 18 | `FetchCompletedTasksPacket` / `FetchCompletedTasksResponsePacket` | C→S / S→C | Parent-only: completed tasks for a child with timestamps |
+| 19 / 20 | `GenerateQRLoginPacket` / `QRLoginResponsePacket` | C→S / S→C | Game generates a short-lived QR token |
+| 21 | `ClaimQRLoginPacket` | C→S | Parent app claims token for a specific child; triggers child auth |
+| 22 | `ChildAuthResponsePacket` | S→C | Auth success: child id, name, session token |
+| 23 / 24 | `FetchChildStatsPacket` / `FetchChildStatsResponsePacket` | C→S / S→C | Child fetches own stats; triggers streak update + AI summary refresh |
+| 25 | `VerifySessionPacket` | C→S | Resume child session from saved `childId` + token (loaded from `session.json`) |
+| 26 | `UpdatePfpPacket` | C→S | Update parent or child profile picture (Base64) |
+| 27 | `RemoveChildPacket` | C→S | Parent deletes a child profile |
+| 28 / 29 | `ExecuteCPPCodePacket` / `ExecuteCPPCodeResponsePacket` | C→S / S→C | Run C++ code server-side (120s timeout); returns stdout/stderr |
+| 30 / 31 | `AskAiPacket` / `AiResponsePacket` | C→S / S→C | AI mentor Q&A; injects learning profile for child sessions |
+| 32 | `FetchChildStatsByParentPacket` | C→S | Parent fetches a child's stats (streak **not** updated) |
+| 33 | `RecordLearningEventPacket` | C→S | Record a learning event against child profile (fire-and-forget, no ACK) |
+| 34 / 35 | `ExecutePythonCodePacket` / `ExecutePythonCodeResponsePacket` | C→S / S→C | Run Python code server-side (120s timeout) |
+| 36 / 37 | `FetchPublishedCoursesPacket` / `FetchPublishedCoursesResponsePacket` | C→S / S→C | Published course catalog with per-child completion flags |
+| 38 / 39 | `FetchCourseDetailPacket` / `FetchCourseDetailResponsePacket` | C→S / S→C | Full course questions + child completion state |
+| 40 | `SubmitCourseCompletionPacket` | C→S | Submit quiz result; awards points on perfect score |
+| 41 / 42 | `FetchAllChildrenPacket` / `FetchAllChildrenResponsePacket` | C→S / S→C | All children in DB + online flags (dev use) |
+| 43 | `DevLoginAsChildPacket` | C→S | Log in as any child by id; creates session |
+| 44 | `DevCreateChildProfilePacket` | C→S | Create a child under the synthetic dev parent account |
 
-Packets that do not require authentication (e.g. handshake, QR login, verify session, dev shortcuts) are whitelisted at the top of `ClientHandler.onMessage` and processed before any session check.
+Packets **1, 2, 3, 19, 25, 41, 43, 44** are whitelisted and processed **without** prior authentication. All others return an `ActionResponsePacket(currentId, false, "Unauthorized")` if the client has no valid session.
 
 ---
 
@@ -287,9 +347,12 @@ Courses are authored in the web creator and played by students in the Community 
 
 **Course structure:**
 
-- A `Course` has metadata (title, acronym, language, difficulty, summary, description, point reward) and an ordered list of `CourseQuizQuestion` entries
-- Each question has a prompt, four answer options, a `correctIndex` (0–3), and an optional explanation
+- A `Course` has metadata (title, acronym, language, difficulty, summary ≤280 chars, description, point reward) and an ordered list of `CourseQuizQuestion` entries
+- Each question has a prompt, four answer options (A–D), a `correctIndex` (0–3), and an optional explanation
+- Acronyms are sanitised server-side (uppercased, non-alphanumeric stripped) for use as learning profile topic keys
+- Courses require at least 1 question; all options and a valid `correctIndex` are validated before saving
 - Courses are only visible in-game after a parent explicitly **publishes** them
+- The web creator persists the session token in `localStorage` so parents stay logged in across browser refreshes
 
 **Completion rules:**
 
@@ -310,13 +373,27 @@ On completion:
 
 ### Task & Goal System
 
-**Tasks** are pre-defined programming challenges seeded from `DefaultTaskType` into the `tasks` table. Any child can complete a task once for its associated point value.
+**Tasks** are pre-defined programming challenges seeded from `DefaultTaskType` into the `tasks` table on first server start. Any child can complete a task once for its point value. Completing a task also increments `game_stats["tasks_completed"]` and triggers automatic goal-completion checking.
+
+**The 22 built-in tasks:**
+
+| # | Title | Points | Category |
+|---|-------|--------|---------|
+| 1 | C++ Starter Quiz | 25 | C++ |
+| 2–5 | C++ Debug: Multiply, Sum, Even, Increment | 15–20 | C++ Medium |
+| 6–10 | C++ Hard: IsEven, MaxOfTwo, Square, Sum3, Factorial | 30–35 | C++ Hard |
+| 11–14 | Python Debug: Multiply, Sum, Even, Loop | 15–20 | Python Medium |
+| 15–19 | Python Visual: Bar Line, Progress Bar, Square Grid, Stairs, Alternating | 30–35 | Python Hard |
+| 20 | Logic: Jump & Box (adjust jump velocity + enable physics) | 20 | Logic |
+| 21 | Logic: Reveal Island (set island visible flag) | 20 | Logic |
+| 22 | Logic: Reveal Bridge (unlock bridge path) | 20 | Logic |
 
 **Goals** are created by parents and tied to a child. A goal specifies:
 - A title and description
-- A reward message for the child
+- A reward message shown to the child on completion
 - Either a **point threshold** (`required_points`) or a **specific task** (`required_task_id`) as the completion condition
-- The server checks goal completion automatically when a task is completed or points are updated
+
+The server checks goal completion automatically when a task is completed or points are updated. When a goal is met, a live push packet is sent to both the connected game client (so the child sees the reward in-game immediately) and the parent's Android app.
 
 ---
 
@@ -328,7 +405,8 @@ Schema is managed automatically by **Hibernate DDL auto-update**. The logical sc
 parents
   ├── id (PK)
   ├── email (unique)
-  └── password_hash
+  ├── password_hash
+  └── profile_picture (Base64)
 
 children
   ├── id (PK)
