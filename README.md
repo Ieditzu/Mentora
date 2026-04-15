@@ -101,7 +101,6 @@ A 3D game environment built in **Unity** with the **High Definition Render Pipel
 - Take a **5-question C++ multiple choice quiz** (bilingual Romanian/English) with a portal cinematic entry sequence
 - Ask the AI mentor for hints at any challenge via a chat panel — the AI knows the current task, the student's code, and their full learning profile
 - Track daily login streaks and a real-time progress bar showing overall task completion
-- Set a custom server URL via the pause menu (for dev/local testing) without rebuilding
 
 **Python code verification flow:**
 
@@ -117,7 +116,7 @@ Python challenges use a two-step AI evaluation that is intentionally separate fr
 | Script | Purpose |
 |--------|---------|
 | `GameClient.cs` | Singleton WebSocket client; connects to `wss://neuro.serenityutils.club` by default, handles all binary packet send/receive |
-| `PauseMenuManager.cs` | Central in-game UI hub — QR code generation and display, `session.json` auto-login on startup, `VerifySessionPacket` resume, task/goal/children lists, `CompleteTaskByTitle`, streak display, dev unlock via code `dvlp`, server URL override |
+| `PauseMenuManager.cs` | Central in-game UI hub — QR code generation and display, session auto-login on startup, task/goal/children lists, streak display |
 | `PythonDebugPadCinematic.cs` | Python coding pads (medium + hard modes); runs code, AI-evaluates output, records learning events, provides AI hint chat |
 | `CppQuestionPadCinematic.cs` | 5-question bilingual C++ MCQ; records per-answer learning events, AI hint chat, awards task on perfect score |
 | `CommunityIslandMenu.cs` | Loads and displays published community courses via `FetchPublishedCoursesPacket` |
@@ -133,25 +132,15 @@ The Unity client exclusively uses the binary WebSocket protocol — it never cal
 
 A **Jetpack Compose** Android application (target SDK 36) used by **parents** to monitor their child's learning progress and manage goals. It mirrors the same binary WebSocket protocol as the Unity client.
 
-**Screens:**
-
-| Screen | What it shows |
-|--------|--------------|
-| **Home** | List of parent's children with total points, **live online dot** (whether the child is currently connected to the game server), QR link action, and tap-through to goals |
-| **History** | Completed tasks grouped by date with daily totals and task point values |
-| **Goals / AI Insights** | Per-child goals (locked/completed state) plus expandable **AI Insights cards** for C++, Python, and General — each card shows the one-line AI summary; tapping opens a `ProfileDetailDialog` with the full three-line breakdown and raw stats |
-| **Settings** | Parent profile picture, dark mode toggle, colour theme selection, add/remove children, **dev "Force Game Login"** (manually enter child id + session token for testing), logout |
-
 **Key features:**
-- **Per-language AI summaries** — AI-generated one-line → three-line → full stats, refreshed automatically as the child's profile evolves (throttled to once per 5 minutes)
-- **Live online presence** — the home screen shows which children are currently active in the game in real time
+- **Per-language AI summaries** — AI-generated one-line → three-line → full stats breakdown for C++, Python, and General, refreshed automatically as the child's profile evolves (throttled to once per 5 minutes)
+- **Live online presence** — shows which children are currently active in the game in real time
 - **Custom goal setting** — parents define point-threshold or task-completion goals with a reward message; the server pushes a live completion event to the app the moment the child hits the target
-- **System notifications** (Android Tiramisu+ permission requested at launch) — the app is notified in real time when a child completes a task
+- **System notifications** — the app is notified in real time when a child completes a task
 - **Task completion history** grouped by date with daily stats
 - **QR code scanning** (via **ML Kit** barcode + **CameraX**) to link a child's game account without the child typing credentials
 - **Profile pictures** for both parents and children, stored as Base64 on the server
 - Dark mode and colour theme customisation
-- Auth state and server token persisted across app restarts
 
 ---
 
@@ -307,9 +296,6 @@ Every packet is encrypted with **AES-256-CBC** using a dynamic per-packet seed s
 | 36 / 37 | `FetchPublishedCoursesPacket` / `FetchPublishedCoursesResponsePacket` | C→S / S→C | Published course catalog with per-child completion flags |
 | 38 / 39 | `FetchCourseDetailPacket` / `FetchCourseDetailResponsePacket` | C→S / S→C | Full course questions + child completion state |
 | 40 | `SubmitCourseCompletionPacket` | C→S | Submit quiz result; awards points on perfect score |
-| 41 / 42 | `FetchAllChildrenPacket` / `FetchAllChildrenResponsePacket` | C→S / S→C | All children in DB + online flags (dev use) |
-| 43 | `DevLoginAsChildPacket` | C→S | Log in as any child by id; creates session |
-| 44 | `DevCreateChildProfilePacket` | C→S | Create a child under the synthetic dev parent account |
 
 Packets **1, 2, 3, 19, 25, 41, 43, 44** are whitelisted and processed **without** prior authentication. All others return an `ActionResponsePacket(currentId, false, "Unauthorized")` if the client has no valid session.
 
