@@ -338,6 +338,10 @@ public class PauseMenuManager : MonoBehaviour
         }
     }
 
+    private bool isAutoConnecting = false;
+    private float lastAutoConnectTime = 0f;
+    private const float AutoConnectInterval = 5f;
+
     private void Update()
     {
         ReacquireControllerIfNeeded();
@@ -350,6 +354,33 @@ public class PauseMenuManager : MonoBehaviour
             if (IsGamePaused) ResumeGame();
             else PauseGame();
         }
+
+        CheckAutoReconnect();
+    }
+
+    private void CheckAutoReconnect()
+    {
+        if (GameClient.Instance == null) return;
+        
+        if (!GameClient.Instance.IsConnected && !isAutoConnecting)
+        {
+            if (Time.time - lastAutoConnectTime > AutoConnectInterval)
+            {
+                if (File.Exists(SessionFilePath))
+                {
+                    lastAutoConnectTime = Time.time;
+                    _ = AutoReconnectFlow();
+                }
+            }
+        }
+    }
+
+    private async System.Threading.Tasks.Task AutoReconnectFlow()
+    {
+        isAutoConnecting = true;
+        Debug.Log("[PauseMenuManager] Connection lost, attempting auto-reconnect...");
+        await ConnectAndTryAutoLogin();
+        isAutoConnecting = false;
     }
 
     private static bool IsEscapePressed()

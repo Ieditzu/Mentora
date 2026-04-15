@@ -44,8 +44,12 @@ public class ClientHandler {
             if (currentPacketId != 1
                     && currentPacketId != 2
                     && currentPacketId != 3
+                    && currentPacketId != 11
+                    && currentPacketId != 13
+                    && currentPacketId != 15
                     && currentPacketId != 19
                     && currentPacketId != 25
+                    && currentPacketId != 32
                     && currentPacketId != 41
                     && currentPacketId != 43
                     && currentPacketId != 44
