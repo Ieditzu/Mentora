@@ -1,6 +1,8 @@
 # Mentora
 
-**Mentora** is an AI-powered educational learning game designed to teach children programming concepts in Python and C++. It combines a 3D Unity game world, a real-time Java backend, an Android parent dashboard, and a web-based course creator into a single cohesive platform. The AI adapts its tutoring style dynamically based on each student's evolving knowledge profile, tracked across every interaction.
+**Mentora** is an AI-powered educational platform that teaches children aged 9–13 programming through hands-on experience rather than passive lessons. Students write and execute real Python and C++ code inside a 3D Unity game world, receiving instant AI-graded feedback on their output. Every mistake a student makes is remembered — the backend builds a persistent per-student knowledge profile tracking strengths, weaknesses, hint usage, and chat history across topics and languages. An in-game AI tutor (powered by Meta's LLaMA 3.3 70B via Groq) uses that profile before every single response, so hints and explanations are always calibrated to exactly what that student knows and where they are struggling.
+
+Beyond the game, Mentora is an ecosystem: a **companion Android app** lets parents monitor their child's progress in real time, view AI-generated summaries of what their child is good at in Python and C++ respectively, see completed tasks, and set custom goals to keep the child motivated. A **community web platform** allows parents and educators to author and publish their own quiz-based courses, which students can discover and play directly inside the game world.
 
 ---
 
@@ -67,9 +69,10 @@ The backbone of the entire platform. Built with **Spring Boot 3.2** on **Java 21
 - Handles all client connections (game, mobile) over a persistent binary WebSocket on port **49154**
 - Exposes a REST API on port **8085** exclusively for the web course creator
 - Persists all data (children, parents, courses, tasks, goals) to **PostgreSQL** via Spring Data JPA
-- Maintains per-child AI learning profiles as **JSONB** columns
-- Executes student-submitted Python and C++ code server-side via sandboxed runners
-- Calls the **Groq AI API** (LLaMA-3.3-70B) for adaptive tutoring responses and profile summaries
+- Maintains per-child AI learning profiles as **JSONB** columns, updated after every code run, hint request, and AI chat turn
+- **Executes student-submitted Python and C++ code server-side** via `PythonExecutor` and `CppExecutor` (Java process spawning), returning real program output to the game client
+- AI-grades the output in real time and records correctness against the student's profile
+- Calls the **Groq AI API** (LLaMA-3.3-70B) for adaptive tutoring responses, hint generation, and parent-facing progress summaries
 
 **Server bootstrap:**
 
@@ -111,9 +114,10 @@ A **Jetpack Compose** Android application (target SDK 36) used by **parents** to
 
 **Key features:**
 - Parent authentication and child profile management
-- Real-time progress dashboards pulling from the server
-- **QR code scanning** (via **ML Kit** barcode scanning + **CameraX**) to link a child's game account
-- Goal creation and tracking
+- Real-time progress dashboards: tasks completed, total points, streaks, last active
+- **Per-language AI summaries** — the app displays AI-generated one-line and three-line narratives of what the child is strong at in Python vs C++, regenerated automatically as the profile evolves
+- **Custom goal setting** — parents define goals (point thresholds or specific task completions) with a reward message; children see goals in-game as motivation targets
+- **QR code scanning** (via **ML Kit** barcode scanning + **CameraX**) to securely link a child's game account without the child needing to type credentials
 - Image loading via **Coil**
 
 ---
@@ -129,6 +133,7 @@ A lightweight **Vite**-powered single-page application built in vanilla JavaScri
 - Full CRUD for courses: title, language (Python/C++), difficulty, description, quiz questions
 - Each question supports four multiple-choice options with a designated correct answer and optional explanation
 - Publishing/unpublishing courses so they appear in-game on the Community Island
+- Published courses integrate directly with the AI learning profile — completion attempts are recorded as learning events under the topic `{language}_course:{acronym}`, feeding back into the student's adaptive profile
 
 The creator communicates exclusively with the **HTTP REST API** on port 8085, authenticated via a Bearer token stored in the browser.
 
