@@ -192,6 +192,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (PauseMenuManager.IsGamePaused)
         {
+            if (IsVrConfigured())
+            {
+                TryApplyXrHeadPose();
+            }
             return;
         }
 
