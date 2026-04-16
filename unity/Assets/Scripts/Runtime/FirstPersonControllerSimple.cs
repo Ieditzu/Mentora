@@ -81,10 +81,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private float speedBoostUntilTime = -1f;
     private Vector2 lastTouchPos;
     private bool touchLookActive;
+    private bool xrHeadOriginCaptured;
+    private Vector3 xrHeadOriginLocalPosition;
     public void SetHeadAnchor(Transform anchor)
     {
         headAnchor = anchor;
-        if (camTransform != null && headAnchor != null)
+        if (camTransform != null && headAnchor != null && !IsVrConfigured())
         {
             camTransform.position = headAnchor.position;
         }
@@ -237,7 +239,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private void Look()
     {
         // In VR, drive the camera directly from the HMD pose and skip mouse-look.
-        if (XRSettings.enabled && TryApplyXrHeadPose())
+        if (IsVrConfigured() && TryApplyXrHeadPose())
         {
             ApplyVrStickTurn();
             return;
@@ -578,7 +580,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return;
         }
 
-        if (headAnchor != null)
+        if (headAnchor != null && !IsVrConfigured())
         {
             camTransform.SetParent(headAnchor, false);
             camTransform.localPosition = Vector3.zero;
@@ -587,6 +589,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         camTransform.SetParent(transform, false);
         camTransform.localPosition = new Vector3(0f, GetDefaultEyeHeight(), 0f);
+        camTransform.localRotation = Quaternion.identity;
     }
 
     public void SetMovementLocked(bool locked)
@@ -640,6 +643,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         drownTimer = 0f;
         velocity = Vector3.zero;
         pendingExternalDisplacement = Vector3.zero;
+        xrHeadOriginCaptured = false;
         bool wasEnabled = controller.enabled;
         controller.enabled = false;
         transform.SetPositionAndRotation(spawnPosition, spawnRotation);
@@ -744,13 +748,26 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return false;
         }
 
+        if (camTransform.parent != transform)
+        {
+            camTransform.SetParent(transform, false);
+        }
+
         if (InputDevices.GetDeviceAtXRNode(XRNode.Head)
             .TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 pos))
         {
-            camTransform.localPosition = pos;
+            if (!xrHeadOriginCaptured)
+            {
+                xrHeadOriginLocalPosition = pos;
+                xrHeadOriginCaptured = true;
+            }
+
+            Vector3 offset = pos - xrHeadOriginLocalPosition;
+            camTransform.localPosition = new Vector3(offset.x, eyeHeight, offset.z);
         }
         else
         {
+            xrHeadOriginCaptured = false;
             camTransform.localPosition = new Vector3(0f, eyeHeight, 0f);
         }
 
@@ -785,6 +802,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
     {
         var display = GetActiveDisplay();
         return display != null && display.running;
+    }
+
+    private static bool IsVrConfigured()
+    {
+        return XRSettings.enabled;
     }
 
     private bool TryGetVrMoveAxis(out Vector2 axis)
