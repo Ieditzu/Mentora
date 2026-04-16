@@ -37,10 +37,14 @@ public class FirstPersonControllerSimple : MonoBehaviour
     [SerializeField] private float eyeHeight = 4.0f;
     [SerializeField] private float bodyVisualScale = 8f;
     [SerializeField] private float baseControllerHeight = 1.8f;
+    [SerializeField] private float vrNearClipPlane = 0.01f;
     [SerializeField] private float vrHeightScale = 1.35f;
     [SerializeField] private float vrMoveDeadzone = 0.15f;
     [SerializeField] private float vrTurnSpeed = 180f; // degrees per second using right stick X
     [SerializeField] private float vrTurnDeadzone = 0.18f;
+    [SerializeField] private bool showVrControllers = true;
+    [SerializeField] private Vector3 leftControllerLocalOffset = new Vector3(-0.01f, -0.015f, 0.045f);
+    [SerializeField] private Vector3 rightControllerLocalOffset = new Vector3(0.01f, -0.015f, 0.045f);
 
     [Header("Controller Size")]
     [SerializeField] private float controllerHeight = 2.0f;
@@ -81,10 +85,14 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private float speedBoostUntilTime = -1f;
     private Vector2 lastTouchPos;
     private bool touchLookActive;
+    private bool xrHeadOriginCaptured;
+    private Vector3 xrHeadOriginLocalPosition;
+    private Transform leftVrControllerVisual;
+    private Transform rightVrControllerVisual;
     public void SetHeadAnchor(Transform anchor)
     {
         headAnchor = anchor;
-        if (camTransform != null && headAnchor != null)
+        if (camTransform != null && headAnchor != null && !IsVrConfigured())
         {
             camTransform.position = headAnchor.position;
         }
@@ -104,6 +112,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
     public float GetJumpVelocity()
     {
         return jumpVelocity;
+    }
+
+    public void RecalibrateVrTracking()
+    {
+        xrHeadOriginCaptured = false;
     }
 
     private void Awake()
@@ -135,6 +148,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         // If running in XR, scale height to feel taller in VR without changing non-VR builds.
         if (IsVrActive())
         {
+            cam.nearClipPlane = Mathf.Clamp(vrNearClipPlane, 0.001f, 0.1f);
             eyeHeight *= vrHeightScale;
             controllerHeight *= vrHeightScale;
             bodyVisualScale *= vrHeightScale;
@@ -142,6 +156,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         EnsureBodyVisible();
+        EnsureVrControllerVisuals();
 
         HideCursor();
     }
@@ -190,6 +205,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (PauseMenuManager.IsGamePaused)
         {
+            if (IsVrConfigured())
+            {
+                TryApplyXrHeadPose();
+                UpdateVrControllerVisuals();
+            }
             return;
         }
 
@@ -204,6 +224,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         Move();
+        if (IsVrConfigured())
+        {
+            UpdateVrControllerVisuals();
+        }
     }
 
     private void ToggleCursor()
@@ -237,7 +261,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private void Look()
     {
         // In VR, drive the camera directly from the HMD pose and skip mouse-look.
-        if (XRSettings.enabled && TryApplyXrHeadPose())
+        if (IsVrConfigured() && TryApplyXrHeadPose())
         {
             ApplyVrStickTurn();
             return;
@@ -537,6 +561,142 @@ public class FirstPersonControllerSimple : MonoBehaviour
         proxy.transform.localScale = Vector3.one;
     }
 
+    private void EnsureVrControllerVisuals()
+    {
+        if (!showVrControllers)
+        {
+            SetVrControllerVisualState(false);
+            return;
+        }
+
+        if (leftVrControllerVisual == null)
+        {
+            leftVrControllerVisual = CreateVrControllerVisual("LeftVrControllerVisual", new Color(0.22f, 0.78f, 1f, 1f));
+        }
+
+        if (rightVrControllerVisual == null)
+        {
+            rightVrControllerVisual = CreateVrControllerVisual("RightVrControllerVisual", new Color(1f, 0.56f, 0.24f, 1f));
+        }
+
+        bool shouldShow = IsVrConfigured();
+        SetVrControllerVisualState(shouldShow);
+    }
+
+    private Transform CreateVrControllerVisual(string name, Color color)
+    {
+        GameObject root = new GameObject(name);
+        root.transform.SetParent(transform, false);
+
+        GameObject grip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        grip.name = "Grip";
+        grip.transform.SetParent(root.transform, false);
+        grip.transform.localScale = new Vector3(0.045f, 0.07f, 0.14f);
+
+        GameObject pointer = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        pointer.name = "Pointer";
+        pointer.transform.SetParent(root.transform, false);
+        pointer.transform.localScale = new Vector3(0.01f, 0.06f, 0.01f);
+        pointer.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        pointer.transform.localPosition = new Vector3(0f, -0.01f, 0.08f);
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Standard");
+            }
+
+            Material material = new Material(shader);
+            material.color = color;
+            if (material.HasProperty("_Surface"))
+            {
+                material.SetFloat("_Surface", 0f);
+            }
+            renderer.sharedMaterial = material;
+        }
+
+        Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+            {
+                colliders[i].enabled = false;
+            }
+        }
+
+        return root.transform;
+    }
+
+    private void SetVrControllerVisualState(bool visible)
+    {
+        if (leftVrControllerVisual != null)
+        {
+            leftVrControllerVisual.gameObject.SetActive(visible);
+        }
+
+        if (rightVrControllerVisual != null)
+        {
+            rightVrControllerVisual.gameObject.SetActive(visible);
+        }
+    }
+
+    private void UpdateVrControllerVisuals()
+    {
+        EnsureVrControllerVisuals();
+        if (!showVrControllers || !IsVrConfigured())
+        {
+            return;
+        }
+
+        UpdateVrControllerVisual(XRNode.LeftHand, leftVrControllerVisual, leftControllerLocalOffset);
+        UpdateVrControllerVisual(XRNode.RightHand, rightVrControllerVisual, rightControllerLocalOffset);
+    }
+
+    private void UpdateVrControllerVisual(XRNode node, Transform visual, Vector3 localOffset)
+    {
+        if (visual == null)
+        {
+            return;
+        }
+
+        XRInputDevice device = InputDevices.GetDeviceAtXRNode(node);
+        if (!device.isValid)
+        {
+            visual.gameObject.SetActive(false);
+            return;
+        }
+
+        bool hasPosition = device.TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 localPosition);
+        bool hasRotation = device.TryGetFeatureValue(XRCommonUsages.deviceRotation, out Quaternion localRotation);
+        if (!hasPosition && !hasRotation)
+        {
+            visual.gameObject.SetActive(false);
+            return;
+        }
+
+        visual.gameObject.SetActive(true);
+        Vector3 calibratedPosition = localPosition;
+        if (xrHeadOriginCaptured)
+        {
+            Vector3 relativeToHeadOrigin = localPosition - xrHeadOriginLocalPosition;
+            calibratedPosition = new Vector3(relativeToHeadOrigin.x, eyeHeight + relativeToHeadOrigin.y, relativeToHeadOrigin.z);
+        }
+
+        visual.localPosition = calibratedPosition + (hasRotation ? localRotation * localOffset : localOffset);
+        visual.localRotation = hasRotation ? localRotation : Quaternion.identity;
+    }
+
     private void SinkBodyToGround(Transform body)
     {
         if (body == null)
@@ -578,7 +738,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return;
         }
 
-        if (headAnchor != null)
+        if (headAnchor != null && !IsVrConfigured())
         {
             camTransform.SetParent(headAnchor, false);
             camTransform.localPosition = Vector3.zero;
@@ -587,6 +747,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         camTransform.SetParent(transform, false);
         camTransform.localPosition = new Vector3(0f, GetDefaultEyeHeight(), 0f);
+        camTransform.localRotation = Quaternion.identity;
     }
 
     public void SetMovementLocked(bool locked)
@@ -640,6 +801,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         drownTimer = 0f;
         velocity = Vector3.zero;
         pendingExternalDisplacement = Vector3.zero;
+        xrHeadOriginCaptured = false;
         bool wasEnabled = controller.enabled;
         controller.enabled = false;
         transform.SetPositionAndRotation(spawnPosition, spawnRotation);
@@ -744,13 +906,26 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return false;
         }
 
+        if (camTransform.parent != transform)
+        {
+            camTransform.SetParent(transform, false);
+        }
+
         if (InputDevices.GetDeviceAtXRNode(XRNode.Head)
             .TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 pos))
         {
-            camTransform.localPosition = pos;
+            if (!xrHeadOriginCaptured)
+            {
+                xrHeadOriginLocalPosition = pos;
+                xrHeadOriginCaptured = true;
+            }
+
+            Vector3 offset = pos - xrHeadOriginLocalPosition;
+            camTransform.localPosition = new Vector3(offset.x, eyeHeight, offset.z);
         }
         else
         {
+            xrHeadOriginCaptured = false;
             camTransform.localPosition = new Vector3(0f, eyeHeight, 0f);
         }
 
@@ -785,6 +960,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
     {
         var display = GetActiveDisplay();
         return display != null && display.running;
+    }
+
+    private static bool IsVrConfigured()
+    {
+        return XRSettings.enabled;
     }
 
     private bool TryGetVrMoveAxis(out Vector2 axis)

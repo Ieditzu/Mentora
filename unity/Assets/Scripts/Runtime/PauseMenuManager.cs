@@ -8,6 +8,9 @@ using UnityEngine.UI;
 using Mentora.Network;
 using System.Collections.Generic;
 using System.IO;
+using UnityEngine.XR;
+using XRCommonUsages = UnityEngine.XR.CommonUsages;
+using XRInputDevice = UnityEngine.XR.InputDevice;
 
 public class PauseMenuManager : MonoBehaviour
 {
@@ -32,6 +35,7 @@ public class PauseMenuManager : MonoBehaviour
     private InputField sensitivityInput;
     private Text sensitivityValueText;
     private FirstPersonControllerSimple fpsController;
+    private Camera menuCamera;
     private float previousTimeScale = 1f;
     private bool initialized;
 
@@ -65,6 +69,10 @@ public class PauseMenuManager : MonoBehaviour
     private bool devOptionsUnlocked;
     private int devUnlockProgress;
     private int devProfileCounter = 1;
+    private bool vrPauseButtonWasPressed;
+    private const float VrMenuDistance = 2.4f;
+    private const float VrMenuHeightOffset = -0.1f;
+    private static readonly Vector3 VrMenuScale = Vector3.one * 0.00135f;
 
     private string SessionFilePath => Path.Combine(Application.persistentDataPath, "session.json");
 
@@ -345,11 +353,12 @@ public class PauseMenuManager : MonoBehaviour
     private void Update()
     {
         ReacquireControllerIfNeeded();
+        UpdateMenuPresentation();
         if (IsGamePaused)
         {
             HandleDevUnlockInput();
         }
-        if (IsEscapePressed())
+        if (WasPausePressedThisFrame())
         {
             if (IsGamePaused) ResumeGame();
             else PauseGame();
@@ -386,6 +395,38 @@ public class PauseMenuManager : MonoBehaviour
     private static bool IsEscapePressed()
     {
         return Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+    }
+
+    private bool WasPausePressedThisFrame()
+    {
+        bool keyboardPressed = IsEscapePressed();
+        bool vrPressed = IsVrPausePressed();
+        return keyboardPressed || vrPressed;
+    }
+
+    private bool IsVrPausePressed()
+    {
+        if (!IsVrPauseMenuActive())
+        {
+            vrPauseButtonWasPressed = false;
+            return false;
+        }
+
+        XRInputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        bool pressedNow = false;
+        if (leftHand.isValid)
+        {
+            if (!leftHand.TryGetFeatureValue(XRCommonUsages.menuButton, out pressedNow))
+            {
+                bool secondaryPressed = false;
+                leftHand.TryGetFeatureValue(XRCommonUsages.secondaryButton, out secondaryPressed);
+                pressedNow = secondaryPressed;
+            }
+        }
+
+        bool wasPressedThisFrame = pressedNow && !vrPauseButtonWasPressed;
+        vrPauseButtonWasPressed = pressedNow;
+        return wasPressedThisFrame;
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -425,6 +466,7 @@ public class PauseMenuManager : MonoBehaviour
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
         canvasObject.AddComponent<GraphicRaycaster>();
+        ConfigureCanvasForCurrentMode();
 
         GameObject dimmer = CreateUiObject("Dimmer", canvas.transform);
         dimmer.AddComponent<Image>().color = new Color(0.03f, 0.04f, 0.08f, 0.82f);
@@ -864,12 +906,14 @@ public class PauseMenuManager : MonoBehaviour
     {
         RebuildIfNeeded();
         ReacquireControllerIfNeeded();
+        ConfigureCanvasForCurrentMode();
         previousTimeScale = Time.timeScale;
         Time.timeScale = 0f;
         IsGamePaused = true;
         if (canvas != null)
         {
             canvas.gameObject.SetActive(true);
+            UpdateVrCanvasPlacement(true);
             ShowPanel(mainPanel);
             RefreshDevOptionsVisibility();
             devUnlockProgress = 0;
@@ -1000,6 +1044,130 @@ public class PauseMenuManager : MonoBehaviour
     private void UpdateSensitivityLabel(float v) { if (sensitivityValueText != null) sensitivityValueText.text = v.ToString("0.00"); }
 
     private void ReacquireControllerIfNeeded() { if (fpsController == null) fpsController = PlayerCache.GetFps(); }
+
+    private void UpdateMenuPresentation()
+    {
+        if (canvas == null)
+        {
+            return;
+        }
+
+        ConfigureCanvasForCurrentMode();
+        if (IsGamePaused)
+        {
+            UpdateVrCanvasPlacement(false);
+        }
+    }
+
+    private void ConfigureCanvasForCurrentMode()
+    {
+        if (canvas == null)
+        {
+            return;
+        }
+
+        bool vrActive = IsVrPauseMenuActive();
+        Camera targetCamera = GetMenuCamera();
+
+        if (vrActive && targetCamera != null)
+        {
+            if (canvas.renderMode != RenderMode.WorldSpace)
+            {
+                canvas.renderMode = RenderMode.WorldSpace;
+            }
+
+            canvas.worldCamera = targetCamera;
+            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+            if (canvasRect != null)
+            {
+                canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+                canvasRect.localScale = VrMenuScale;
+            }
+        }
+        else
+        {
+            if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
+
+            canvas.worldCamera = null;
+            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+            if (canvasRect != null)
+            {
+                canvasRect.localPosition = Vector3.zero;
+                canvasRect.localRotation = Quaternion.identity;
+                canvasRect.localScale = Vector3.one;
+            }
+        }
+    }
+
+    private void UpdateVrCanvasPlacement(bool snap)
+    {
+        if (canvas == null || canvas.renderMode != RenderMode.WorldSpace)
+        {
+            return;
+        }
+
+        Camera targetCamera = GetMenuCamera();
+        if (targetCamera == null)
+        {
+            return;
+        }
+
+        Transform camTransform = targetCamera.transform;
+        Vector3 forward = camTransform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = camTransform.forward;
+        }
+        forward.Normalize();
+
+        Vector3 desiredPosition = camTransform.position + forward * VrMenuDistance;
+        desiredPosition.y = camTransform.position.y + VrMenuHeightOffset;
+        Quaternion desiredRotation = Quaternion.LookRotation(desiredPosition - camTransform.position, Vector3.up);
+
+        Transform canvasTransform = canvas.transform;
+        if (snap)
+        {
+            canvasTransform.position = desiredPosition;
+            canvasTransform.rotation = desiredRotation;
+        }
+        else
+        {
+            float moveT = 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime);
+            float rotateT = 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime);
+            canvasTransform.position = Vector3.Lerp(canvasTransform.position, desiredPosition, moveT);
+            canvasTransform.rotation = Quaternion.Slerp(canvasTransform.rotation, desiredRotation, rotateT);
+        }
+    }
+
+    private bool IsVrPauseMenuActive()
+    {
+        return XRSettings.enabled && XRSettings.isDeviceActive;
+    }
+
+    private Camera GetMenuCamera()
+    {
+        if (fpsController != null)
+        {
+            Camera fpsCamera = fpsController.GetComponentInChildren<Camera>(true);
+            if (fpsCamera != null)
+            {
+                menuCamera = fpsCamera;
+                return menuCamera;
+            }
+        }
+
+        if (Camera.main != null)
+        {
+            menuCamera = Camera.main;
+            return menuCamera;
+        }
+
+        return menuCamera;
+    }
 
     private void ApplySavedSensitivity()
     {
