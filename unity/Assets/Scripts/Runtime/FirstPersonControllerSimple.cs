@@ -571,69 +571,33 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (leftVrControllerVisual == null)
         {
-            leftVrControllerVisual = CreateVrControllerVisual("LeftVrControllerVisual", new Color(0.22f, 0.78f, 1f, 1f));
+            leftVrControllerVisual = CreateVrControllerVisual("LeftVrControllerVisual", true);
         }
 
         if (rightVrControllerVisual == null)
         {
-            rightVrControllerVisual = CreateVrControllerVisual("RightVrControllerVisual", new Color(1f, 0.56f, 0.24f, 1f));
+            rightVrControllerVisual = CreateVrControllerVisual("RightVrControllerVisual", false);
         }
 
         bool shouldShow = IsVrConfigured();
         SetVrControllerVisualState(shouldShow);
     }
 
-    private Transform CreateVrControllerVisual(string name, Color color)
+    private Transform CreateVrControllerVisual(string name, bool isLeft)
     {
         GameObject root = new GameObject(name);
         root.transform.SetParent(transform, false);
 
-        GameObject grip = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        grip.name = "Grip";
-        grip.transform.SetParent(root.transform, false);
-        grip.transform.localScale = new Vector3(0.045f, 0.07f, 0.14f);
-
-        GameObject pointer = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        pointer.name = "Pointer";
-        pointer.transform.SetParent(root.transform, false);
-        pointer.transform.localScale = new Vector3(0.01f, 0.06f, 0.01f);
-        pointer.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-        pointer.transform.localPosition = new Vector3(0f, -0.01f, 0.08f);
-
-        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-        for (int i = 0; i < renderers.Length; i++)
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
         {
-            Renderer renderer = renderers[i];
-            if (renderer == null)
-            {
-                continue;
-            }
-
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-            }
-
-            Material material = new Material(shader);
-            material.color = color;
-            if (material.HasProperty("_Surface"))
-            {
-                material.SetFloat("_Surface", 0f);
-            }
-            renderer.sharedMaterial = material;
+            shader = Shader.Find("Standard");
         }
 
-        Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            if (colliders[i] != null)
-            {
-                colliders[i].enabled = false;
-            }
-        }
+        OVRRuntimeController runtimeController = root.AddComponent<OVRRuntimeController>();
+        runtimeController.m_controller = isLeft ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
+        runtimeController.m_controllerModelShader = shader;
+        runtimeController.m_supportAnimation = true;
 
         return root.transform;
     }
