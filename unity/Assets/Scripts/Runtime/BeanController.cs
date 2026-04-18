@@ -6,6 +6,8 @@ public class BeanController : MonoBehaviour
     private const float MaxJumpValue = 10f;
     private const string LeftTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Left";
     private const string RightTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Right";
+    private static readonly Vector3 TouchPlusModelLocalPosition = new Vector3(0f, -0.03f, -0.04f);
+    private static readonly Quaternion TouchPlusModelLocalRotation = Quaternion.Euler(30f, 0f, 0f);
 
     [SerializeField] private float moveSpeed = 7f;
     [SerializeField] private float sprintMultiplier = 2f;
@@ -370,8 +372,8 @@ public class BeanController : MonoBehaviour
 
         GameObject modelInstance = Instantiate(modelPrefab, parent);
         modelInstance.name = modelPrefab.name;
-        modelInstance.transform.localPosition = new Vector3(0f, -0.03f, -0.04f);
-        modelInstance.transform.localRotation = Quaternion.AngleAxis(-60f, Vector3.right);
+        modelInstance.transform.localPosition = TouchPlusModelLocalPosition;
+        modelInstance.transform.localRotation = TouchPlusModelLocalRotation;
         modelInstance.transform.localScale = Vector3.one;
         return true;
     }
