@@ -19,9 +19,7 @@ public class SakuraAreaColliderApplier : MonoBehaviour
         "insula3",
     };
 
-#if UNITY_EDITOR
     private bool applyQueued;
-#endif
 
     private void OnEnable()
     {
@@ -51,9 +49,7 @@ public class SakuraAreaColliderApplier : MonoBehaviour
             return;
         }
 
-#if UNITY_EDITOR
         applyQueued = false;
-#endif
         ApplyToRootAndChildren(GameObject.Find("sakura2"), false);
         ApplyWalkableTopSurface(GameObject.Find("low_poly_treesNXT_5flat"));
         ApplySketchfabWalkableSurfaces();
