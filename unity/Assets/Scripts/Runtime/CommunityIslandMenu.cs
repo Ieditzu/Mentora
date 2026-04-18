@@ -456,36 +456,41 @@ public class CommunityIslandMenu : MonoBehaviour
 
         panelImage = EnsureImage(canvasObject.transform, "CommunityPanel", panelColor);
         RectTransform panelRect = panelImage.rectTransform;
-        StretchFullscreen(panelRect);
+        panelRect.sizeDelta = new Vector2(1200f, 850f);
+        panelRect.anchoredPosition = Vector2.zero;
 
         Outline panelOutline = panelImage.GetComponent<Outline>() ?? panelImage.gameObject.AddComponent<Outline>();
-        panelOutline.effectColor = new Color(accentColor.r, accentColor.g, accentColor.b, 0.16f);
-        panelOutline.effectDistance = new Vector2(3f, -3f);
+        panelOutline.effectColor = new Color(accentColor.r, accentColor.g, accentColor.b, 0.24f);
+        panelOutline.effectDistance = new Vector2(4f, -4f);
 
-        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.82f), new Vector2(900f, 100f), 42, FontStyle.Bold, textColor);
-        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.50f), new Vector2(1260f, 520f), 24, FontStyle.Normal, secondaryTextColor);
+        Shadow panelShadow = panelImage.GetComponent<Shadow>() ?? panelImage.gameObject.AddComponent<Shadow>();
+        panelShadow.effectColor = new Color(0, 0, 0, 0.15f);
+        panelShadow.effectDistance = new Vector2(10f, -10f);
+
+        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.92f), new Vector2(1100f, 80f), 48, FontStyle.Bold, textColor);
+        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.55f), new Vector2(1100f, 480f), 28, FontStyle.Normal, secondaryTextColor);
         bodyText.alignment = TextAnchor.UpperLeft;
 
-        fetchButton = EnsureButton(canvasObject.transform, "FetchButton", new Vector2(0.93f, 0.92f), new Vector2(72f, 56f), buttonColor, "↻", 28);
+        fetchButton = EnsureButton(panelImage.transform, "FetchButton", new Vector2(0.94f, 0.92f), new Vector2(80f, 80f), buttonColor, "↻", 32);
         fetchButtonText = fetchButton.GetComponentInChildren<Text>(true);
-        themeButton = EnsureButton(canvasObject.transform, "ThemeButton", new Vector2(0.85f, 0.92f), new Vector2(72f, 56f), buttonColor, "☾", 28);
+        themeButton = EnsureButton(panelImage.transform, "ThemeButton", new Vector2(0.06f, 0.92f), new Vector2(80f, 80f), buttonColor, "☾", 32);
         themeButtonText = themeButton.GetComponentInChildren<Text>(true);
 
-        leaveButton = EnsureButton(canvasObject.transform, "LeaveButton", new Vector2(0.11f, 0.11f), new Vector2(72f, 56f), buttonColor, "✕", 30);
+        leaveButton = EnsureButton(panelImage.transform, "LeaveButton", new Vector2(0.5f, -0.08f), new Vector2(160f, 64f), buttonColor, "✕ Close", 24);
         leaveButtonText = leaveButton.GetComponentInChildren<Text>(true);
 
-        prevButton = EnsureButton(canvasObject.transform, "PrevButton", new Vector2(0.35f, 0.2f), new Vector2(100f, 56f), buttonColor, "<", 28);
+        prevButton = EnsureButton(panelImage.transform, "PrevButton", new Vector2(0.15f, 0.12f), new Vector2(120f, 64f), buttonColor, "<", 28);
         prevButtonText = prevButton.GetComponentInChildren<Text>(true);
         
-        nextButton = EnsureButton(canvasObject.transform, "NextButton", new Vector2(0.65f, 0.2f), new Vector2(100f, 56f), buttonColor, ">", 28);
+        nextButton = EnsureButton(panelImage.transform, "NextButton", new Vector2(0.85f, 0.12f), new Vector2(120f, 64f), buttonColor, ">", 28);
         nextButtonText = nextButton.GetComponentInChildren<Text>(true);
 
-        actionButton = EnsureButton(canvasObject.transform, "ActionButton", new Vector2(0.5f, 0.2f), new Vector2(200f, 56f), accentColor, "Start", 28);
+        actionButton = EnsureButton(panelImage.transform, "ActionButton", new Vector2(0.5f, 0.12f), new Vector2(300f, 72f), accentColor, "Start", 28);
         actionButtonText = actionButton.GetComponentInChildren<Text>(true);
 
         for (int i = 0; i < 4; i++) {
-            float yPos = 0.45f - (i * 0.1f);
-            optionButtons[i] = EnsureButton(canvasObject.transform, "OptionButton" + i, new Vector2(0.5f, yPos), new Vector2(800f, 60f), buttonColor, "Option " + i, 24);
+            float yPos = 0.52f - (i * 0.12f);
+            optionButtons[i] = EnsureButton(panelImage.transform, "OptionButton" + i, new Vector2(0.5f, yPos), new Vector2(900f, 70f), buttonColor, "Option " + i, 26);
             optionButtonTexts[i] = optionButtons[i].GetComponentInChildren<Text>(true);
         }
 
@@ -920,20 +925,26 @@ public class CommunityIslandMenu : MonoBehaviour
     {
         if (currentState == MenuState.List)
         {
+            titleText.text = "Community Courses";
             for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
             
             if (availableCourses != null && availableCourses.Length > 0)
             {
                 PublishedCourseSummary course = availableCourses[currentCourseIndex];
-                string completedTag = course.completed ? "[COMPLETED] " : "";
-                communityBodyMessage = $"{currentCourseIndex + 1}/{availableCourses.Length} - {course.title} ({course.pointReward} pts)\n\nLanguage: {course.language} | Difficulty: {course.difficulty}\nQuestions: {course.questionCount}\n\n{completedTag}{course.summary}";
+                string completedTag = course.completed ? "<color=#16a34a><b>[COMPLETED]</b></color> " : "";
+                
+                communityBodyMessage = $"<b><size=42>{course.title}</size></b>\n" +
+                                     $"<color={GetHexColor(secondaryTextColor)}><size=24>{currentCourseIndex + 1} of {availableCourses.Length}</size></color>\n\n" +
+                                     $"<b>Language:</b> {course.language}  |  <b>Difficulty:</b> {course.difficulty}\n" +
+                                     $"<b>Questions:</b> {course.questionCount}  |  <b>Reward:</b> {course.pointReward} pts\n\n" +
+                                     $"{completedTag}{course.summary}";
                 
                 if (prevButton != null) prevButton.gameObject.SetActive(availableCourses.Length > 1);
                 if (nextButton != null) nextButton.gameObject.SetActive(availableCourses.Length > 1);
                 if (actionButton != null)
                 {
                     actionButton.gameObject.SetActive(true);
-                    if (actionButtonText != null) actionButtonText.text = "Start Course";
+                    if (actionButtonText != null) actionButtonText.text = "Enroll Now";
                 }
             }
             else
@@ -947,12 +958,15 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         else if (currentState == MenuState.Quiz)
         {
+            titleText.text = currentCourseDetail.title;
             if (prevButton != null) prevButton.gameObject.SetActive(false);
             if (nextButton != null) nextButton.gameObject.SetActive(false);
             if (actionButton != null) actionButton.gameObject.SetActive(false);
             
             CourseQuestionDto q = currentCourseDetail.questions[currentQuestionIndex];
-            communityBodyMessage = $"Question {currentQuestionIndex + 1}/{currentCourseDetail.questions.Length}\n\n{q.prompt}";
+            communityBodyMessage = $"<color={GetHexColor(secondaryTextColor)}><size=24>Question {currentQuestionIndex + 1} of {currentCourseDetail.questions.Length}</size></color>\n\n" +
+                                 $"<b><size=34>{q.prompt}</size></b>";
+            
             bodyText.alignment = TextAnchor.MiddleCenter;
             
             for (int i = 0; i < 4; i++)
@@ -975,21 +989,33 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         else if (currentState == MenuState.Result)
         {
+            titleText.text = "Course Results";
             for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
             if (prevButton != null) prevButton.gameObject.SetActive(false);
             if (nextButton != null) nextButton.gameObject.SetActive(false);
             
-            communityBodyMessage = $"Quiz Completed!\n\nYour Score: {currentScore} / {currentCourseDetail.questions.Length}";
+            float percentage = (float)currentScore / currentCourseDetail.questions.Length;
+            string colorHex = percentage >= 0.7f ? "#16a34a" : (percentage >= 0.4f ? "#ca8a04" : "#dc2626");
+            
+            communityBodyMessage = $"<size=48>Congratulations!</size>\n\n" +
+                                 $"Your final score is\n" +
+                                 $"<b><size=72><color={colorHex}>{currentScore}</color></size></b> / {currentCourseDetail.questions.Length}";
+            
             bodyText.alignment = TextAnchor.MiddleCenter;
             
             if (actionButton != null)
             {
                 actionButton.gameObject.SetActive(true);
-                if (actionButtonText != null) actionButtonText.text = "Finish & Submit";
+                if (actionButtonText != null) actionButtonText.text = "Finish & Claim Reward";
             }
         }
         
         UpdateBodyText();
+    }
+
+    private string GetHexColor(Color color)
+    {
+        return "#" + ColorUtility.ToHtmlStringRGB(color);
     }
 
     private async void OnActionClicked()
@@ -1205,6 +1231,7 @@ public class CommunityIslandMenu : MonoBehaviour
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.color = color;
         text.raycastTarget = false;
+        text.supportRichText = true;
         return text;
     }
 
