@@ -9,6 +9,8 @@ using XRInputDevice = UnityEngine.XR.InputDevice;
 public class FirstPersonControllerSimple : MonoBehaviour
 {
     private const float MaxJumpValue = 10f;
+    private const string LeftTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Left";
+    private const string RightTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Right";
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
@@ -89,6 +91,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private Vector3 xrHeadOriginLocalPosition;
     private Transform leftVrControllerVisual;
     private Transform rightVrControllerVisual;
+
+    private bool ShouldDriveVrControllerVisuals()
+    {
+        return showVrControllers && (IsVrConfigured() || HasConnectedOvrControllers());
+    }
+
     public void SetHeadAnchor(Transform anchor)
     {
         headAnchor = anchor;
@@ -117,6 +125,22 @@ public class FirstPersonControllerSimple : MonoBehaviour
     public void RecalibrateVrTracking()
     {
         xrHeadOriginCaptured = false;
+    }
+
+    public float GetVrEyeHeight()
+    {
+        return eyeHeight;
+    }
+
+    public void SetHandTrackingVisualsActive(bool handTrackingActive)
+    {
+        if (showVrControllers)
+        {
+            EnsureVrControllerVisuals();
+        }
+
+        bool shouldShowControllers = showVrControllers && !handTrackingActive && IsVrConfigured();
+        SetVrControllerVisualState(shouldShowControllers);
     }
 
     private void Awake()
@@ -208,6 +232,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
             if (IsVrConfigured())
             {
                 TryApplyXrHeadPose();
+            }
+
+            if (ShouldDriveVrControllerVisuals())
+            {
                 UpdateVrControllerVisuals();
             }
             return;
@@ -224,7 +252,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         Move();
-        if (IsVrConfigured())
+        if (ShouldDriveVrControllerVisuals())
         {
             UpdateVrControllerVisuals();
         }
@@ -579,7 +607,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
             rightVrControllerVisual = CreateVrControllerVisual("RightVrControllerVisual", false);
         }
 
-        bool shouldShow = IsVrConfigured();
+        bool shouldShow = IsVrConfigured() || HasConnectedOvrControllers();
         SetVrControllerVisualState(shouldShow);
     }
 
@@ -588,18 +616,86 @@ public class FirstPersonControllerSimple : MonoBehaviour
         GameObject root = new GameObject(name);
         root.transform.SetParent(transform, false);
 
+        if (TryCreateTouchPlusControllerModel(root.transform, isLeft))
+        {
+            return root.transform;
+        }
+
+        CreateFallbackControllerGeometry(root.transform, isLeft);
+        return root.transform;
+    }
+
+    private static bool TryCreateTouchPlusControllerModel(Transform parent, bool isLeft)
+    {
+        string resourcePath = isLeft ? LeftTouchPlusResourcePath : RightTouchPlusResourcePath;
+        GameObject modelPrefab = Resources.Load<GameObject>(resourcePath);
+        if (modelPrefab == null)
+        {
+            return false;
+        }
+
+        GameObject modelInstance = Instantiate(modelPrefab, parent);
+        modelInstance.name = modelPrefab.name;
+        modelInstance.transform.localPosition = new Vector3(0f, -0.03f, -0.04f);
+        modelInstance.transform.localRotation = Quaternion.AngleAxis(-60f, Vector3.right);
+        modelInstance.transform.localScale = Vector3.one;
+        return true;
+    }
+
+    private static void CreateFallbackControllerGeometry(Transform parent, bool isLeft)
+    {
+        GameObject grip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        grip.name = isLeft ? "LeftControllerGrip" : "RightControllerGrip";
+        grip.transform.SetParent(parent, false);
+        grip.transform.localPosition = new Vector3(0f, -0.015f, 0f);
+        grip.transform.localRotation = Quaternion.identity;
+        grip.transform.localScale = new Vector3(0.055f, 0.09f, 0.04f);
+
+        GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        ring.name = isLeft ? "LeftControllerRing" : "RightControllerRing";
+        ring.transform.SetParent(parent, false);
+        ring.transform.localPosition = new Vector3(0f, 0.02f, 0.025f);
+        ring.transform.localRotation = Quaternion.identity;
+        ring.transform.localScale = new Vector3(0.09f, 0.06f, 0.09f);
+
+        Collider gripCollider = grip.GetComponent<Collider>();
+        if (gripCollider != null)
+        {
+            Destroy(gripCollider);
+        }
+
+        Collider ringCollider = ring.GetComponent<Collider>();
+        if (ringCollider != null)
+        {
+            Destroy(ringCollider);
+        }
+
+        Material material = CreateFallbackControllerMaterial(isLeft);
+        ApplyMaterial(grip, material);
+        ApplyMaterial(ring, material);
+    }
+
+    private static Material CreateFallbackControllerMaterial(bool isLeft)
+    {
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null)
         {
             shader = Shader.Find("Standard");
         }
 
-        OVRRuntimeController runtimeController = root.AddComponent<OVRRuntimeController>();
-        runtimeController.m_controller = isLeft ? OVRInput.Controller.LTouch : OVRInput.Controller.RTouch;
-        runtimeController.m_controllerModelShader = shader;
-        runtimeController.m_supportAnimation = true;
+        Material material = new Material(shader);
+        Color color = isLeft ? new Color(0.22f, 0.72f, 0.95f) : new Color(0.95f, 0.78f, 0.22f);
+        material.color = color;
+        return material;
+    }
 
-        return root.transform;
+    private static void ApplyMaterial(GameObject target, Material material)
+    {
+        MeshRenderer renderer = target.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.sharedMaterial = material;
+        }
     }
 
     private void SetVrControllerVisualState(bool visible)
@@ -618,16 +714,16 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private void UpdateVrControllerVisuals()
     {
         EnsureVrControllerVisuals();
-        if (!showVrControllers || !IsVrConfigured())
+        if (!showVrControllers)
         {
             return;
         }
 
-        UpdateVrControllerVisual(XRNode.LeftHand, leftVrControllerVisual, leftControllerLocalOffset);
-        UpdateVrControllerVisual(XRNode.RightHand, rightVrControllerVisual, rightControllerLocalOffset);
+        UpdateVrControllerVisual(XRNode.LeftHand, OVRInput.Controller.LTouch, leftVrControllerVisual, leftControllerLocalOffset);
+        UpdateVrControllerVisual(XRNode.RightHand, OVRInput.Controller.RTouch, rightVrControllerVisual, rightControllerLocalOffset);
     }
 
-    private void UpdateVrControllerVisual(XRNode node, Transform visual, Vector3 localOffset)
+    private void UpdateVrControllerVisual(XRNode node, OVRInput.Controller ovrController, Transform visual, Vector3 localOffset)
     {
         if (visual == null)
         {
@@ -635,30 +731,61 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         XRInputDevice device = InputDevices.GetDeviceAtXRNode(node);
-        if (!device.isValid)
-        {
-            visual.gameObject.SetActive(false);
-            return;
-        }
+        Vector3 localPosition = Vector3.zero;
+        Quaternion localRotation = Quaternion.identity;
+        bool hasPosition = device.isValid && device.TryGetFeatureValue(XRCommonUsages.devicePosition, out localPosition);
+        bool hasRotation = device.isValid && device.TryGetFeatureValue(XRCommonUsages.deviceRotation, out localRotation);
 
-        bool hasPosition = device.TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 localPosition);
-        bool hasRotation = device.TryGetFeatureValue(XRCommonUsages.deviceRotation, out Quaternion localRotation);
-        if (!hasPosition && !hasRotation)
+        if ((!hasPosition && !hasRotation) && TryGetOvrControllerPose(ovrController, out Vector3 ovrLocalPosition, out Quaternion ovrLocalRotation))
         {
-            visual.gameObject.SetActive(false);
-            return;
+            localPosition = ovrLocalPosition;
+            localRotation = ovrLocalRotation;
+            hasPosition = true;
+            hasRotation = true;
         }
 
         visual.gameObject.SetActive(true);
-        Vector3 calibratedPosition = localPosition;
-        if (xrHeadOriginCaptured)
+        Vector3 calibratedPosition = GetDefaultControllerRestPosition(ovrController);
+        if (hasPosition)
         {
-            Vector3 relativeToHeadOrigin = localPosition - xrHeadOriginLocalPosition;
-            calibratedPosition = new Vector3(relativeToHeadOrigin.x, eyeHeight + relativeToHeadOrigin.y, relativeToHeadOrigin.z);
+            calibratedPosition = localPosition;
+            if (xrHeadOriginCaptured)
+            {
+                Vector3 relativeToHeadOrigin = localPosition - xrHeadOriginLocalPosition;
+                calibratedPosition = new Vector3(relativeToHeadOrigin.x, eyeHeight + relativeToHeadOrigin.y, relativeToHeadOrigin.z);
+            }
         }
 
         visual.localPosition = calibratedPosition + (hasRotation ? localRotation * localOffset : localOffset);
         visual.localRotation = hasRotation ? localRotation : Quaternion.identity;
+    }
+
+    private Vector3 GetDefaultControllerRestPosition(OVRInput.Controller controllerMask)
+    {
+        float horizontalOffset = controllerMask == OVRInput.Controller.LTouch ? -0.22f : 0.22f;
+        return new Vector3(horizontalOffset, eyeHeight - 0.18f, 0.35f);
+    }
+
+    private static bool HasConnectedOvrControllers()
+    {
+        OVRInput.Controller connectedControllers = OVRInput.GetConnectedControllers();
+        return (connectedControllers & OVRInput.Controller.LTouch) != 0
+            || (connectedControllers & OVRInput.Controller.RTouch) != 0;
+    }
+
+    private static bool TryGetOvrControllerPose(OVRInput.Controller controllerMask, out Vector3 localPosition, out Quaternion localRotation)
+    {
+        localPosition = Vector3.zero;
+        localRotation = Quaternion.identity;
+
+        if ((OVRInput.GetConnectedControllers() & controllerMask) == 0)
+        {
+            return false;
+        }
+
+        localPosition = OVRInput.GetLocalControllerPosition(controllerMask);
+        localRotation = OVRInput.GetLocalControllerRotation(controllerMask);
+        return true;
     }
 
     private void SinkBodyToGround(Transform body)

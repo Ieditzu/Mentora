@@ -4,6 +4,8 @@ using UnityEngine;
 public class BeanController : MonoBehaviour
 {
     private const float MaxJumpValue = 10f;
+    private const string LeftTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Left";
+    private const string RightTouchPlusResourcePath = "MetaQuestTouchPlus/MetaQuestTouchPlus_Right";
 
     [SerializeField] private float moveSpeed = 7f;
     [SerializeField] private float sprintMultiplier = 2f;
@@ -30,6 +32,8 @@ public class BeanController : MonoBehaviour
     private float lastGroundedTime = -10f;
 
     private Transform camTransform;
+    private Transform leftControllerVisual;
+    private Transform rightControllerVisual;
     private float pitch;
 
     public static bool KeyboardInputEnabled { get; set; } = true;
@@ -81,6 +85,7 @@ public class BeanController : MonoBehaviour
             Cursor.visible = false;
         }
         SpawnVisualBeanIfNeeded();
+        EnsureControllerVisuals();
 
         startPosition = transform.position;
         startRotation = transform.rotation;
@@ -90,6 +95,8 @@ public class BeanController : MonoBehaviour
 
     private void Update()
     {
+        UpdateControllerVisuals();
+
         if (hardFreeze)
         {
             input = Vector3.zero;
@@ -279,6 +286,135 @@ public class BeanController : MonoBehaviour
         {
             Destroy(col);
         }
+    }
+
+    private void EnsureControllerVisuals()
+    {
+        if (leftControllerVisual == null)
+        {
+            leftControllerVisual = CreateControllerVisual("BeanLeftController", true);
+        }
+
+        if (rightControllerVisual == null)
+        {
+            rightControllerVisual = CreateControllerVisual("BeanRightController", false);
+        }
+    }
+
+    private Transform CreateControllerVisual(string name, bool isLeft)
+    {
+        GameObject root = new GameObject(name);
+        root.transform.SetParent(transform, false);
+
+        if (TryCreateTouchPlusControllerModel(root.transform, isLeft))
+        {
+            return root.transform;
+        }
+
+        GameObject grip = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        grip.name = isLeft ? "LeftGrip" : "RightGrip";
+        grip.transform.SetParent(root.transform, false);
+        grip.transform.localPosition = new Vector3(0f, -0.015f, 0f);
+        grip.transform.localScale = new Vector3(0.055f, 0.09f, 0.04f);
+
+        GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        ring.name = isLeft ? "LeftRing" : "RightRing";
+        ring.transform.SetParent(root.transform, false);
+        ring.transform.localPosition = new Vector3(0f, 0.02f, 0.025f);
+        ring.transform.localScale = new Vector3(0.09f, 0.06f, 0.09f);
+
+        Collider gripCollider = grip.GetComponent<Collider>();
+        if (gripCollider != null)
+        {
+            Destroy(gripCollider);
+        }
+
+        Collider ringCollider = ring.GetComponent<Collider>();
+        if (ringCollider != null)
+        {
+            Destroy(ringCollider);
+        }
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        Material material = new Material(shader);
+        material.color = isLeft ? new Color(0.22f, 0.72f, 0.95f) : new Color(0.95f, 0.78f, 0.22f);
+
+        MeshRenderer gripRenderer = grip.GetComponent<MeshRenderer>();
+        if (gripRenderer != null)
+        {
+            gripRenderer.sharedMaterial = material;
+        }
+
+        MeshRenderer ringRenderer = ring.GetComponent<MeshRenderer>();
+        if (ringRenderer != null)
+        {
+            ringRenderer.sharedMaterial = material;
+        }
+
+        return root.transform;
+    }
+
+    private static bool TryCreateTouchPlusControllerModel(Transform parent, bool isLeft)
+    {
+        string resourcePath = isLeft ? LeftTouchPlusResourcePath : RightTouchPlusResourcePath;
+        GameObject modelPrefab = Resources.Load<GameObject>(resourcePath);
+        if (modelPrefab == null)
+        {
+            return false;
+        }
+
+        GameObject modelInstance = Instantiate(modelPrefab, parent);
+        modelInstance.name = modelPrefab.name;
+        modelInstance.transform.localPosition = new Vector3(0f, -0.03f, -0.04f);
+        modelInstance.transform.localRotation = Quaternion.AngleAxis(-60f, Vector3.right);
+        modelInstance.transform.localScale = Vector3.one;
+        return true;
+    }
+
+    private void UpdateControllerVisuals()
+    {
+        EnsureControllerVisuals();
+        UpdateControllerVisual(leftControllerVisual, OVRInput.Controller.LTouch, true);
+        UpdateControllerVisual(rightControllerVisual, OVRInput.Controller.RTouch, false);
+    }
+
+    private void UpdateControllerVisual(Transform visual, OVRInput.Controller controllerMask, bool isLeft)
+    {
+        if (visual == null)
+        {
+            return;
+        }
+
+        Vector3 defaultPosition = GetDefaultControllerPosition(isLeft);
+        Quaternion defaultRotation = camTransform != null ? camTransform.localRotation : Quaternion.identity;
+
+        if ((OVRInput.GetConnectedControllers() & controllerMask) != 0)
+        {
+            Vector3 trackedPosition = OVRInput.GetLocalControllerPosition(controllerMask);
+            Quaternion trackedRotation = OVRInput.GetLocalControllerRotation(controllerMask);
+            Vector3 cameraOffset = camTransform != null ? camTransform.localPosition : new Vector3(0f, 2.35f, 0f);
+
+            visual.localPosition = cameraOffset + trackedPosition;
+            visual.localRotation = trackedRotation;
+            visual.gameObject.SetActive(true);
+            return;
+        }
+
+        visual.localPosition = defaultPosition;
+        visual.localRotation = defaultRotation;
+        visual.gameObject.SetActive(true);
+    }
+
+    private Vector3 GetDefaultControllerPosition(bool isLeft)
+    {
+        float horizontalOffset = isLeft ? -0.22f : 0.22f;
+        float cameraHeight = camTransform != null ? camTransform.localPosition.y : 2.35f;
+        return new Vector3(horizontalOffset, cameraHeight - 0.18f, 0.35f);
     }
 
     public void SetMovementLocked(bool locked)
