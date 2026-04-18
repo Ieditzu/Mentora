@@ -418,7 +418,6 @@ public class BeanController : MonoBehaviour
         float cameraHeight = camTransform != null ? camTransform.localPosition.y : 2.35f;
         return new Vector3(horizontalOffset, cameraHeight - 0.18f, 0.35f);
     }
-
     public void SetMovementLocked(bool locked)
     {
         movementLocked = locked;

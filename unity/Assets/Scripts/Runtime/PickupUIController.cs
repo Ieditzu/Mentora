@@ -197,12 +197,8 @@ public class PickupUIController : MonoBehaviour
         }
 
         CacheTargetBoxState();
-        if (!targetBox.isKinematic)
-        {
-            targetBox.velocity = Vector3.zero;
-            targetBox.angularVelocity = Vector3.zero;
-        }
-
+        targetBox.velocity = Vector3.zero;
+        targetBox.angularVelocity = Vector3.zero;
         targetBox.position = targetBoxSpawnPosition;
         targetBox.rotation = targetBoxSpawnRotation;
         targetBox.Sleep();

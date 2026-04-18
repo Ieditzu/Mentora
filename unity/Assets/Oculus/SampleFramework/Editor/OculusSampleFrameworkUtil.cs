@@ -44,14 +44,7 @@ public class OculusSampleFrameworkUtil
     {
         if (state == PlayModeStateChange.EnteredPlayMode)
         {
-            try
-            {
-                OVRPlugin.SendEvent("load", OVRPlugin.wrapperVersion.ToString(), "sample_framework");
-            }
-            catch
-            {
-                // Sample telemetry is non-essential; avoid breaking editor play mode when OVR is unavailable.
-            }
+            OVRPlugin.SendEvent("load", OVRPlugin.wrapperVersion.ToString(), "sample_framework");
         }
     }
 #endif
