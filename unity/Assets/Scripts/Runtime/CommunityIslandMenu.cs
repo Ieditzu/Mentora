@@ -467,8 +467,8 @@ public class CommunityIslandMenu : MonoBehaviour
         panelShadow.effectColor = new Color(0, 0, 0, 0.15f);
         panelShadow.effectDistance = new Vector2(10f, -10f);
 
-        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.92f), new Vector2(1100f, 80f), 48, FontStyle.Bold, textColor);
-        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.55f), new Vector2(1100f, 480f), 28, FontStyle.Normal, secondaryTextColor);
+        titleText = EnsureText(panelImage.transform, "TitleText", new Vector2(0.5f, 0.92f), new Vector2(900f, 80f), 48, FontStyle.Bold, textColor);
+        bodyText = EnsureText(panelImage.transform, "BodyText", new Vector2(0.5f, 0.68f), new Vector2(1100f, 300f), 28, FontStyle.Normal, secondaryTextColor);
         bodyText.alignment = TextAnchor.UpperLeft;
 
         fetchButton = EnsureButton(panelImage.transform, "FetchButton", new Vector2(0.94f, 0.92f), new Vector2(80f, 80f), buttonColor, "↻", 32);
@@ -479,18 +479,18 @@ public class CommunityIslandMenu : MonoBehaviour
         leaveButton = EnsureButton(panelImage.transform, "LeaveButton", new Vector2(0.5f, -0.08f), new Vector2(160f, 64f), buttonColor, "✕ Close", 24);
         leaveButtonText = leaveButton.GetComponentInChildren<Text>(true);
 
-        prevButton = EnsureButton(panelImage.transform, "PrevButton", new Vector2(0.15f, 0.12f), new Vector2(120f, 64f), buttonColor, "<", 28);
+        prevButton = EnsureButton(panelImage.transform, "PrevButton", new Vector2(0.15f, 0.10f), new Vector2(120f, 64f), buttonColor, "<", 28);
         prevButtonText = prevButton.GetComponentInChildren<Text>(true);
         
-        nextButton = EnsureButton(panelImage.transform, "NextButton", new Vector2(0.85f, 0.12f), new Vector2(120f, 64f), buttonColor, ">", 28);
+        nextButton = EnsureButton(panelImage.transform, "NextButton", new Vector2(0.85f, 0.10f), new Vector2(120f, 64f), buttonColor, ">", 28);
         nextButtonText = nextButton.GetComponentInChildren<Text>(true);
 
-        actionButton = EnsureButton(panelImage.transform, "ActionButton", new Vector2(0.5f, 0.12f), new Vector2(300f, 72f), accentColor, "Start", 28);
+        actionButton = EnsureButton(panelImage.transform, "ActionButton", new Vector2(0.5f, 0.10f), new Vector2(300f, 72f), accentColor, "Start", 28);
         actionButtonText = actionButton.GetComponentInChildren<Text>(true);
 
         for (int i = 0; i < 4; i++) {
-            float yPos = 0.52f - (i * 0.12f);
-            optionButtons[i] = EnsureButton(panelImage.transform, "OptionButton" + i, new Vector2(0.5f, yPos), new Vector2(900f, 70f), buttonColor, "Option " + i, 26);
+            float yPos = 0.44f - (i * 0.10f);
+            optionButtons[i] = EnsureButton(panelImage.transform, "OptionButton" + i, new Vector2(0.5f, yPos), new Vector2(900f, 64f), buttonColor, "Option " + i, 26);
             optionButtonTexts[i] = optionButtons[i].GetComponentInChildren<Text>(true);
         }
 
