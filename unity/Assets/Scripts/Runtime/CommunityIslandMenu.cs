@@ -5,6 +5,9 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [ExecuteAlways]
 public class CommunityIslandMenu : MonoBehaviour
@@ -66,6 +69,7 @@ public class CommunityIslandMenu : MonoBehaviour
     private Color lightButtonColor;
     private Color lightAccentColor;
     private bool capturedLightTheme;
+    private bool validateRefreshQueued;
 
     private void Awake()
     {
@@ -89,8 +93,36 @@ public class CommunityIslandMenu : MonoBehaviour
 
     private void OnValidate()
     {
+#if UNITY_EDITOR
+        if (Application.isPlaying)
+        {
+            EnsureTriggerVolume();
+            return;
+        }
+
+        if (validateRefreshQueued)
+        {
+            return;
+        }
+
+        validateRefreshQueued = true;
+        EditorApplication.delayCall += RefreshAfterValidate;
+#endif
+    }
+
+#if UNITY_EDITOR
+    private void RefreshAfterValidate()
+    {
+        validateRefreshQueued = false;
+
+        if (this == null)
+        {
+            return;
+        }
+
         EnsureTriggerVolume();
     }
+#endif
 
     private void LateUpdate()
     {
