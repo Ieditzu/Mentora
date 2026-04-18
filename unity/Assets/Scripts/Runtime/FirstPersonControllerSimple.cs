@@ -93,6 +93,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private Vector3 xrHeadOriginLocalPosition;
     private Transform leftVrControllerVisual;
     private Transform rightVrControllerVisual;
+
+    private bool ShouldDriveVrControllerVisuals()
+    {
+        return showVrControllers && (IsVrConfigured() || HasConnectedOvrControllers());
+    }
+
     public void SetHeadAnchor(Transform anchor)
     {
         headAnchor = anchor;
@@ -121,6 +127,22 @@ public class FirstPersonControllerSimple : MonoBehaviour
     public void RecalibrateVrTracking()
     {
         xrHeadOriginCaptured = false;
+    }
+
+    public float GetVrEyeHeight()
+    {
+        return eyeHeight;
+    }
+
+    public void SetHandTrackingVisualsActive(bool handTrackingActive)
+    {
+        if (showVrControllers)
+        {
+            EnsureVrControllerVisuals();
+        }
+
+        bool shouldShowControllers = showVrControllers && !handTrackingActive && IsVrConfigured();
+        SetVrControllerVisualState(shouldShowControllers);
     }
 
     private void Awake()
@@ -212,6 +234,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
             if (IsVrConfigured())
             {
                 TryApplyXrHeadPose();
+            }
+
+            if (ShouldDriveVrControllerVisuals())
+            {
                 UpdateVrControllerVisuals();
             }
             return;
@@ -228,7 +254,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         Move();
-        if (IsVrConfigured())
+        if (ShouldDriveVrControllerVisuals())
         {
             UpdateVrControllerVisuals();
         }
