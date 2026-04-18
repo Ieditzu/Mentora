@@ -4,7 +4,8 @@ import {
   Plus, Save, Trash2, LogOut, Globe, Terminal, 
   AlertCircle, CheckCircle2, Layout,
   Layers, Sparkles, BookOpen, Zap,
-  ChevronRight, MoreVertical, Activity, Settings, User, FileText
+  ChevronRight, MoreVertical, Activity, Settings, User, FileText,
+  Clock, Code, Cpu
 } from 'lucide-react';
 import { api, API_BASE } from './lib/api';
 import { clsx } from 'clsx';
@@ -36,6 +37,28 @@ const blankCourse = () => ({
   published: false,
   questions: [blankQuestion()]
 });
+
+// Helper to fix the bug where options were empty when editing
+const mapBackendToFrontend = (courseData) => {
+  if (!courseData.questions) return courseData;
+  
+  return {
+    ...courseData,
+    questions: courseData.questions.map(q => {
+      // If backend sends 'options' array, map to optionA/B/C/D
+      if (q.options && Array.isArray(q.options)) {
+        return {
+          ...q,
+          optionA: q.options[0] || "",
+          optionB: q.options[1] || "",
+          optionC: q.options[2] || "",
+          optionD: q.options[3] || "",
+        };
+      }
+      return q;
+    })
+  };
+};
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("mentora_creator_token") || "");
@@ -124,7 +147,8 @@ export default function App() {
         method,
         body: JSON.stringify(editorCourse)
       }, token);
-      setEditorCourse(data);
+      
+      setEditorCourse(mapBackendToFrontend(data));
       await loadCourses(token);
       showToast("Course saved successfully");
     } catch (err) {
@@ -154,7 +178,7 @@ export default function App() {
   const loadCourseDetail = async (id) => {
     try {
       const data = await api(`/api/web/courses/${id}`, {}, token);
-      setEditorCourse(data);
+      setEditorCourse(mapBackendToFrontend(data));
       setActiveTab('editor');
     } catch (err) {
       showToast(err.message, "error");
@@ -188,8 +212,8 @@ export default function App() {
             {/* Sidebar */}
             <aside className="w-64 flex-shrink-0 bg-surface/50 border-r border-border backdrop-blur-xl flex flex-col z-20">
               <div className="p-6 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand to-purple-500 flex items-center justify-center text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]">
-                  <Sparkles size={18} />
+                <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shadow-lg shadow-brand/20">
+                  <img src="/logo.png" alt="Mentora Logo" className="w-full h-full object-cover" />
                 </div>
                 <div>
                   <h1 className="text-lg font-heading font-bold text-white tracking-wide">Mentora</h1>
@@ -333,36 +357,56 @@ export default function App() {
                               <motion.div
                                 key={course.id}
                                 layout
-                                initial={{ opacity: 0, scale: 0.9 }}
+                                initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
-                                className="card card-hover flex flex-col bg-surface/50 backdrop-blur-sm"
+                                className="card group hover:border-brand/40 transition-all duration-500 flex flex-col bg-surface/40 backdrop-blur-md relative overflow-hidden"
                               >
-                                <div className="p-5 flex-1">
-                                  <div className="flex justify-between items-start mb-3">
-                                    <div className="bg-surface-raised px-2 py-1 rounded text-[10px] font-mono text-brand border border-brand/20 uppercase">
-                                      {course.acronym || 'N/A'}
+                                {/* Subtle background glow on hover */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-brand/5 via-transparent to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                
+                                <div className="p-6 flex-1 relative z-10">
+                                  <div className="flex justify-between items-start mb-5">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex items-center gap-2">
+                                        <div className="p-1.5 rounded-lg bg-surface-raised border border-border group-hover:border-brand/30 transition-colors">
+                                          {course.language === 'cpp' || course.language === 'python' || course.language === 'javascript' ? (
+                                            <Code size={14} className="text-brand" />
+                                          ) : (
+                                            <BookOpen size={14} className="text-text-muted" />
+                                          )}
+                                        </div>
+                                        <span className="text-[10px] font-mono font-bold text-brand uppercase tracking-wider">{course.acronym || 'ID:N/A'}</span>
+                                      </div>
                                     </div>
                                     <span className={cn(
-                                      "text-[10px] font-bold px-2 py-1 rounded-full uppercase border",
-                                      course.published ? "bg-success/10 text-success border-success/20" : "bg-surface-raised text-text-muted border-border"
+                                      "text-[9px] font-black px-2.5 py-1 rounded-full uppercase border tracking-tighter",
+                                      course.published 
+                                        ? "bg-success/10 text-success border-success/30" 
+                                        : "bg-surface-raised text-text-dim border-border"
                                     )}>
                                       {course.published ? "Published" : "Draft"}
                                     </span>
                                   </div>
-                                  <h4 className="text-lg font-bold text-white mb-2 leading-tight">{course.title}</h4>
-                                  <p className="text-sm text-text-muted line-clamp-2">{course.summary || "No summary provided."}</p>
+
+                                  <h4 className="text-xl font-bold text-white mb-3 group-hover:text-brand transition-colors duration-300 leading-tight">
+                                    {course.title}
+                                  </h4>
+                                  <p className="text-sm text-text-muted line-clamp-2 leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
+                                    {course.summary || "No description sequence defined."}
+                                  </p>
                                 </div>
-                                <div className="px-5 py-4 border-t border-border/50 bg-surface-raised/30 flex items-center justify-between">
-                                  <div className="flex items-center gap-3 text-xs text-text-dim font-medium">
-                                    <span className="flex items-center gap-1"><Layers size={14}/> {course.questionCount || 0} questions</span>
-                                    <span className="flex items-center gap-1"><Zap size={14}/> {course.difficulty}</span>
+
+                                <div className="px-6 py-4 border-t border-border/50 bg-black/20 flex items-center justify-between relative z-10">
+                                  <div className="flex items-center gap-4 text-[10px] font-bold text-text-dim uppercase tracking-widest">
+                                    <div className="flex items-center gap-1.5"><Layers size={14}/> {course.questionCount || 0}</div>
+                                    <div className="flex items-center gap-1.5"><Zap size={14}/> {course.difficulty}</div>
                                   </div>
                                   <button 
                                     onClick={() => loadCourseDetail(course.id)}
-                                    className="p-2 rounded-lg bg-surface-highlight text-white hover:bg-brand hover:text-white transition-colors"
+                                    className="w-10 h-10 rounded-xl bg-surface-raised text-text-muted group-hover:bg-brand group-hover:text-white group-hover:shadow-[0_0_20px_rgba(129,140,248,0.3)] transition-all duration-300 flex items-center justify-center"
                                   >
-                                    <ChevronRight size={16} />
+                                    <ChevronRight size={20} />
                                   </button>
                                 </div>
                               </motion.div>
@@ -595,8 +639,8 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand to-transparent opacity-50" />
         
         <div className="text-center space-y-4 mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-border flex items-center justify-center mx-auto shadow-lg shadow-brand/10">
-            <BookOpen size={28} className="text-brand" />
+          <div className="w-20 h-20 rounded-3xl overflow-hidden border border-white/10 flex items-center justify-center mx-auto shadow-2xl shadow-brand/20">
+            <img src="/logo.png" alt="Mentora Logo" className="w-full h-full object-cover" />
           </div>
           <div>
             <h2 className="text-2xl font-heading font-bold text-white tracking-tight">
@@ -611,14 +655,14 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
         <div className="space-y-6">
           {state.step === 'email' ? (
             <>
-              <InputField label="Email Address" value={email} onChange={setEmail} placeholder="creator@mentora.net" />
+              <InputField label="Email Address" value={email} onChange={setEmail} placeholder="creator@mentora.net" onKeyDown={e => e.key === 'Enter' && onLookup(email)} />
               <button onClick={() => onLookup(email)} disabled={!email || loading} className="btn-primary w-full py-3.5 mt-2">
                 {loading ? "Continuing..." : "Continue"}
               </button>
             </>
           ) : (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-              <InputField label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
+              <InputField label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && onSubmit(password)} />
               <div className="flex gap-3 pt-2">
                 <button onClick={onReset} className="btn-secondary flex-1 py-3">Back</button>
                 <button onClick={() => onSubmit(password)} disabled={!password || loading} className="btn-primary flex-[2] py-3">
