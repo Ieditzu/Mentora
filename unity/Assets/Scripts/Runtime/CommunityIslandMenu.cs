@@ -62,6 +62,25 @@ public class CommunityIslandMenu : MonoBehaviour
     private bool packetSubscribed;
     private bool fetchInProgress;
     private string communityBodyMessage = "Press Fetch Courses to load community quizzes.";
+
+    private static Button prevButton;
+    private static Text prevButtonText;
+    private static Button nextButton;
+    private static Text nextButtonText;
+    private static Button actionButton;
+    private static Text actionButtonText;
+    private static Button[] optionButtons = new Button[4];
+    private static Text[] optionButtonTexts = new Text[4];
+
+    private enum MenuState { List, Quiz, Result }
+    private MenuState currentState = MenuState.List;
+    private PublishedCourseSummary[] availableCourses;
+    private int currentCourseIndex = 0;
+    private CourseDetailDto currentCourseDetail;
+    private int currentQuestionIndex = 0;
+    private int currentScore = 0;
+    private bool answerSelected = false;
+
     private Color lightPageTint;
     private Color lightPanelColor;
     private Color lightTextColor;
@@ -342,6 +361,37 @@ public class CommunityIslandMenu : MonoBehaviour
         titleText.text = "Community";
         UpdateBodyText();
 
+        if (prevButton != null) {
+            prevButton.onClick.RemoveAllListeners();
+            prevButton.onClick.AddListener(() => {
+                if (availableCourses != null && availableCourses.Length > 0) {
+                    currentCourseIndex = (currentCourseIndex - 1 + availableCourses.Length) % availableCourses.Length;
+                    UpdateUIState();
+                }
+            });
+        }
+        if (nextButton != null) {
+            nextButton.onClick.RemoveAllListeners();
+            nextButton.onClick.AddListener(() => {
+                if (availableCourses != null && availableCourses.Length > 0) {
+                    currentCourseIndex = (currentCourseIndex + 1) % availableCourses.Length;
+                    UpdateUIState();
+                }
+            });
+        }
+        if (actionButton != null) {
+            actionButton.onClick.RemoveAllListeners();
+            actionButton.onClick.AddListener(OnActionClicked);
+        }
+        for (int i = 0; i < 4; i++) {
+            int idx = i;
+            if (optionButtons[idx] != null) {
+                optionButtons[idx].onClick.RemoveAllListeners();
+                optionButtons[idx].onClick.AddListener(() => OnOptionClicked(idx));
+            }
+        }
+
+
         while (!leaveRequested)
         {
             yield return null;
@@ -349,6 +399,17 @@ public class CommunityIslandMenu : MonoBehaviour
 
         UnsubscribeFromPackets();
         ShowThemeButton(false);
+
+        if (prevButton != null) prevButton.gameObject.SetActive(false);
+        if (nextButton != null) nextButton.gameObject.SetActive(false);
+        if (actionButton != null) actionButton.gameObject.SetActive(false);
+        for (int i = 0; i < 4; i++) {
+            if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
+        }
+        currentState = MenuState.List;
+        availableCourses = null;
+        currentCourseIndex = 0;
+
         ShowFetchButton(false);
         ShowLeaveButton(false);
         yield return AnimatePanel(false);
@@ -413,6 +474,22 @@ public class CommunityIslandMenu : MonoBehaviour
         leaveButton = EnsureButton(canvasObject.transform, "LeaveButton", new Vector2(0.11f, 0.11f), new Vector2(72f, 56f), buttonColor, "✕", 30);
         leaveButtonText = leaveButton.GetComponentInChildren<Text>(true);
 
+        prevButton = EnsureButton(canvasObject.transform, "PrevButton", new Vector2(0.35f, 0.2f), new Vector2(100f, 56f), buttonColor, "<", 28);
+        prevButtonText = prevButton.GetComponentInChildren<Text>(true);
+        
+        nextButton = EnsureButton(canvasObject.transform, "NextButton", new Vector2(0.65f, 0.2f), new Vector2(100f, 56f), buttonColor, ">", 28);
+        nextButtonText = nextButton.GetComponentInChildren<Text>(true);
+
+        actionButton = EnsureButton(canvasObject.transform, "ActionButton", new Vector2(0.5f, 0.2f), new Vector2(200f, 56f), accentColor, "Start", 28);
+        actionButtonText = actionButton.GetComponentInChildren<Text>(true);
+
+        for (int i = 0; i < 4; i++) {
+            float yPos = 0.45f - (i * 0.1f);
+            optionButtons[i] = EnsureButton(canvasObject.transform, "OptionButton" + i, new Vector2(0.5f, yPos), new Vector2(800f, 60f), buttonColor, "Option " + i, 24);
+            optionButtonTexts[i] = optionButtons[i].GetComponentInChildren<Text>(true);
+        }
+
+
         EnsureEventSystem();
     }
 
@@ -446,6 +523,17 @@ public class CommunityIslandMenu : MonoBehaviour
         ShowLeaveButton(false);
         ShowFetchButton(false);
         ShowThemeButton(false);
+
+        if (prevButton != null) prevButton.gameObject.SetActive(false);
+        if (nextButton != null) nextButton.gameObject.SetActive(false);
+        if (actionButton != null) actionButton.gameObject.SetActive(false);
+        for (int i = 0; i < 4; i++) {
+            if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
+        }
+        currentState = MenuState.List;
+        availableCourses = null;
+        currentCourseIndex = 0;
+
     }
 
     private void SetOverlayVisible(bool visible)
@@ -684,6 +772,14 @@ public class CommunityIslandMenu : MonoBehaviour
         ApplyButtonTheme(fetchButton, fetchButtonText, fetchInProgress ? "…" : "↻");
         ApplyButtonTheme(themeButton, themeButtonText, useDarkTheme ? "☀" : "☾");
         ApplyButtonTheme(leaveButton, leaveButtonText, "✕");
+
+        ApplyButtonTheme(prevButton, prevButtonText, "<");
+        ApplyButtonTheme(nextButton, nextButtonText, ">");
+        ApplyButtonTheme(actionButton, actionButtonText, actionButtonText != null ? actionButtonText.text : "Start");
+        for (int i = 0; i < 4; i++) {
+            ApplyButtonTheme(optionButtons[i], optionButtonTexts[i], optionButtonTexts[i] != null ? optionButtonTexts[i].text : "");
+        }
+
     }
 
     private void ApplyButtonTheme(Button button, Text label, string buttonLabel)
@@ -744,6 +840,8 @@ public class CommunityIslandMenu : MonoBehaviour
         packetSubscribed = false;
     }
 
+    
+    
     private void OnPacketReceived(Packet packet)
     {
         if (packet is FetchPublishedCoursesResponsePacket coursesPacket)
@@ -751,23 +849,207 @@ public class CommunityIslandMenu : MonoBehaviour
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 fetchInProgress = false;
-                communityBodyMessage = BuildCourseListText(coursesPacket.CoursesJson);
+                PublishedCourseSummaryList payload = ParsePublishedCourses(coursesPacket.CoursesJson);
+                if (payload != null && payload.items != null && payload.items.Length > 0)
+                {
+                    availableCourses = payload.items;
+                    currentCourseIndex = 0;
+                    currentState = MenuState.List;
+                }
+                else
+                {
+                    availableCourses = null;
+                    communityBodyMessage = "No published community quizzes were returned.";
+                }
+                UpdateUIState();
                 ShowFetchButton(true);
-                UpdateBodyText();
             });
             return;
         }
-
-        if (packet is ActionResponsePacket actionPacket && actionPacket.RequestPacketId == 36 && !actionPacket.Success)
+        
+        if (packet is FetchCourseDetailResponsePacket detailPacket)
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 fetchInProgress = false;
-                communityBodyMessage = "Fetch failed: " + (string.IsNullOrWhiteSpace(actionPacket.Message) ? "Unknown error." : actionPacket.Message);
+                currentCourseDetail = ParseCourseDetail(detailPacket.CourseJson);
+                if (currentCourseDetail != null && currentCourseDetail.questions != null && currentCourseDetail.questions.Length > 0)
+                {
+                    currentState = MenuState.Quiz;
+                    currentQuestionIndex = 0;
+                    currentScore = 0;
+                }
+                else
+                {
+                    currentState = MenuState.List;
+                    communityBodyMessage = "Course details could not be loaded.";
+                }
+                UpdateUIState();
                 ShowFetchButton(true);
-                UpdateBodyText();
             });
+            return;
         }
+
+        if (packet is ActionResponsePacket actionPacket)
+        {
+            if (actionPacket.RequestPacketId == 36 && !actionPacket.Success)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() =>
+                {
+                    fetchInProgress = false;
+                    communityBodyMessage = "Fetch failed: " + (string.IsNullOrWhiteSpace(actionPacket.Message) ? "Unknown error." : actionPacket.Message);
+                    UpdateUIState();
+                    ShowFetchButton(true);
+                });
+            }
+            else if (actionPacket.RequestPacketId == 40)
+            {
+                UnityMainThreadDispatcher.Instance().Enqueue(() =>
+                {
+                    fetchInProgress = false;
+                    communityBodyMessage = actionPacket.Success ? "Course completed successfully!" : "Failed to submit course completion.";
+                    currentState = MenuState.List;
+                    UpdateUIState();
+                    ShowFetchButton(true);
+                });
+            }
+        }
+    }
+
+    private void UpdateUIState()
+    {
+        if (currentState == MenuState.List)
+        {
+            for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
+            
+            if (availableCourses != null && availableCourses.Length > 0)
+            {
+                PublishedCourseSummary course = availableCourses[currentCourseIndex];
+                string completedTag = course.completed ? "[COMPLETED] " : "";
+                communityBodyMessage = $"{currentCourseIndex + 1}/{availableCourses.Length} - {course.title} ({course.pointReward} pts)\n\nLanguage: {course.language} | Difficulty: {course.difficulty}\nQuestions: {course.questionCount}\n\n{completedTag}{course.summary}";
+                
+                if (prevButton != null) prevButton.gameObject.SetActive(availableCourses.Length > 1);
+                if (nextButton != null) nextButton.gameObject.SetActive(availableCourses.Length > 1);
+                if (actionButton != null)
+                {
+                    actionButton.gameObject.SetActive(true);
+                    if (actionButtonText != null) actionButtonText.text = "Start Course";
+                }
+            }
+            else
+            {
+                if (prevButton != null) prevButton.gameObject.SetActive(false);
+                if (nextButton != null) nextButton.gameObject.SetActive(false);
+                if (actionButton != null) actionButton.gameObject.SetActive(false);
+            }
+            
+            bodyText.alignment = TextAnchor.UpperLeft;
+        }
+        else if (currentState == MenuState.Quiz)
+        {
+            if (prevButton != null) prevButton.gameObject.SetActive(false);
+            if (nextButton != null) nextButton.gameObject.SetActive(false);
+            if (actionButton != null) actionButton.gameObject.SetActive(false);
+            
+            CourseQuestionDto q = currentCourseDetail.questions[currentQuestionIndex];
+            communityBodyMessage = $"Question {currentQuestionIndex + 1}/{currentCourseDetail.questions.Length}\n\n{q.prompt}";
+            bodyText.alignment = TextAnchor.MiddleCenter;
+            
+            for (int i = 0; i < 4; i++)
+            {
+                if (optionButtons[i] != null)
+                {
+                    if (i < q.options.Length)
+                    {
+                        optionButtons[i].gameObject.SetActive(true);
+                        optionButtons[i].interactable = true;
+                        optionButtonTexts[i].text = q.options[i];
+                        ApplyButtonTheme(optionButtons[i], optionButtonTexts[i], q.options[i]);
+                    }
+                    else
+                    {
+                        optionButtons[i].gameObject.SetActive(false);
+                    }
+                }
+            }
+        }
+        else if (currentState == MenuState.Result)
+        {
+            for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
+            if (prevButton != null) prevButton.gameObject.SetActive(false);
+            if (nextButton != null) nextButton.gameObject.SetActive(false);
+            
+            communityBodyMessage = $"Quiz Completed!\n\nYour Score: {currentScore} / {currentCourseDetail.questions.Length}";
+            bodyText.alignment = TextAnchor.MiddleCenter;
+            
+            if (actionButton != null)
+            {
+                actionButton.gameObject.SetActive(true);
+                if (actionButtonText != null) actionButtonText.text = "Finish & Submit";
+            }
+        }
+        
+        UpdateBodyText();
+    }
+
+    private async void OnActionClicked()
+    {
+        if (currentState == MenuState.List && availableCourses != null && availableCourses.Length > 0)
+        {
+            long courseId = availableCourses[currentCourseIndex].id;
+            fetchInProgress = true;
+            communityBodyMessage = "Loading course details...";
+            UpdateUIState();
+            
+            try
+            {
+                await GameClient.Instance.SendPacket(new FetchCourseDetailPacket(courseId));
+            }
+            catch (System.Exception ex)
+            {
+                communityBodyMessage = "Failed to load course: " + ex.Message;
+                fetchInProgress = false;
+                UpdateUIState();
+            }
+        }
+        else if (currentState == MenuState.Result)
+        {
+            fetchInProgress = true;
+            communityBodyMessage = "Submitting score...";
+            UpdateUIState();
+            
+            try
+            {
+                await GameClient.Instance.SendPacket(new SubmitCourseCompletionPacket(currentCourseDetail.id, currentScore, currentCourseDetail.questions.Length));
+            }
+            catch (System.Exception ex)
+            {
+                communityBodyMessage = "Failed to submit score: " + ex.Message;
+                fetchInProgress = false;
+                currentState = MenuState.List;
+                UpdateUIState();
+            }
+        }
+    }
+
+    private void OnOptionClicked(int optionIndex)
+    {
+        if (currentState != MenuState.Quiz) return;
+        
+        CourseQuestionDto q = currentCourseDetail.questions[currentQuestionIndex];
+        
+        if (optionIndex == q.correctIndex)
+        {
+            currentScore++;
+        }
+        
+        currentQuestionIndex++;
+        if (currentQuestionIndex >= currentCourseDetail.questions.Length)
+        {
+            currentState = MenuState.Result;
+        }
+        
+        UpdateUIState();
     }
 
     private string BuildCourseListText(string coursesJson)
@@ -1023,6 +1305,37 @@ public class CommunityIslandMenu : MonoBehaviour
         return 1f - Mathf.Pow(1f - t, 3f);
     }
 
+
+    [System.Serializable]
+    private class CourseDetailDto
+    {
+        public long id;
+        public string title;
+        public CourseQuestionDto[] questions;
+    }
+
+    [System.Serializable]
+    private class CourseQuestionDto
+    {
+        public int id;
+        public string prompt;
+        public string[] options;
+        public int correctIndex;
+        public string explanation;
+    }
+
+    private CourseDetailDto ParseCourseDetail(string json)
+    {
+        try
+        {
+            return JsonUtility.FromJson<CourseDetailDto>(json);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Failed to parse course detail JSON: " + ex.Message);
+            return null;
+        }
+    }
     [System.Serializable]
     private class PublishedCourseSummaryList
     {
