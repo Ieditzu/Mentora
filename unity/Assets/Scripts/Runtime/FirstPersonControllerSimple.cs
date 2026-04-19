@@ -204,6 +204,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
     private void Update()
     {
+        CheckVrPauseButton();
         if (GetKeyDownCompat(KeyCode.CapsLock))
         {
             ToggleCursor();
@@ -1109,6 +1110,26 @@ public class FirstPersonControllerSimple : MonoBehaviour
     }
 
     private bool _vrJumpWasPressed = false;
+    private bool _vrPauseWasPressed = false;
+
+    private void CheckVrPauseButton()
+    {
+        bool pressedNow = false;
+
+        XRInputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (leftHand.isValid)
+            leftHand.TryGetFeatureValue(XRCommonUsages.secondaryButton, out pressedNow);
+
+        if (!pressedNow)
+        {
+            try { pressedNow = OVRInput.Get(OVRInput.RawButton.Y); } catch { }
+        }
+
+        if (pressedNow && !_vrPauseWasPressed)
+            PauseMenuManager.VrTogglePause();
+
+        _vrPauseWasPressed = pressedNow;
+    }
 
     private bool TryGetVrJumpRequest()
     {
