@@ -101,6 +101,8 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject vrPressedObject;
     private bool vrSelectWasPressed;
     private const float VrPointerMaxDistance = 6f;
+    private const float VrPointerSensitivity = 0.7f;
+    private const float VrPointerDownwardAngle = -30f;
     private static readonly Vector2 VrCursorHoverSize = new Vector2(42f, 42f);
     private static readonly Vector2 VrCursorPressedSize = new Vector2(32f, 32f);
 
@@ -1131,6 +1133,7 @@ public class PauseMenuManager : MonoBehaviour
         }
 
         vrPointerEventData.Reset();
+        vrPointerEventData.button = PointerEventData.InputButton.Left;
         vrPointerEventData.position = screenPoint;
         vrPointerEventData.pointerCurrentRaycast = default;
         vrRaycastResults.Clear();
@@ -1150,6 +1153,9 @@ public class PauseMenuManager : MonoBehaviour
         if (selectPressedThisFrame && hitObject != null)
         {
             vrPressedObject = ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject;
+            vrPointerEventData.eligibleForClick = true;
+            vrPointerEventData.pointerPress = vrPressedObject;
+            vrPointerEventData.rawPointerPress = hitObject;
             vrPointerEventData.pressPosition = screenPoint;
             vrPointerEventData.pointerPressRaycast = raycastResult;
             ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerDownHandler);
@@ -1541,7 +1547,7 @@ public class PauseMenuManager : MonoBehaviour
 
             vrCursor.SetActive(true);
             vrCursor.transform.SetAsLastSibling();
-            vrCursorRect.anchoredPosition = localPoint;
+            vrCursorRect.anchoredPosition = localPoint * VrPointerSensitivity;
             vrCursorRect.sizeDelta = isSelecting ? VrCursorPressedSize : VrCursorHoverSize;
 
             if (vrCursorImage != null)
@@ -1680,10 +1686,17 @@ public class PauseMenuManager : MonoBehaviour
                 ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentHitObject)
                 : null;
 
-            if (clickTarget != null && clickTarget == vrPressedObject)
+            if (vrPointerEventData.eligibleForClick && clickTarget != null && clickTarget == vrPressedObject)
             {
                 ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerClickHandler);
             }
+        }
+
+        if (vrPointerEventData != null)
+        {
+            vrPointerEventData.eligibleForClick = false;
+            vrPointerEventData.pointerPress = null;
+            vrPointerEventData.rawPointerPress = null;
         }
 
         vrPressedObject = null;
@@ -1708,15 +1721,16 @@ public class PauseMenuManager : MonoBehaviour
             rightHand.TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 localPosition) &&
             rightHand.TryGetFeatureValue(XRCommonUsages.deviceRotation, out Quaternion localRotation))
         {
+            Quaternion pointerRotation = localRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
             if (reference != null)
             {
                 origin = reference.TransformPoint(localPosition);
-                direction = reference.TransformDirection(localRotation * Vector3.forward).normalized;
+                direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
                 return true;
             }
 
             origin = localPosition;
-            direction = localRotation * Vector3.forward;
+            direction = pointerRotation * Vector3.forward;
             return true;
         }
 
@@ -1726,12 +1740,17 @@ public class PauseMenuManager : MonoBehaviour
             {
                 Vector3 ovrLocalPosition = OVRInput.GetLocalControllerPosition(OVRInput.Controller.RTouch);
                 Quaternion ovrLocalRotation = OVRInput.GetLocalControllerRotation(OVRInput.Controller.RTouch);
+                Quaternion pointerRotation = ovrLocalRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
                 if (reference != null)
                 {
                     origin = reference.TransformPoint(ovrLocalPosition);
-                    direction = reference.TransformDirection(ovrLocalRotation * Vector3.forward).normalized;
+                    direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
                     return true;
                 }
+
+                origin = ovrLocalPosition;
+                direction = pointerRotation * Vector3.forward;
+                return true;
             }
         }
         catch { }
