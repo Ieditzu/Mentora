@@ -37,7 +37,6 @@ public class PauseMenuVrPointer : MonoBehaviour
     private Renderer cursorRenderer;
     private AudioSource audioSource;
     private bool wasHovering;
-    private bool wasSelecting;
     
     // Shader property IDs for cursor material
     private static readonly int ShaderColor = Shader.PropertyToID("_Color");
@@ -255,7 +254,6 @@ private void EnsurePointableCanvasModule()
         }
         
         wasHovering = false;
-        wasSelecting = false;
     }
     
     private void OnSelect()
@@ -273,7 +271,6 @@ private void EnsurePointableCanvasModule()
             audioSource.PlayOneShot(selectSound, audioVolume);
         }
         
-        wasSelecting = true;
     }
     
     private void OnUnselect()
@@ -285,7 +282,6 @@ private void EnsurePointableCanvasModule()
             cursorRenderer.material.SetFloat(ShaderRadialScale, 0.2f);
         }
         
-        wasSelecting = false;
     }
     
     /// <summary>

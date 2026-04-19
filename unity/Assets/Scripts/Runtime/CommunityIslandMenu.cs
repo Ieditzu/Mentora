@@ -79,7 +79,6 @@ public class CommunityIslandMenu : MonoBehaviour
     private CourseDetailDto currentCourseDetail;
     private int currentQuestionIndex = 0;
     private int currentScore = 0;
-    private bool answerSelected = false;
 
     private Color lightPageTint;
     private Color lightPanelColor;
