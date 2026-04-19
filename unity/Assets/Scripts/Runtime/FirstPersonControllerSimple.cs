@@ -350,7 +350,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         float speed = moveSpeed;
-        bool sprintHeld = GetKeyCompat(sprintKey);
+        bool sprintHeld = GetKeyCompat(sprintKey) || IsVrSprintHeld();
         bool movingForward = v > 0.01f;
         if (sprintHeld || (doubleTapSprintActive && movingForward))
         {
@@ -364,7 +364,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         controller.Move(input * speed * Time.deltaTime);
 
-        bool jumpRequested = GetKeyDownCompat(jumpKey) || MobileTouchInput.ConsumeJumpRequest();
+        bool jumpRequested = GetKeyDownCompat(jumpKey) || MobileTouchInput.ConsumeJumpRequest() || TryGetVrJumpRequest();
         bool canJump = grounded || (Time.time - lastGroundedTime) <= coyoteTime;
         if (jumpRequested && canJump)
         {
@@ -1106,5 +1106,55 @@ public class FirstPersonControllerSimple : MonoBehaviour
                 transform.Rotate(Vector3.up, yawDelta, Space.World);
             }
         }
+    }
+
+    private bool _vrJumpWasPressed = false;
+
+    private bool TryGetVrJumpRequest()
+    {
+        bool pressedNow = false;
+
+        // A button via XR InputDevices (primaryButton on right hand)
+        XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHand.isValid)
+            rightHand.TryGetFeatureValue(XRCommonUsages.primaryButton, out pressedNow);
+
+        // OVRInput fallback
+        if (!pressedNow)
+        {
+            try { pressedNow = OVRInput.Get(OVRInput.RawButton.A); } catch { }
+        }
+
+        bool downThisFrame = pressedNow && !_vrJumpWasPressed;
+        _vrJumpWasPressed = pressedNow;
+        return downThisFrame;
+    }
+
+    private bool IsVrSprintHeld()
+    {
+        // Left index trigger > 0.5 = sprint
+        float triggerValue = 0f;
+        XRInputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (leftHand.isValid)
+            leftHand.TryGetFeatureValue(XRCommonUsages.trigger, out triggerValue);
+
+        if (triggerValue < 0.01f)
+        {
+            try { triggerValue = OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, OVRInput.Controller.LTouch); } catch { }
+        }
+
+        if (triggerValue > 0.5f) return true;
+
+        // Left thumbstick click = sprint
+        bool stickClick = false;
+        if (leftHand.isValid)
+            leftHand.TryGetFeatureValue(XRCommonUsages.primary2DAxisClick, out stickClick);
+
+        if (!stickClick)
+        {
+            try { stickClick = OVRInput.Get(OVRInput.RawButton.LThumbstick); } catch { }
+        }
+
+        return stickClick;
     }
 }

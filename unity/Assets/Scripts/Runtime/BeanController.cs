@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.XR;
 
 [RequireComponent(typeof(Rigidbody))]
 public class BeanController : MonoBehaviour
@@ -154,6 +155,85 @@ public class BeanController : MonoBehaviour
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) z -= 1f;
 
         input = new Vector3(x, 0f, z).normalized;
+
+        ReadVrInput();
+    }
+
+    private void ReadVrInput()
+    {
+        try { OVRInput.Update(); } catch { }
+
+        bool vrActive = XRSettings.enabled && XRSettings.isDeviceActive;
+        if (!vrActive)
+        {
+            var lh = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            vrActive = lh.isValid;
+        }
+        if (!vrActive) return;
+
+        // Jump — A button
+        try
+        {
+            if (!movementLocked && !hardFreeze &&
+                (OVRInput.GetDown(OVRInput.RawButton.A) ||
+                 OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch)))
+            {
+                jumpQueued = true;
+            }
+        }
+        catch { }
+
+        // XR InputDevices A button fallback
+        if (!jumpQueued)
+        {
+            var rh = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            if (rh.isValid && !movementLocked && !hardFreeze)
+            {
+                bool aDown = false;
+                rh.TryGetFeatureValue(CommonUsages.primaryButton, out aDown);
+                if (aDown) jumpQueued = true;
+            }
+        }
+
+        // Left thumbstick — movement
+        Vector2 leftStick = Vector2.zero;
+        try { leftStick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch); } catch { }
+        if (leftStick.sqrMagnitude < 0.01f)
+        {
+            var lh = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            if (lh.isValid) lh.TryGetFeatureValue(CommonUsages.primary2DAxis, out leftStick);
+        }
+        if (leftStick.sqrMagnitude > 0.04f)
+            input = new Vector3(leftStick.x, 0f, leftStick.y).normalized;
+
+        // Right thumbstick — look
+        Vector2 rightStick = Vector2.zero;
+        try { rightStick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.RTouch); } catch { }
+        if (rightStick.sqrMagnitude < 0.01f)
+        {
+            var rh = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            if (rh.isValid) rh.TryGetFeatureValue(CommonUsages.primary2DAxis, out rightStick);
+        }
+        if (Mathf.Abs(rightStick.x) > 0.1f)
+            transform.Rotate(Vector3.up * rightStick.x * mouseSensitivity * Time.deltaTime);
+        if (Mathf.Abs(rightStick.y) > 0.1f && camTransform != null)
+        {
+            pitch -= rightStick.y * mouseSensitivity * Time.deltaTime;
+            pitch = Mathf.Clamp(pitch, -85f, 85f);
+            camTransform.localEulerAngles = new Vector3(pitch, 0f, 0f);
+        }
+
+        // Sprint — left index trigger or left thumbstick click
+        float leftTrigger = 0f;
+        try { leftTrigger = OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger, OVRInput.Controller.LTouch); } catch { }
+        if (leftTrigger < 0.01f)
+        {
+            var lhSprint = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            if (lhSprint.isValid) lhSprint.TryGetFeatureValue(CommonUsages.trigger, out leftTrigger);
+        }
+        bool thumbstickClick = false;
+        try { thumbstickClick = OVRInput.Get(OVRInput.RawButton.LThumbstick); } catch { }
+        isSprinting = isSprinting || leftTrigger > 0.5f || thumbstickClick;
     }
 
     private void OnEnable()

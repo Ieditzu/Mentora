@@ -424,30 +424,61 @@ public class PauseMenuManager : MonoBehaviour
         return keyboardPressed || vrPressed;
     }
 
+    private float _vrDebugLogTimer = 0f;
+
     private bool IsVrPausePressed()
     {
+        bool vrActive = IsVrPauseMenuActive();
+        _vrDebugLogTimer += Time.unscaledDeltaTime;
+        if (_vrDebugLogTimer >= 3f)
+        {
+            _vrDebugLogTimer = 0f;
+            var lh = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            bool xrEnabled = XRSettings.enabled;
+            bool xrDevice = XRSettings.isDeviceActive;
+            bool lhValid = lh.isValid;
+            Debug.Log($"[PMM] VrActive={vrActive} xrEnabled={xrEnabled} xrDevice={xrDevice} lhValid={lhValid}");
+        }
+
+        if (!vrActive)
+        {
+            vrPauseButtonWasPressed = false;
+            return false;
+        }
+
         bool pressedNow = false;
-        
-        // Method 1: Try OVRInput (Oculus SDK) - most reliable on Quest
-        try
+
+        // XR InputDevices — works with OpenXR without OVRManager.
+        var leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (leftHand.isValid)
         {
-            // RawButton.Back is the menu button on Quest controllers
-            pressedNow = OVRInput.Get(OVRInput.RawButton.Back) || 
-                        OVRInput.Get(OVRInput.Button.Start, OVRInput.Controller.LTouch) ||
-                        OVRInput.Get(OVRInput.Button.Start, OVRInput.Controller.All);
+            leftHand.TryGetFeatureValue(XRCommonUsages.menuButton, out pressedNow);
+            if (pressedNow) Debug.Log("[PMM] menuButton detected via XR InputDevices");
         }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("OVRInput failed: " + e.Message);
-        }
-        
-        // Method 2: Try XR InputDevices
+
+        // OVRInput — manually pump state in case no OVRManager is present.
         if (!pressedNow)
         {
-            XRInputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
-            if (leftHand.isValid)
+            try
             {
-                leftHand.TryGetFeatureValue(XRCommonUsages.menuButton, out pressedNow);
+                OVRInput.Update();
+                pressedNow = OVRInput.GetDown(OVRInput.RawButton.Start) ||
+                             OVRInput.GetDown(OVRInput.Button.Start, OVRInput.Controller.LTouch) ||
+                             OVRInput.GetDown(OVRInput.RawButton.A) ||
+                             OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch);
+                if (pressedNow) Debug.Log("[PMM] button detected via OVRInput");
+            }
+            catch { }
+        }
+
+        // XR InputDevices A button fallback.
+        if (!pressedNow)
+        {
+            var rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            if (rightHand.isValid)
+            {
+                rightHand.TryGetFeatureValue(XRCommonUsages.primaryButton, out pressedNow);
+                if (pressedNow) Debug.Log("[PMM] A button detected via XR InputDevices");
             }
         }
 
@@ -1180,7 +1211,15 @@ public class PauseMenuManager : MonoBehaviour
 
     private bool IsVrPauseMenuActive()
     {
-        return XRSettings.enabled && XRSettings.isDeviceActive;
+        if (XRSettings.enabled && XRSettings.isDeviceActive) return true;
+        var leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (leftHand.isValid) return true;
+        try
+        {
+            return OVRInput.IsControllerConnected(OVRInput.Controller.LTouch) ||
+                   OVRInput.IsControllerConnected(OVRInput.Controller.Touch);
+        }
+        catch { return false; }
     }
 
     private Camera GetMenuCamera()
