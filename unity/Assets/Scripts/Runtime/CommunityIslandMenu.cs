@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
+using UnityEngine.XR;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -12,6 +13,8 @@ using UnityEditor;
 [ExecuteAlways]
 public class CommunityIslandMenu : MonoBehaviour
 {
+    public static bool IsVrMenuActive { get; private set; }
+
     [Header("Trigger")]
     [SerializeField] private Vector3 triggerSize = new Vector3(0.25f, 0.4f, 0.25f);
     [SerializeField] private Vector3 triggerOffset = new Vector3(0f, 1.25f, 0f);
@@ -39,6 +42,7 @@ public class CommunityIslandMenu : MonoBehaviour
     [SerializeField] private float menuFadeDuration = 0.22f;
 
     private static Canvas overlayCanvas;
+    private static GraphicRaycaster overlayRaycaster;
     private static Image whiteImage;
     private static Image panelImage;
     private static Text titleText;
@@ -88,6 +92,27 @@ public class CommunityIslandMenu : MonoBehaviour
     private Color lightAccentColor;
     private bool capturedLightTheme;
     private bool validateRefreshQueued;
+    private PointerEventData vrPointerEventData;
+    private EventSystem vrPointerEventSystem;
+    private readonly List<RaycastResult> vrRaycastResults = new List<RaycastResult>();
+    private GameObject vrHoveredObject;
+    private GameObject vrPressedObject;
+    private bool vrSelectWasPressed;
+    private GameObject vrCursor;
+    private RectTransform vrCursorRect;
+    private Image vrCursorImage;
+    private Outline vrCursorOutline;
+    private const float VrMenuDistance = 2.2f;
+    private const float VrMenuHeightOffset = -0.05f;
+    private static readonly Vector3 VrMenuScale = Vector3.one * 0.00115f;
+    private static readonly Vector2 VrPanelSize = new Vector2(1080f, 760f);
+    private const float VrPointerMaxDistance = 6f;
+    private const float VrPointerSensitivity = 0.7f;
+    private const float VrPointerDownwardAngle = -30f;
+    private static readonly Vector2 VrCursorHoverSize = new Vector2(42f, 42f);
+    private static readonly Vector2 VrCursorPressedSize = new Vector2(32f, 32f);
+    private static readonly Color VrCursorHoverColor = new Color(1f, 0.96f, 0.35f, 1f);
+    private static readonly Color VrCursorSelectColor = new Color(1f, 0.55f, 0.18f, 1f);
 
     private void Awake()
     {
@@ -146,7 +171,10 @@ public class CommunityIslandMenu : MonoBehaviour
     {
         if (overlayInteractionActive)
         {
-            SetCursorVisible(true);
+            ConfigureOverlayForCurrentMode();
+            UpdateVrCanvasPlacement();
+            UpdateVrPointer();
+            SetCursorVisible(!IsVrActive());
         }
     }
 
@@ -339,18 +367,24 @@ public class CommunityIslandMenu : MonoBehaviour
             triggerVolume.enabled = false;
         }
 
-        SetPlayerLockState(sphere, fps, true, true);
+        bool vrActive = IsVrActive();
+        SetPlayerLockState(sphere, fps, !vrActive, !vrActive);
         if (fps != null)
         {
-            fps.SetCameraControlEnabled(false);
+            fps.SetCameraControlEnabled(!vrActive);
         }
 
         EnsureOverlay();
         ResetOverlay();
+        ConfigureOverlayForCurrentMode();
+        UpdateVrCanvasPlacement(true);
         SetOverlayVisible(true);
-        SetCursorVisible(true);
+        SetCursorVisible(!IsVrActive());
 
-        yield return FadeImage(whiteImage, 0f, 1f, fadeToWhiteDuration, pageTint);
+        if (!IsVrActive())
+        {
+            yield return FadeImage(whiteImage, 0f, 1f, fadeToWhiteDuration, pageTint);
+        }
         yield return AnimatePanel(true);
 
         ShowLeaveButton(true);
@@ -412,7 +446,10 @@ public class CommunityIslandMenu : MonoBehaviour
         ShowFetchButton(false);
         ShowLeaveButton(false);
         yield return AnimatePanel(false);
-        yield return FadeImage(whiteImage, 1f, 0f, 0.2f, pageTint);
+        if (!IsVrActive())
+        {
+            yield return FadeImage(whiteImage, 1f, 0f, 0.2f, pageTint);
+        }
 
         RestorePlayerState(sphere, fps);
         StartCoroutine(ReenableTriggerAfterDelay());
@@ -442,7 +479,7 @@ public class CommunityIslandMenu : MonoBehaviour
         overlayCanvas = canvasObject.AddComponent<Canvas>();
         overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
         overlayCanvas.sortingOrder = 6000;
-        canvasObject.AddComponent<GraphicRaycaster>();
+        overlayRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
         Object.DontDestroyOnLoad(canvasObject);
 
         CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
@@ -493,7 +530,7 @@ public class CommunityIslandMenu : MonoBehaviour
             optionButtonTexts[i] = optionButtons[i].GetComponentInChildren<Text>(true);
         }
 
-
+        EnsureVrCursor();
         EnsureEventSystem();
     }
 
@@ -543,10 +580,187 @@ public class CommunityIslandMenu : MonoBehaviour
     private void SetOverlayVisible(bool visible)
     {
         overlayInteractionActive = visible;
+        IsVrMenuActive = visible && IsVrActive();
         if (!visible)
         {
+            ResetVrPointerState();
             SetCursorVisible(false);
         }
+    }
+
+    private void ConfigureOverlayForCurrentMode()
+    {
+        if (overlayCanvas == null)
+        {
+            return;
+        }
+
+        Camera targetCamera = ResolveMenuCamera();
+        if (IsVrActive() && targetCamera != null)
+        {
+            overlayCanvas.renderMode = RenderMode.WorldSpace;
+            overlayCanvas.worldCamera = targetCamera;
+            RectTransform canvasRect = overlayCanvas.GetComponent<RectTransform>();
+            if (canvasRect != null)
+            {
+                canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+                canvasRect.localScale = VrMenuScale;
+            }
+
+            if (whiteImage != null)
+            {
+                whiteImage.enabled = false;
+                whiteImage.color = new Color(pageTint.r, pageTint.g, pageTint.b, 0f);
+            }
+
+            if (panelImage != null)
+            {
+                panelImage.rectTransform.sizeDelta = VrPanelSize;
+            }
+        }
+        else
+        {
+            overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            overlayCanvas.worldCamera = null;
+            RectTransform canvasRect = overlayCanvas.GetComponent<RectTransform>();
+            if (canvasRect != null)
+            {
+                canvasRect.localPosition = Vector3.zero;
+                canvasRect.localRotation = Quaternion.identity;
+                canvasRect.localScale = Vector3.one;
+            }
+
+            if (panelImage != null)
+            {
+                panelImage.rectTransform.sizeDelta = new Vector2(1200f, 850f);
+            }
+        }
+    }
+
+    private void UpdateVrCanvasPlacement(bool snap = false)
+    {
+        if (overlayCanvas == null || overlayCanvas.renderMode != RenderMode.WorldSpace)
+        {
+            return;
+        }
+
+        Camera targetCamera = ResolveMenuCamera();
+        if (targetCamera == null)
+        {
+            return;
+        }
+
+        Transform camTransform = targetCamera.transform;
+        Vector3 forward = camTransform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = camTransform.forward;
+        }
+        forward.Normalize();
+
+        Vector3 desiredPosition = camTransform.position + forward * VrMenuDistance;
+        desiredPosition.y = camTransform.position.y + VrMenuHeightOffset;
+        Quaternion desiredRotation = Quaternion.LookRotation(desiredPosition - camTransform.position, Vector3.up);
+
+        Transform canvasTransform = overlayCanvas.transform;
+        if (snap)
+        {
+            canvasTransform.position = desiredPosition;
+            canvasTransform.rotation = desiredRotation;
+        }
+        else
+        {
+            float moveT = 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime);
+            float rotateT = 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime);
+            canvasTransform.position = Vector3.Lerp(canvasTransform.position, desiredPosition, moveT);
+            canvasTransform.rotation = Quaternion.Slerp(canvasTransform.rotation, desiredRotation, rotateT);
+        }
+    }
+
+    private void UpdateVrPointer()
+    {
+        if (!overlayInteractionActive || overlayCanvas == null || overlayCanvas.renderMode != RenderMode.WorldSpace || !IsVrActive())
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        if (!TryGetRightControllerRay(out Vector3 rayOrigin, out Vector3 rayDirection))
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        RectTransform canvasRect = overlayCanvas.GetComponent<RectTransform>();
+        if (canvasRect == null)
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        Plane canvasPlane = new Plane(-overlayCanvas.transform.forward, overlayCanvas.transform.position);
+        if (!canvasPlane.Raycast(new Ray(rayOrigin, rayDirection), out float distanceToPlane) ||
+            distanceToPlane < 0f ||
+            distanceToPlane > VrPointerMaxDistance)
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        Vector3 hitPoint = rayOrigin + (rayDirection * distanceToPlane);
+        if (!IsWorldPointInsideCanvas(canvasRect, hitPoint))
+        {
+            ClearVrHover();
+            HandleVrSelectReleaseIfNeeded();
+            HideVrCursor();
+            return;
+        }
+
+        EnsureVrPointerEventData();
+        if (vrPointerEventData == null || overlayRaycaster == null)
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(overlayCanvas.worldCamera, hitPoint);
+        vrPointerEventData.Reset();
+        vrPointerEventData.button = PointerEventData.InputButton.Left;
+        vrPointerEventData.position = screenPoint;
+        vrPointerEventData.pointerCurrentRaycast = default;
+        vrRaycastResults.Clear();
+        overlayRaycaster.Raycast(vrPointerEventData, vrRaycastResults);
+
+        RaycastResult raycastResult = FindFirstInteractiveRaycast(vrRaycastResults);
+        GameObject hitObject = raycastResult.gameObject;
+        UpdateVrHover(hitObject);
+        vrPointerEventData.pointerCurrentRaycast = raycastResult;
+
+        bool selectPressed = IsVrSelectPressed();
+        bool selectPressedThisFrame = selectPressed && !vrSelectWasPressed;
+        bool selectReleasedThisFrame = !selectPressed && vrSelectWasPressed;
+        vrSelectWasPressed = selectPressed;
+
+        if (selectPressedThisFrame && hitObject != null)
+        {
+            vrPressedObject = ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject;
+            vrPointerEventData.eligibleForClick = true;
+            vrPointerEventData.pointerPress = vrPressedObject;
+            vrPointerEventData.rawPointerPress = hitObject;
+            vrPointerEventData.pressPosition = screenPoint;
+            vrPointerEventData.pointerPressRaycast = raycastResult;
+            ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerDownHandler);
+        }
+
+        if (selectReleasedThisFrame)
+        {
+            HandleVrSelectRelease(hitObject);
+        }
+
+        GameObject currentClickHandler = hitObject != null ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject : null;
+        bool isPressingCurrent = selectPressed && currentClickHandler != null && currentClickHandler == vrPressedObject;
+        ShowVrCursor(hitPoint, isPressingCurrent);
     }
 
     private IEnumerator AnimatePanel(bool show)
@@ -1286,6 +1500,304 @@ public class CommunityIslandMenu : MonoBehaviour
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
         rect.anchoredPosition = Vector2.zero;
+    }
+
+    private void EnsureVrCursor()
+    {
+        if (overlayCanvas == null)
+        {
+            return;
+        }
+
+        if (vrCursor == null)
+        {
+            vrCursor = GetOrCreateUiObject(overlayCanvas.transform, "VrCursor");
+            vrCursorRect = vrCursor.GetComponent<RectTransform>();
+            vrCursorRect.anchorMin = new Vector2(0.5f, 0.5f);
+            vrCursorRect.anchorMax = new Vector2(0.5f, 0.5f);
+            vrCursorRect.pivot = new Vector2(0.5f, 0.5f);
+            vrCursorRect.sizeDelta = VrCursorHoverSize;
+
+            vrCursorImage = vrCursor.GetComponent<Image>() ?? vrCursor.AddComponent<Image>();
+            vrCursorImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            vrCursorImage.color = VrCursorHoverColor;
+            vrCursorImage.raycastTarget = false;
+
+            vrCursorOutline = vrCursor.GetComponent<Outline>() ?? vrCursor.AddComponent<Outline>();
+            vrCursorOutline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            vrCursorOutline.effectDistance = new Vector2(2f, -2f);
+            vrCursor.SetActive(false);
+        }
+    }
+
+    private void ShowVrCursor(Vector3 worldPosition, bool isSelecting)
+    {
+        if (vrCursor == null || vrCursorRect == null || overlayCanvas == null)
+        {
+            return;
+        }
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                overlayCanvas.GetComponent<RectTransform>(),
+                RectTransformUtility.WorldToScreenPoint(overlayCanvas.worldCamera, worldPosition),
+                overlayCanvas.worldCamera,
+                out Vector2 localPoint))
+        {
+            vrCursor.SetActive(false);
+            return;
+        }
+
+        vrCursor.SetActive(true);
+        vrCursor.transform.SetAsLastSibling();
+        vrCursorRect.anchoredPosition = localPoint * VrPointerSensitivity;
+        vrCursorRect.sizeDelta = isSelecting ? VrCursorPressedSize : VrCursorHoverSize;
+        if (vrCursorImage != null)
+        {
+            vrCursorImage.color = isSelecting ? VrCursorSelectColor : VrCursorHoverColor;
+        }
+    }
+
+    private void HideVrCursor()
+    {
+        if (vrCursor != null)
+        {
+            vrCursor.SetActive(false);
+        }
+    }
+
+    private void EnsureVrPointerEventData()
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null)
+        {
+            EnsureEventSystem();
+            eventSystem = EventSystem.current;
+        }
+
+        if (eventSystem == null)
+        {
+            return;
+        }
+
+        if (vrPointerEventData == null || vrPointerEventSystem != eventSystem)
+        {
+            vrPointerEventSystem = eventSystem;
+            vrPointerEventData = new PointerEventData(eventSystem)
+            {
+                pointerId = -21
+            };
+        }
+    }
+
+    private static RaycastResult FindFirstInteractiveRaycast(List<RaycastResult> results)
+    {
+        for (int i = 0; i < results.Count; i++)
+        {
+            if (results[i].gameObject == null)
+            {
+                continue;
+            }
+
+            if (ExecuteEvents.GetEventHandler<IPointerClickHandler>(results[i].gameObject) != null ||
+                ExecuteEvents.GetEventHandler<ISubmitHandler>(results[i].gameObject) != null)
+            {
+                return results[i];
+            }
+        }
+
+        return results.Count > 0 ? results[0] : default;
+    }
+
+    private static bool IsWorldPointInsideCanvas(RectTransform canvasRect, Vector3 worldPoint)
+    {
+        Vector3 localPoint3 = canvasRect.InverseTransformPoint(worldPoint);
+        return canvasRect.rect.Contains(new Vector2(localPoint3.x, localPoint3.y));
+    }
+
+    private void UpdateVrHover(GameObject hitObject)
+    {
+        GameObject nextHover = hitObject != null
+            ? ExecuteEvents.GetEventHandler<IPointerEnterHandler>(hitObject) ?? hitObject
+            : null;
+
+        if (vrHoveredObject == nextHover)
+        {
+            if (vrHoveredObject != null && vrPointerEventData != null)
+            {
+                ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerMoveHandler);
+            }
+            return;
+        }
+
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerExitHandler);
+        }
+
+        vrHoveredObject = nextHover;
+
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerEnterHandler);
+        }
+    }
+
+    private void ClearVrHover()
+    {
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerExitHandler);
+        }
+
+        vrHoveredObject = null;
+    }
+
+    private void HandleVrSelectReleaseIfNeeded()
+    {
+        bool selectPressed = IsVrSelectPressed();
+        bool selectReleasedThisFrame = !selectPressed && vrSelectWasPressed;
+        vrSelectWasPressed = selectPressed;
+        if (selectReleasedThisFrame)
+        {
+            HandleVrSelectRelease(null);
+        }
+    }
+
+    private void HandleVrSelectRelease(GameObject currentHitObject)
+    {
+        if (vrPressedObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerUpHandler);
+
+            GameObject clickTarget = currentHitObject != null
+                ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentHitObject)
+                : null;
+
+            if (vrPointerEventData.eligibleForClick && clickTarget != null && clickTarget == vrPressedObject)
+            {
+                ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerClickHandler);
+            }
+        }
+
+        if (vrPointerEventData != null)
+        {
+            vrPointerEventData.eligibleForClick = false;
+            vrPointerEventData.pointerPress = null;
+            vrPointerEventData.rawPointerPress = null;
+        }
+
+        vrPressedObject = null;
+    }
+
+    private void ResetVrPointerState()
+    {
+        HideVrCursor();
+        ClearVrHover();
+        HandleVrSelectReleaseIfNeeded();
+    }
+
+    private static bool IsVrActive()
+    {
+        if (XRSettings.enabled && XRSettings.isDeviceActive)
+        {
+            return true;
+        }
+
+        return InputDevices.GetDeviceAtXRNode(XRNode.LeftHand).isValid ||
+               InputDevices.GetDeviceAtXRNode(XRNode.RightHand).isValid;
+    }
+
+    private static Camera ResolveMenuCamera()
+    {
+        FirstPersonControllerSimple fps = Object.FindObjectOfType<FirstPersonControllerSimple>();
+        if (fps != null)
+        {
+            Camera fpsCamera = fps.GetComponentInChildren<Camera>(true);
+            if (fpsCamera != null)
+            {
+                return fpsCamera;
+            }
+        }
+
+        return Camera.main;
+    }
+
+    private static bool TryGetRightControllerRay(out Vector3 origin, out Vector3 direction)
+    {
+        origin = Vector3.zero;
+        direction = Vector3.forward;
+
+        Camera camera = ResolveMenuCamera();
+        Transform reference = camera != null ? camera.transform.parent : null;
+
+        UnityEngine.XR.InputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHand.isValid &&
+            rightHand.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 localPosition) &&
+            rightHand.TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion localRotation))
+        {
+            Quaternion pointerRotation = localRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
+            if (reference != null)
+            {
+                origin = reference.TransformPoint(localPosition);
+                direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
+            }
+            else
+            {
+                origin = localPosition;
+                direction = pointerRotation * Vector3.forward;
+            }
+            return true;
+        }
+
+        try
+        {
+            if ((OVRInput.GetConnectedControllers() & OVRInput.Controller.RTouch) != 0)
+            {
+                Vector3 ovrLocalPosition = OVRInput.GetLocalControllerPosition(OVRInput.Controller.RTouch);
+                Quaternion ovrLocalRotation = OVRInput.GetLocalControllerRotation(OVRInput.Controller.RTouch);
+                Quaternion pointerRotation = ovrLocalRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
+                if (reference != null)
+                {
+                    origin = reference.TransformPoint(ovrLocalPosition);
+                    direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
+                }
+                else
+                {
+                    origin = ovrLocalPosition;
+                    direction = pointerRotation * Vector3.forward;
+                }
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private static bool IsVrSelectPressed()
+    {
+        UnityEngine.XR.InputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHand.isValid)
+        {
+            if (rightHand.TryGetFeatureValue(CommonUsages.triggerButton, out bool triggerButton) && triggerButton)
+            {
+                return true;
+            }
+
+            if (rightHand.TryGetFeatureValue(CommonUsages.primaryButton, out bool primaryButton) && primaryButton)
+            {
+                return true;
+            }
+        }
+
+        try
+        {
+            return OVRInput.Get(OVRInput.RawButton.RIndexTrigger) || OVRInput.Get(OVRInput.RawButton.A);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void EnsureEventSystem()

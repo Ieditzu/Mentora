@@ -38,6 +38,8 @@ public class BeanController : MonoBehaviour
     private Transform leftControllerVisual;
     private Transform rightControllerVisual;
     private float pitch;
+    private bool xrHeadOriginCaptured;
+    private Vector3 xrHeadOriginLocalPosition;
 
     public static bool KeyboardInputEnabled { get; set; } = true;
 
@@ -109,6 +111,14 @@ public class BeanController : MonoBehaviour
 
         if (PauseMenuManager.IsGamePaused || Cursor.lockState != CursorLockMode.Locked)
         {
+            input = Vector3.zero;
+            isSprinting = false;
+            return;
+        }
+
+        if (CommunityIslandMenu.IsVrMenuActive)
+        {
+            TryApplyVrHeadPose();
             input = Vector3.zero;
             isSprinting = false;
             return;
@@ -257,6 +267,12 @@ public class BeanController : MonoBehaviour
         if (isGrounded)
         {
             lastGroundedTime = Time.time;
+        }
+
+        if (CommunityIslandMenu.IsVrMenuActive)
+        {
+            rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+            return;
         }
 
         if (hardFreeze)
@@ -534,5 +550,49 @@ public class BeanController : MonoBehaviour
     public float GetJumpForce()
     {
         return jumpVelocity;
+    }
+
+    private bool TryApplyVrHeadPose()
+    {
+        if (camTransform == null)
+        {
+            return false;
+        }
+
+        if (!XRSettings.enabled || !XRSettings.isDeviceActive)
+        {
+            xrHeadOriginCaptured = false;
+            return false;
+        }
+
+        if (InputDevices.GetDeviceAtXRNode(XRNode.Head)
+            .TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 pos))
+        {
+            if (!xrHeadOriginCaptured)
+            {
+                xrHeadOriginLocalPosition = pos;
+                xrHeadOriginCaptured = true;
+            }
+
+            Vector3 offset = pos - xrHeadOriginLocalPosition;
+            camTransform.localPosition = new Vector3(offset.x, 2.35f + offset.y, offset.z);
+        }
+        else
+        {
+            xrHeadOriginCaptured = false;
+            camTransform.localPosition = new Vector3(0f, 2.35f, 0f);
+        }
+
+        if (InputDevices.GetDeviceAtXRNode(XRNode.Head)
+            .TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion rot))
+        {
+            camTransform.localRotation = rot;
+        }
+        else
+        {
+            camTransform.localRotation = Quaternion.identity;
+        }
+
+        return true;
     }
 }

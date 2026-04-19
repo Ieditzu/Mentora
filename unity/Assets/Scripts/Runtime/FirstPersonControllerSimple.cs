@@ -244,6 +244,21 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return;
         }
 
+        if (CommunityIslandMenu.IsVrMenuActive)
+        {
+            velocity = Vector3.zero;
+            if (IsVrConfigured())
+            {
+                TryApplyXrHeadPose();
+            }
+
+            if (ShouldDriveVrControllerVisuals())
+            {
+                UpdateVrControllerVisuals();
+            }
+            return;
+        }
+
         if (cameraControlEnabled)
         {
             Look();
