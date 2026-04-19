@@ -87,13 +87,12 @@ public class PauseMenuManager : MonoBehaviour
     // VR Pointer fields
     private PointableCanvas pointableCanvas;
     private GameObject vrCursor;
-    private Renderer vrCursorRenderer;
-    private LineRenderer vrRayLine;
+    private RectTransform vrCursorRect;
+    private Image vrCursorImage;
+    private Outline vrCursorOutline;
     private Color vrCursorDefaultColor = new Color(1f, 1f, 1f, 0.8f);
-    private Color vrCursorHoverColor = new Color(0.35f, 0.72f, 0.95f, 0.95f);
-    private Color vrCursorSelectColor = new Color(0.18f, 0.62f, 0.32f, 0.95f);
-    private int shaderRadialScale = Shader.PropertyToID("_RadialGradientScale");
-    private int shaderInnerColor = Shader.PropertyToID("_Color");
+    private Color vrCursorHoverColor = new Color(1f, 0.96f, 0.35f, 1f);
+    private Color vrCursorSelectColor = new Color(1f, 0.55f, 0.18f, 1f);
     private GraphicRaycaster canvasRaycaster;
     private PointerEventData vrPointerEventData;
     private EventSystem vrPointerEventSystem;
@@ -102,10 +101,8 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject vrPressedObject;
     private bool vrSelectWasPressed;
     private const float VrPointerMaxDistance = 6f;
-    private const float VrPointerIdleDistance = 2.5f;
-    private const float VrCursorSurfaceOffset = 0.0025f;
-    private const float VrCursorHoverScale = 0.035f;
-    private const float VrCursorPressedScale = 0.026f;
+    private static readonly Vector2 VrCursorHoverSize = new Vector2(42f, 42f);
+    private static readonly Vector2 VrCursorPressedSize = new Vector2(32f, 32f);
 
     private string SessionFilePath => Path.Combine(Application.persistentDataPath, "session.json");
 
@@ -1107,7 +1104,6 @@ public class PauseMenuManager : MonoBehaviour
             distanceToPlane < 0f ||
             distanceToPlane > VrPointerMaxDistance)
         {
-            ResetVrPointerVisual(rayOrigin, rayOrigin + (rayDirection * VrPointerIdleDistance));
             if (vrCursor != null)
             {
                 vrCursor.SetActive(false);
@@ -1122,7 +1118,6 @@ public class PauseMenuManager : MonoBehaviour
 
         if (!IsWorldPointInsideCanvas(canvasRect, hitPoint))
         {
-            ResetVrPointerVisual(rayOrigin, rayOrigin + (rayDirection * Mathf.Min(distanceToPlane, VrPointerMaxDistance)));
             ClearVrHover();
             HandleVrSelectReleaseIfNeeded();
             return;
@@ -1167,7 +1162,7 @@ public class PauseMenuManager : MonoBehaviour
 
         GameObject currentClickHandler = hitObject != null ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject : null;
         bool isPressingCurrent = selectPressed && currentClickHandler != null && currentClickHandler == vrPressedObject;
-        ShowVrCursor(hitPoint, Quaternion.LookRotation(-canvas.transform.forward, canvas.transform.up), rayOrigin, isPressingCurrent);
+        ShowVrCursor(hitPoint, isPressingCurrent);
     }
 
     private void ConfigureCanvasForCurrentMode()
@@ -1472,33 +1467,29 @@ public class PauseMenuManager : MonoBehaviour
         // Create VR cursor
         if (vrCursor == null)
         {
-            vrCursor = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            Destroy(vrCursor.GetComponent<Collider>());
-            vrCursor.name = "PauseMenuVrCursor";
-            vrCursor.transform.localScale = Vector3.one * VrCursorHoverScale;
-            
-            vrCursorRenderer = vrCursor.GetComponent<Renderer>();
-            vrCursorRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            vrCursorRenderer.receiveShadows = false;
-            vrCursorRenderer.material = CreateVrCursorMaterial(vrCursorDefaultColor);
+            vrCursor = CreateUiObject("PauseMenuVrCursor", canvas.transform);
+            vrCursorRect = vrCursor.GetComponent<RectTransform>();
+            vrCursorRect.anchorMin = new Vector2(0.5f, 0.5f);
+            vrCursorRect.anchorMax = new Vector2(0.5f, 0.5f);
+            vrCursorRect.pivot = new Vector2(0.5f, 0.5f);
+            vrCursorRect.sizeDelta = VrCursorHoverSize;
+
+            vrCursorImage = vrCursor.AddComponent<Image>();
+            vrCursorImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            vrCursorImage.color = vrCursorHoverColor;
+            vrCursorImage.raycastTarget = false;
+
+            vrCursorOutline = vrCursor.AddComponent<Outline>();
+            vrCursorOutline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            vrCursorOutline.effectDistance = new Vector2(2f, -2f);
+
             vrCursor.SetActive(false);
         }
-        
-        // Create ray line
-        if (vrRayLine == null)
+        else if (vrCursorRect == null)
         {
-            GameObject rayGo = new GameObject("PauseMenuVrRay");
-            rayGo.transform.SetParent(transform);
-            vrRayLine = rayGo.AddComponent<LineRenderer>();
-            Material rayMat = new Material(Shader.Find("Sprites/Default"));
-            vrRayLine.material = rayMat;
-            vrRayLine.startWidth = 0.008f;
-            vrRayLine.endWidth = 0.004f;
-            vrRayLine.useWorldSpace = true;
-            vrRayLine.positionCount = 2;
-            vrRayLine.startColor = new Color(1f, 1f, 1f, 0.3f);
-            vrRayLine.endColor = new Color(1f, 1f, 1f, 0.1f);
-            vrRayLine.enabled = false;
+            vrCursorRect = vrCursor.GetComponent<RectTransform>();
+            vrCursorImage = vrCursor.GetComponent<Image>();
+            vrCursorOutline = vrCursor.GetComponent<Outline>();
         }
         
         // Subscribe to pointer events
@@ -1529,26 +1520,35 @@ public class PauseMenuManager : MonoBehaviour
     
     private void ShowVrCursor(Vector3 position, Quaternion rotation)
     {
-        ShowVrCursor(position, rotation, position - rotation * Vector3.forward * 2f, false);
+        _ = rotation;
+        ShowVrCursor(position, false);
     }
 
-    private void ShowVrCursor(Vector3 position, Quaternion rotation, Vector3 rayOrigin, bool isSelecting)
+    private void ShowVrCursor(Vector3 position, bool isSelecting)
     {
-        if (vrCursor != null)
+        if (vrCursor != null && vrCursorRect != null)
         {
-            vrCursor.SetActive(true);
-            vrCursor.transform.position = position + rotation * Vector3.forward * VrCursorSurfaceOffset;
-            vrCursor.transform.rotation = rotation;
-            vrCursor.transform.localScale = Vector3.one * (isSelecting ? VrCursorPressedScale : VrCursorHoverScale);
-            
-            if (vrCursorRenderer != null)
+            Vector2 localPoint;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvas.GetComponent<RectTransform>(),
+                    RectTransformUtility.WorldToScreenPoint(canvas.worldCamera, position),
+                    canvas.worldCamera,
+                    out localPoint))
             {
-                vrCursorRenderer.material.SetColor(shaderInnerColor, isSelecting ? vrCursorSelectColor : vrCursorHoverColor);
-                vrCursorRenderer.material.SetFloat(shaderRadialScale, isSelecting ? 0.08f : 0.2f);
+                vrCursor.SetActive(false);
+                return;
+            }
+
+            vrCursor.SetActive(true);
+            vrCursor.transform.SetAsLastSibling();
+            vrCursorRect.anchoredPosition = localPoint;
+            vrCursorRect.sizeDelta = isSelecting ? VrCursorPressedSize : VrCursorHoverSize;
+
+            if (vrCursorImage != null)
+            {
+                vrCursorImage.color = isSelecting ? vrCursorSelectColor : vrCursorHoverColor;
             }
         }
-        
-        ResetVrPointerVisual(rayOrigin, position);
     }
     
     private void HideVrCursor()
@@ -1557,27 +1557,16 @@ public class PauseMenuManager : MonoBehaviour
         {
             vrCursor.SetActive(false);
         }
-        if (vrRayLine != null)
-        {
-            vrRayLine.enabled = false;
-        }
     }
     
     private void SetVrCursorSelect(bool selecting)
     {
-        if (vrCursorRenderer != null && vrCursor.activeSelf)
+        if (vrCursorImage != null && vrCursor.activeSelf)
         {
-            if (selecting)
+            vrCursorImage.color = selecting ? vrCursorSelectColor : vrCursorHoverColor;
+            if (vrCursorRect != null)
             {
-                vrCursorRenderer.material.SetColor(shaderInnerColor, vrCursorSelectColor);
-                vrCursorRenderer.material.SetFloat(shaderRadialScale, 0.08f);
-                vrCursor.transform.localScale = Vector3.one * VrCursorPressedScale;
-            }
-            else
-            {
-                vrCursorRenderer.material.SetColor(shaderInnerColor, vrCursorHoverColor);
-                vrCursorRenderer.material.SetFloat(shaderRadialScale, 0.2f);
-                vrCursor.transform.localScale = Vector3.one * VrCursorHoverScale;
+                vrCursorRect.sizeDelta = selecting ? VrCursorPressedSize : VrCursorHoverSize;
             }
         }
     }
@@ -1604,28 +1593,6 @@ public class PauseMenuManager : MonoBehaviour
                 pointerId = -10
             };
         }
-    }
-
-    private Material CreateVrCursorMaterial(Color color)
-    {
-        Shader oculusCursorShader = Shader.Find("Interaction/OculusHandCursor");
-        if (oculusCursorShader != null)
-        {
-            Material cursorMat = new Material(oculusCursorShader);
-            cursorMat.SetFloat(shaderRadialScale, 0.2f);
-            cursorMat.SetColor(shaderInnerColor, color);
-            return cursorMat;
-        }
-
-        Shader unlitShader = Shader.Find("Unlit/Color");
-        if (unlitShader == null)
-        {
-            unlitShader = Shader.Find("Sprites/Default");
-        }
-
-        Material fallbackMat = new Material(unlitShader);
-        fallbackMat.color = color;
-        return fallbackMat;
     }
 
     private static bool IsWorldPointInsideCanvas(RectTransform canvasRect, Vector3 worldPoint)
@@ -1727,18 +1694,6 @@ public class PauseMenuManager : MonoBehaviour
         HideVrCursor();
         ClearVrHover();
         HandleVrSelectReleaseIfNeeded();
-    }
-
-    private void ResetVrPointerVisual(Vector3 rayOrigin, Vector3 rayEnd)
-    {
-        if (vrRayLine == null)
-        {
-            return;
-        }
-
-        vrRayLine.enabled = true;
-        vrRayLine.SetPosition(0, rayOrigin);
-        vrRayLine.SetPosition(1, rayEnd);
     }
 
     private bool TryGetRightControllerRay(out Vector3 origin, out Vector3 direction)
