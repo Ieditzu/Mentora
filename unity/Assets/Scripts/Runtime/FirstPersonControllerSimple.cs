@@ -86,6 +86,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private bool doubleTapSprintActive;
     private float jumpPower;
     private float lastGroundedTime = -10f;
+    private bool wasGrounded;
     private float speedBoostUntilTime = -1f;
     private Vector2 lastTouchPos;
     private bool touchLookActive;
@@ -386,6 +387,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         {
             velocity.y = Mathf.Max(0.05f, jumpVelocity + jumpPower);
             lastGroundedTime = -10f;
+            AudioManager.Play(MenSfx.Jump);
         }
 
         velocity.y -= gravity * Time.deltaTime;
@@ -892,9 +894,14 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (grounded)
         {
+            if (!wasGrounded)
+            {
+                AudioManager.Play(MenSfx.Land);
+            }
             lastGroundedTime = Time.time;
         }
 
+        wasGrounded = grounded;
         return grounded;
     }
 
@@ -915,6 +922,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         controller.enabled = false;
         transform.SetPositionAndRotation(spawnPosition, spawnRotation);
         controller.enabled = wasEnabled;
+        AudioManager.Play(MenSfx.Respawn);
     }
 
     private void HandleWaterSubmersion()

@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public enum MenSfx
 {
@@ -37,6 +40,7 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip pipeAscendClip;
 
     private AudioSource source;
+    private readonly HashSet<Button> registeredButtons = new HashSet<Button>();
 
     private void Awake()
     {
@@ -52,8 +56,29 @@ public class AudioManager : MonoBehaviour
         {
             source = gameObject.AddComponent<AudioSource>();
         }
-        source.spatialBlend = 0f; // 2D — UI sounds should not be positional
+        source.spatialBlend = 0f;
         source.playOnAwake = false;
+    }
+
+    private void Start()
+    {
+        StartCoroutine(AutoRegisterButtons());
+    }
+
+    private IEnumerator AutoRegisterButtons()
+    {
+        var wait = new WaitForSeconds(0.5f);
+        while (true)
+        {
+            foreach (var btn in FindObjectsOfType<Button>(true))
+            {
+                if (registeredButtons.Add(btn))
+                {
+                    btn.onClick.AddListener(() => Play(MenSfx.ButtonClick));
+                }
+            }
+            yield return wait;
+        }
     }
 
     public static void Play(MenSfx sfx)
@@ -71,16 +96,16 @@ public class AudioManager : MonoBehaviour
 
     private AudioClip GetClip(MenSfx sfx) => sfx switch
     {
-        MenSfx.Jump             => jumpClip,
-        MenSfx.Land             => landClip,
-        MenSfx.Respawn          => respawnClip,
-        MenSfx.ButtonClick      => buttonClickClip,
-        MenSfx.AnswerCorrect    => answerCorrectClip,
-        MenSfx.AnswerWrong      => answerWrongClip,
+        MenSfx.Jump              => jumpClip,
+        MenSfx.Land              => landClip,
+        MenSfx.Respawn           => respawnClip,
+        MenSfx.ButtonClick       => buttonClickClip,
+        MenSfx.AnswerCorrect     => answerCorrectClip,
+        MenSfx.AnswerWrong       => answerWrongClip,
         MenSfx.ChallengeComplete => challengeCompleteClip,
-        MenSfx.PortalEnter      => portalEnterClip,
-        MenSfx.PipeDescend      => pipeDescendClip,
-        MenSfx.PipeAscend       => pipeAscendClip,
-        _                       => null,
+        MenSfx.PortalEnter       => portalEnterClip,
+        MenSfx.PipeDescend       => pipeDescendClip,
+        MenSfx.PipeAscend        => pipeAscendClip,
+        _                        => null,
     };
 }
