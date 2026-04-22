@@ -141,6 +141,7 @@ public class BlackoutPipeTrigger : MonoBehaviour
             yield return null;
         }
 
+        AudioManager.Play(MenSfx.PipeDescend);
         t = 0f;
         while (t < descendIntoHoleDuration)
         {
@@ -1303,6 +1304,7 @@ public class BlackoutPipeTrigger : MonoBehaviour
         Vector3 bottom = new Vector3(root.position.x, shaftBottomY, root.position.z);
         activeSphere.transform.position = bottom;
 
+        AudioManager.Play(MenSfx.PipeAscend);
         float t = 0f;
         while (t < riseFromHoleDuration)
         {

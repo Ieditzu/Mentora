@@ -31,6 +31,7 @@ public class BeanController : MonoBehaviour
     private bool hardFreeze;
     private bool isSprinting;
     private bool isGrounded;
+    private bool wasGrounded;
     private bool jumpQueued;
     private float lastGroundedTime = -10f;
 
@@ -263,10 +264,15 @@ public class BeanController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        wasGrounded = isGrounded;
         isGrounded = CheckGrounded();
         if (isGrounded)
         {
             lastGroundedTime = Time.time;
+            if (!wasGrounded)
+            {
+                AudioManager.Play(MenSfx.Land);
+            }
         }
 
         if (CommunityIslandMenu.IsVrMenuActive)
@@ -303,6 +309,7 @@ public class BeanController : MonoBehaviour
             jumpQueued = false;
             isGrounded = false;
             lastGroundedTime = -10f;
+            AudioManager.Play(MenSfx.Jump);
         }
 
         if (jumpQueued && !canJump)
@@ -342,6 +349,7 @@ public class BeanController : MonoBehaviour
         rb.rotation = startRotation;
         transform.position = startPosition;
         transform.rotation = startRotation;
+        AudioManager.Play(MenSfx.Respawn);
     }
 
     private bool CheckGrounded()

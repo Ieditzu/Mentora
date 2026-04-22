@@ -323,6 +323,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
             SetPlayerPositionAndRotation(sphere, fps, playerRoot.position, targetRotation);
         }
 
+        AudioManager.Play(MenSfx.PortalEnter);
         yield return FadeWhite(0f, 1f, fadeToWhiteDuration);
         if (textFadeDelay > 0f)
         {
@@ -1067,6 +1068,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
                     wrongAnswers[questionId] = false;
                     quizFeedbackText.text = Localize("Corect.", "Correct.");
                     quizFeedbackText.color = new Color(0.18f, 0.58f, 0.32f, 1f);
+                    AudioManager.Play(MenSfx.AnswerCorrect);
                     nextButton.gameObject.SetActive(true);
                     nextButton.onClick.RemoveAllListeners();
                     nextButton.onClick.AddListener(() => nextRequested = true);
@@ -1135,6 +1137,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
                 wrongAnswers[questionId] = true;
                 quizFeedbackText.text = Localize("Nu este corect.", "That is not correct.");
                 quizFeedbackText.color = new Color(0.78f, 0.2f, 0.2f, 1f);
+                AudioManager.Play(MenSfx.AnswerWrong);
                 nextButton.gameObject.SetActive(true);
                 nextButton.onClick.RemoveAllListeners();
                 nextButton.onClick.AddListener(() => nextRequested = true);
@@ -1335,6 +1338,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
                     {
                         quizFeedbackText.text = Localize("Corect. Apasa Next.", "Correct. Press Next.");
                         quizFeedbackText.color = new Color(0.18f, 0.58f, 0.32f, 1f);
+                        AudioManager.Play(MenSfx.AnswerCorrect);
                         nextButton.gameObject.SetActive(true);
                         nextButtonText.text = i == PythonChallenges.Length - 1 ? Localize("Final", "Finish") : Localize("Next", "Next");
                         nextButton.onClick.RemoveAllListeners();
@@ -1344,6 +1348,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
                     {
                         quizFeedbackText.text = Localize("Nu este corect. Mai incearca.", "That is not correct. Try again.");
                         quizFeedbackText.color = new Color(0.78f, 0.2f, 0.2f, 1f);
+                        AudioManager.Play(MenSfx.AnswerWrong);
                     }
                 }
 
@@ -1368,6 +1373,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
             centerText.alignment = TextAnchor.MiddleCenter;
             centerText.text = Localize("Ai terminat si challenge-urile Python.", "You finished the Python challenges.");
             centerText.gameObject.SetActive(true);
+            AudioManager.Play(MenSfx.ChallengeComplete);
             while (!leaveRequested)
             {
                 yield return null;
@@ -1487,6 +1493,7 @@ public class SphereRiftPortalSequence : MonoBehaviour
     {
         optionSelected = true;
         answerCorrect = selectedIndex == correctIndex;
+        AudioManager.Play(MenSfx.ButtonClick);
     }
 
     private IEnumerator PromptQuizLanguage()
