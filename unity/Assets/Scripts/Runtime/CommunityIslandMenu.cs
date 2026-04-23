@@ -113,6 +113,7 @@ public class CommunityIslandMenu : MonoBehaviour
     private static readonly Vector2 VrCursorPressedSize = new Vector2(32f, 32f);
     private static readonly Color VrCursorHoverColor = new Color(1f, 0.96f, 0.35f, 1f);
     private static readonly Color VrCursorSelectColor = new Color(1f, 0.55f, 0.18f, 1f);
+    private static Sprite vrCursorSprite;
 
     private void Awake()
     {
@@ -1519,7 +1520,7 @@ public class CommunityIslandMenu : MonoBehaviour
             vrCursorRect.sizeDelta = VrCursorHoverSize;
 
             vrCursorImage = vrCursor.GetComponent<Image>() ?? vrCursor.AddComponent<Image>();
-            vrCursorImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            vrCursorImage.sprite = GetVrCursorSprite();
             vrCursorImage.color = VrCursorHoverColor;
             vrCursorImage.raycastTarget = false;
 
@@ -1528,6 +1529,22 @@ public class CommunityIslandMenu : MonoBehaviour
             vrCursorOutline.effectDistance = new Vector2(2f, -2f);
             vrCursor.SetActive(false);
         }
+    }
+
+    private static Sprite GetVrCursorSprite()
+    {
+        if (vrCursorSprite != null)
+        {
+            return vrCursorSprite;
+        }
+
+        var texture = Texture2D.whiteTexture;
+        vrCursorSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        return vrCursorSprite;
     }
 
     private void ShowVrCursor(Vector3 worldPosition, bool isSelecting)
@@ -1730,6 +1747,11 @@ public class CommunityIslandMenu : MonoBehaviour
         Camera camera = ResolveMenuCamera();
         Transform reference = camera != null ? camera.transform.parent : null;
 
+        if (VrHandTracking.TryGetPointerRay(XRNode.RightHand, reference, out origin, out direction))
+        {
+            return true;
+        }
+
         UnityEngine.XR.InputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         if (rightHand.isValid &&
             rightHand.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 localPosition) &&
@@ -1776,6 +1798,11 @@ public class CommunityIslandMenu : MonoBehaviour
 
     private static bool IsVrSelectPressed()
     {
+        if (VrHandTracking.IsPinching(XRNode.RightHand))
+        {
+            return true;
+        }
+
         UnityEngine.XR.InputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         if (rightHand.isValid)
         {

@@ -105,6 +105,7 @@ public class PauseMenuManager : MonoBehaviour
     private const float VrPointerDownwardAngle = -30f;
     private static readonly Vector2 VrCursorHoverSize = new Vector2(42f, 42f);
     private static readonly Vector2 VrCursorPressedSize = new Vector2(32f, 32f);
+    private static Sprite vrCursorSprite;
 
     private string SessionFilePath => Path.Combine(Application.persistentDataPath, "session.json");
 
@@ -1481,7 +1482,7 @@ public class PauseMenuManager : MonoBehaviour
             vrCursorRect.sizeDelta = VrCursorHoverSize;
 
             vrCursorImage = vrCursor.AddComponent<Image>();
-            vrCursorImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            vrCursorImage.sprite = GetVrCursorSprite();
             vrCursorImage.color = vrCursorHoverColor;
             vrCursorImage.raycastTarget = false;
 
@@ -1503,6 +1504,22 @@ public class PauseMenuManager : MonoBehaviour
         {
             pointableCanvas.WhenPointerEventRaised += OnVrPointerEvent;
         }
+    }
+
+    private static Sprite GetVrCursorSprite()
+    {
+        if (vrCursorSprite != null)
+        {
+            return vrCursorSprite;
+        }
+
+        var texture = Texture2D.whiteTexture;
+        vrCursorSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        return vrCursorSprite;
     }
     
     private void OnVrPointerEvent(PointerEvent evt)
@@ -1716,6 +1733,11 @@ public class PauseMenuManager : MonoBehaviour
 
         Transform reference = fpsController != null ? fpsController.transform : null;
 
+        if (VrHandTracking.TryGetPointerRay(XRNode.RightHand, reference, out origin, out direction))
+        {
+            return true;
+        }
+
         XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         if (rightHand.isValid &&
             rightHand.TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 localPosition) &&
@@ -1760,6 +1782,11 @@ public class PauseMenuManager : MonoBehaviour
 
     private bool IsVrSelectPressed()
     {
+        if (VrHandTracking.IsPinching(XRNode.RightHand))
+        {
+            return true;
+        }
+
         XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         if (rightHand.isValid)
         {

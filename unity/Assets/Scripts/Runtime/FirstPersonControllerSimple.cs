@@ -94,6 +94,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private Vector3 xrHeadOriginLocalPosition;
     private Transform leftVrControllerVisual;
     private Transform rightVrControllerVisual;
+    private bool handTrackingVisualsActive;
 
     private bool ShouldDriveVrControllerVisuals()
     {
@@ -137,13 +138,14 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
     public void SetHandTrackingVisualsActive(bool handTrackingActive)
     {
+        handTrackingVisualsActive = handTrackingActive;
+
         if (showVrControllers)
         {
             EnsureVrControllerVisuals();
         }
 
-        bool shouldShowControllers = showVrControllers && !handTrackingActive && IsVrConfigured();
-        SetVrControllerVisualState(shouldShowControllers);
+        ApplyVrControllerVisibility();
     }
 
     private void Awake()
@@ -627,8 +629,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
             rightVrControllerVisual = CreateVrControllerVisual("RightVrControllerVisual", false);
         }
 
-        bool shouldShow = IsVrConfigured() || HasConnectedOvrControllers();
-        SetVrControllerVisualState(shouldShow);
+        ApplyVrControllerVisibility();
     }
 
     private Transform CreateVrControllerVisual(string name, bool isLeft)
@@ -734,7 +735,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private void UpdateVrControllerVisuals()
     {
         EnsureVrControllerVisuals();
-        if (!showVrControllers)
+        if (!showVrControllers || handTrackingVisualsActive)
         {
             return;
         }
@@ -764,7 +765,6 @@ public class FirstPersonControllerSimple : MonoBehaviour
             hasRotation = true;
         }
 
-        visual.gameObject.SetActive(true);
         Vector3 calibratedPosition = GetDefaultControllerRestPosition(ovrController);
         if (hasPosition)
         {
@@ -778,6 +778,14 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         visual.localPosition = calibratedPosition + (hasRotation ? localRotation * localOffset : localOffset);
         visual.localRotation = hasRotation ? localRotation : Quaternion.identity;
+    }
+
+    private void ApplyVrControllerVisibility()
+    {
+        bool shouldShow = showVrControllers
+            && !handTrackingVisualsActive
+            && (IsVrConfigured() || HasConnectedOvrControllers());
+        SetVrControllerVisualState(shouldShow);
     }
 
     private Vector3 GetDefaultControllerRestPosition(OVRInput.Controller controllerMask)
@@ -1148,6 +1156,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
             try { pressedNow = OVRInput.Get(OVRInput.RawButton.Y); } catch { }
         }
 
+        if (!pressedNow)
+        {
+            pressedNow = VrHandTracking.IsPinching(XRNode.LeftHand);
+        }
+
         if (pressedNow && !_vrPauseWasPressed)
             PauseMenuManager.VrTogglePause();
 
@@ -1167,6 +1180,11 @@ public class FirstPersonControllerSimple : MonoBehaviour
         if (!pressedNow)
         {
             try { pressedNow = OVRInput.Get(OVRInput.RawButton.A); } catch { }
+        }
+
+        if (!pressedNow)
+        {
+            pressedNow = VrHandTracking.IsPinching(XRNode.RightHand);
         }
 
         bool downThisFrame = pressedNow && !_vrJumpWasPressed;
