@@ -72,6 +72,11 @@ public class VrTrackingCalibrator : MonoBehaviour
 
     private static bool AreBothGripButtonsHeld()
     {
+        if (VrHandTracking.AreBothHandsPinching())
+        {
+            return true;
+        }
+
         return IsGripHeld(XRNode.LeftHand) && IsGripHeld(XRNode.RightHand);
     }
 
