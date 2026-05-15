@@ -31,8 +31,8 @@ htmlAttrs:
   <h1 style="font-family:'Space Grotesk',sans-serif; font-size:3.8rem; font-weight:800; color:white; letter-spacing:-0.02em; text-shadow: 0 2px 20px rgba(0,0,0,0.5);">Mentora</h1>
   <p style="font-size:1.2rem; color:rgba(255,255,255,0.88); margin-top:0.6rem; font-weight:300; letter-spacing:0.02em;">Platformă Educațională AI pentru Programare</p>
   <div class="mt-7 flex gap-3 flex-wrap justify-center">
-    <span style="padding:0.35rem 1rem; border-radius:999px; background:rgba(124,58,237,0.55); color:white; font-size:0.93rem; border:1px solid rgba(167,139,250,0.5); backdrop-filter:blur(8px);">InfoEducație 2026</span>
-    <span style="padding:0.35rem 1rem; border-radius:999px; background:rgba(16,185,129,0.4); color:white; font-size:0.93rem; border:1px solid rgba(52,211,153,0.4); backdrop-filter:blur(8px);">Secțiunea Software Educațional</span>
+    <span style="padding:0.35rem 1rem; border-radius:999px; background:rgba(124,58,237,0.55); color:white; font-size:1.2rem; border:1px solid rgba(167,139,250,0.5); backdrop-filter:blur(8px);">InfoEducație 2026</span>
+    <span style="padding:0.35rem 1rem; border-radius:999px; background:rgba(16,185,129,0.4); color:white; font-size:1.2rem; border:1px solid rgba(52,211,153,0.4); backdrop-filter:blur(8px);">Secțiunea Software Educațional</span>
   </div>
 </div>
 
@@ -56,7 +56,7 @@ layout: default
 <div class="grid grid-cols-2 gap-7 mt-5">
 <div>
 
-<p style="font-size:0.93rem; font-weight:600; color:#a78bfa; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">Situația actuală</p>
+<p style="font-size:1.2rem; font-weight:600; color:#a78bfa; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">Situația actuală</p>
 
 
 
@@ -70,7 +70,7 @@ layout: default
 </div>
 <div>
 
-<p style="font-size:0.93rem; font-weight:600; color:#34d399; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">Ce spune cercetarea</p>
+<p style="font-size:1.2rem; font-weight:600; color:#34d399; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">Ce spune cercetarea</p>
 
 
 
@@ -101,30 +101,30 @@ layout: default
 
 # Ecosistemul Mentora — 4 Componente
 
-<div class="grid grid-cols-2 gap-6 mt-4">
+<div class="grid grid-cols-2 gap-6 mt-6">
 
-<div class="p-5 rounded-xl" style="border:1px solid rgba(124,58,237,0.4); background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(124,58,237,0.04));">
+<div class="p-6 rounded-xl" style="border:1px solid rgba(124,58,237,0.4); background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(124,58,237,0.04));">
   <div class="text-3xl mb-2">🎮</div>
-  <h3 class="font-bold" style="color:#a78bfa; font-size:1.08rem;">Joc Unity 3D</h3>
-  <p style="font-size:0.93rem; color:#9ca3af; margin-top:0.3rem;">Lumea 3D HDRP unde copiii scriu cod Python și C++ real, rezolvă puzzle-uri și interacționează cu tutorul AI</p>
+  <h3 class="font-bold" style="color:#a78bfa; font-size:1.2rem;">Joc Unity 3D</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.3rem;">Lumea 3D HDRP unde copiii scriu cod Python și C++ real, rezolvă puzzle-uri și interacționează cu tutorul AI</p>
 </div>
 
-<div class="p-5 rounded-xl" style="border:1px solid rgba(16,185,129,0.4); background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04));">
+<div class="p-6 rounded-xl" style="border:1px solid rgba(16,185,129,0.4); background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04));">
   <div class="text-3xl mb-2">📱</div>
-  <h3 class="font-bold" style="color:#34d399; font-size:1.08rem;">Aplicație Android</h3>
-  <p style="font-size:0.93rem; color:#9ca3af; margin-top:0.3rem;">Dashboard pentru părinți: prezență online, obiective, istoricul task-urilor, rezumate AI despre progresul copilului</p>
+  <h3 class="font-bold" style="color:#34d399; font-size:1.2rem;">Aplicație Android</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.3rem;">Dashboard pentru părinți: prezență online, obiective, istoricul task-urilor, rezumate AI despre progresul copilului</p>
 </div>
 
-<div class="p-5 rounded-xl" style="border:1px solid rgba(59,130,246,0.4); background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(59,130,246,0.04));">
+<div class="p-6 rounded-xl" style="border:1px solid rgba(59,130,246,0.4); background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(59,130,246,0.04));">
   <div class="text-3xl mb-2">🌐</div>
-  <h3 class="font-bold" style="color:#60a5fa; font-size:1.08rem;">Web Creator</h3>
-  <p style="font-size:0.93rem; color:#9ca3af; margin-top:0.3rem;">Instrument pentru educatori: creare cursuri quiz, publicare în joc, gestionare conținut educațional</p>
+  <h3 class="font-bold" style="color:#60a5fa; font-size:1.2rem;">Web Creator</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.3rem;">Instrument pentru educatori: creare cursuri quiz, publicare în joc, gestionare conținut educațional</p>
 </div>
 
-<div class="p-5 rounded-xl" style="border:1px solid rgba(245,158,11,0.4); background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04));">
+<div class="p-6 rounded-xl" style="border:1px solid rgba(245,158,11,0.4); background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04));">
   <div class="text-3xl mb-2">⚙️</div>
-  <h3 class="font-bold" style="color:#fbbf24; font-size:1.08rem;">Server Java</h3>
-  <p style="font-size:0.93rem; color:#9ca3af; margin-top:0.3rem;">Backend Spring Boot: execuție cod în sandbox, AI adaptiv (LLaMA 3.3 70B via Groq), protocol binar WebSocket criptat</p>
+  <h3 class="font-bold" style="color:#fbbf24; font-size:1.2rem;">Server Java</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.3rem;">Backend Spring Boot: execuție cod în sandbox, AI adaptiv (LLaMA 3.3 70B via Groq), protocol binar WebSocket criptat</p>
 </div>
 
 </div>
@@ -152,7 +152,7 @@ image: /entire_map_in_game.png
 
 
 
-<div style="margin-top:1.2rem; padding:0.6rem 0.9rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:1.08rem;">
+<div style="margin-top:1.2rem; padding:0.9rem 1.1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:1.2rem;">
   <strong style="color:#a78bfa;">22 task-uri built-in</strong> progresive, organizate pe 3 niveluri de dificultate
 </div>
 
@@ -176,7 +176,7 @@ image: /python_coding.png
 
 
 
-<div style="margin-top:0.8rem; padding:0.6rem 0.9rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:0.93rem;">
+<div style="margin-top:0.8rem; padding:0.9rem 1.1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:1.2rem;">
   Nu există răspunsuri hardcodate — orice soluție corectă este acceptată
 </div>
 
@@ -209,8 +209,8 @@ layout: two-cols
 ::right::
 
 <div class="flex flex-col gap-3 mt-2">
-  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="max-height: 200px; object-fit: cover; object-position: top;" />
-  <img src="/app_goals_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="max-height: 200px; object-fit: cover; object-position: top;" />
+  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="" />
+  <img src="/app_goals_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="" />
 </div>
 
 ---
@@ -233,8 +233,8 @@ layout: two-cols
 ::right::
 
 <div class="flex flex-col gap-3 mt-2">
-  <img src="/app_ai_insight_of_child.png" class="rounded-xl shadow-lg w-full" style="max-height: 200px; object-fit: cover; object-position: top;" />
-  <img src="/app_task_history.png" class="rounded-xl shadow-lg w-full" style="max-height: 200px; object-fit: cover; object-position: top;" />
+  <img src="/app_ai_insight_of_child.png" class="rounded-xl shadow-lg w-full" style="" />
+  <img src="/app_task_history.png" class="rounded-xl shadow-lg w-full" style="" />
 </div>
 
 ---
@@ -261,7 +261,7 @@ image: /web_creator.png
 
 
 
-<div style="margin-top:0.8rem; padding:0.6rem 0.9rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.3); font-size:0.93rem;">
+<div style="margin-top:0.8rem; padding:0.9rem 1.1rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.3); font-size:1.2rem;">
   Completare 100% obligatorie — orice răspuns greșit anulează recompensa
 </div>
 
@@ -288,7 +288,7 @@ graph TD
     SRV --> SB["🔒 Sandbox<br/>Python · C++"]
 ```
 
-<div class="grid grid-cols-3 gap-3 mt-4" style="font-size:0.93rem;">
+<div class="grid grid-cols-3 gap-3 mt-4" style="font-size:1.2rem;">
   <div class="p-2 rounded-lg text-center" style="background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.35);">
     <div style="color:#a78bfa; font-weight:700; margin-bottom:2px;">Backend</div>
     Java 21 · Spring Boot 3.2<br/>Spring Data JPA · Hibernate
@@ -314,8 +314,6 @@ layoutClass: gap-8
 
 Mentora rulează pe **orice platformă majoră** fără modificări de cod.
 
-
-
 | Componentă | Platforme |
 |---|---|
 | Server Java | Windows · macOS · Linux |
@@ -323,23 +321,19 @@ Mentora rulează pe **orice platformă majoră** fără modificări de cod.
 | Aplicație Android | Android 7.0+ (API 24+) |
 | Web Creator | Orice browser modern |
 
-
-
-<div style="margin-top:1.4rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.6rem; font-size:0.90rem;">
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
+<div style="margin-top:1.5rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.9rem; font-size:1.2rem;">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
     <span style="color:#a78bfa; font-weight:700;">Java 21 LTS</span><br/>Portabil pe orice JVM
   </div>
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
     <span style="color:#34d399; font-weight:700;">Unity Cross-Platform</span><br/>Windows, macOS, Linux build
   </div>
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
     <span style="color:#60a5fa; font-weight:700;">Web Standard</span><br/>Orice browser modern
   </div>
 </div>
 
 ::right::
-
-<div style="margin-top:0.5rem;">
 
 ### Tehnologii alese strategic
 
@@ -349,10 +343,16 @@ Mentora rulează pe **orice platformă majoră** fără modificări de cod.
 - **Vite + React 19** — build rapid, orice browser
 - **PostgreSQL** — JSONB nativ pentru profiluri AI
 
+<div style="margin-top:1.2rem; padding:0.9rem 1rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25); font-size:1.1rem;">
+  <strong style="color:#fbbf24;">Live:</strong> <code>neuro.serenityutils.club</code> — server activ în producție
 </div>
 
-<div style="margin-top:1rem; padding:0.6rem 0.8rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25); font-size:0.90rem;">
-  <strong style="color:#fbbf24;">Deployment:</strong> serverul rulează live la <code>neuro.serenityutils.club</code> — proiect distribuit publicului
+<div style="margin-top:0.8rem; padding:0.9rem 1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25); font-size:1.1rem;">
+  <strong style="color:#a78bfa;">Open-source:</strong> cod sursă complet disponibil pe GitHub
+</div>
+
+<div style="margin-top:0.8rem; padding:0.9rem 1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25); font-size:1.1rem;">
+  <strong style="color:#34d399;">Fără dependențe proprietare</strong> — toate tehnologiile sunt open-source
 </div>
 
 ---
@@ -371,7 +371,7 @@ layout: default
 <div class="grid grid-cols-2 gap-5 mt-3">
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Format cadru</p>
+<p style="font-size:1.2rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Format cadru</p>
 
 ```
 [4 bytes: seed length]
@@ -391,11 +391,11 @@ layout: default
 </div>
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Whitelist pre-autentificare</p>
+<p style="font-size:1.2rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Whitelist pre-autentificare</p>
 
 Pachete **1, 2, 3, 19, 25, 41, 43, 44** permise înainte de auth. Orice alt pachet → eroare de autorizare.
 
-<p style="font-size:0.90rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.07em; margin:0.7rem 0 0.3rem;">Autentificare REST</p>
+<p style="font-size:1.2rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.07em; margin:0.7rem 0 0.3rem;">Autentificare REST</p>
 
 - Parole hash-uite cu **SHA-256**
 - Token-uri UUID cu **TTL 7 zile**
@@ -404,14 +404,14 @@ Pachete **1, 2, 3, 19, 25, 41, 43, 44** permise înainte de auth. Orice alt pach
 </div>
 </div>
 
-<div style="margin-top:1.2rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.6rem; font-size:0.90rem;">
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25); text-align:center;">
+<div style="margin-top:2rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.9rem; font-size:1.2rem;">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25); text-align:center;">
     <div style="color:#a78bfa; font-weight:700;">AES-256-CBC</div>Criptare per-pachet
   </div>
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25); text-align:center;">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25); text-align:center;">
     <div style="color:#34d399; font-weight:700;">44 tipuri pachete</div>Switch expression Java 21
   </div>
-  <div style="padding:0.5rem 0.7rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25); text-align:center;">
+  <div style="padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25); text-align:center;">
     <div style="color:#60a5fa; font-weight:700;">SHA-256 + UUID</div>Auth securizat REST
   </div>
 </div>
@@ -425,7 +425,7 @@ layout: default
 <div class="grid grid-cols-2 gap-5 mt-3">
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Constrângeri sandbox</p>
+<p style="font-size:1.2rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Constrângeri sandbox</p>
 
 ```bash
 unshare --net       # izolare rețea completă
@@ -438,7 +438,7 @@ timeout 120s        # + 2s grace period
 </div>
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Ce previne</p>
+<p style="font-size:1.2rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Ce previne</p>
 
 - **Exfiltrare date** — fără acces la rețea
 - **Fork bombs** — limită de procese
@@ -446,24 +446,24 @@ timeout 120s        # + 2s grace period
 - **Blocare server** — timeout strict
 - **Overflow memorie** — limită RAM
 
-<div style="margin-top:0.6rem; padding:0.5rem 0.8rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:0.90rem;">
+<div style="margin-top:0.6rem; padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:1.2rem;">
   Aplicația nu este expusă la vulnerabilități de execuție cod arbitrar
 </div>
 
 </div>
 </div>
 
-<div style="margin-top:1.2rem; display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; font-size:1.02rem; text-align:center;">
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
+<div style="margin-top:2rem; display:grid; grid-template-columns:repeat(4,1fr); gap:0.8rem; font-size:1.15rem; text-align:center;">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
     <div style="color:#a78bfa; font-weight:700;">256 MB</div>RAM max
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
     <div style="color:#fbbf24; font-weight:700;">64</div>procese max
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
     <div style="color:#60a5fa; font-weight:700;">120s</div>timeout
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
     <div style="color:#34d399; font-weight:700;">0</div>acces rețea
   </div>
 </div>
@@ -479,14 +479,14 @@ layout: default
 
 
 
-<p style="font-size:0.90rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.3rem;">Eleganța codului</p>
+<p style="font-size:1.2rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.3rem;">Eleganța codului</p>
 
 - Pattern-uri Spring Boot (DI, JPA repositories, `@Transactional`)
 - Jetpack Compose cu ViewModel + StateFlow
 - React 19 cu hooks și componente funcționale
 - Dispatcher pachete cu `switch` expression (Java 21)
 
-<p style="font-size:0.90rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin:0.6rem 0 0.3rem;">Gestionare cod</p>
+<p style="font-size:1.2rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin:0.6rem 0 0.3rem;">Gestionare cod</p>
 
 - Proiect versionat cu **Git** pe tot parcursul dezvoltării
 - Istoric complet de commit-uri documentat
@@ -498,13 +498,13 @@ layout: default
 
 
 
-<p style="font-size:0.90rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.3rem;">Maturitate</p>
+<p style="font-size:1.2rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.3rem;">Maturitate</p>
 
 - Serverul rulează în producție la `neuro.serenityutils.club`
 - Aplicația Android funcțională pe dispozitive reale
 - Jocul Unity testat pe Windows și macOS
 
-<p style="font-size:0.90rem; font-weight:700; color:#fbbf24; text-transform:uppercase; letter-spacing:0.07em; margin:0.6rem 0 0.3rem;">Cache & Rate limiting</p>
+<p style="font-size:1.2rem; font-weight:700; color:#fbbf24; text-transform:uppercase; letter-spacing:0.07em; margin:0.6rem 0 0.3rem;">Cache & Rate limiting</p>
 
 - LRU cache 200 intrări, TTL 5 min pentru Groq
 - Cooldown 60s după rate limit
@@ -515,14 +515,14 @@ layout: default
 </div>
 </div>
 
-<div style="margin-top:1.2rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.6rem; font-size:1.02rem; text-align:center;">
-  <div style="padding:0.7rem 0.9rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
+<div style="margin-top:2rem; display:grid; grid-template-columns:repeat(3,1fr); gap:0.9rem; font-size:1.15rem; text-align:center;">
+  <div style="padding:1rem 1.2rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
     <div style="color:#34d399; font-weight:700;">Producție live</div>neuro.serenityutils.club
   </div>
-  <div style="padding:0.7rem 0.9rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
+  <div style="padding:1rem 1.2rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
     <div style="color:#a78bfa; font-weight:700;">Git versionat</div>Istoric complet commits
   </div>
-  <div style="padding:0.7rem 0.9rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
+  <div style="padding:1rem 1.2rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
     <div style="color:#fbbf24; font-weight:700;">LRU 200 intrări</div>Cache răspunsuri AI
   </div>
 </div>
@@ -551,7 +551,7 @@ image: /game_picture.png
 
 
 
-<div style="margin-top:0.8rem; padding:0.6rem 0.9rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:0.93rem;">
+<div style="margin-top:0.8rem; padding:0.9rem 1.1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:1.2rem;">
   Interfața se adaptează la rezoluții multiple — testat pe 1080p și 1440p
 </div>
 
@@ -584,8 +584,8 @@ layoutClass: gap-6
 ::right::
 
 <div class="flex flex-col gap-3 mt-2">
-  <img src="/web_creator-fr.png" class="rounded-xl shadow-lg" style="max-height: 190px; object-fit: cover; object-position: top;" />
-  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg" style="max-height: 190px; object-fit: cover; object-position: top;" />
+  <img src="/web_creator-fr.png" class="rounded-xl shadow-lg" style="" />
+  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg" style="" />
 </div>
 
 ---
@@ -622,7 +622,7 @@ Fiecare copil are un **profil JSONB** în PostgreSQL cu trei sub-profile: C++, P
 
 
 
-<div style="margin-top:0.6rem; padding:0.5rem 0.8rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:0.90rem;">
+<div style="margin-top:0.6rem; padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.3); font-size:1.2rem;">
   <strong style="color:#a78bfa;">Clasificare automată:</strong> Beginner (&lt;10 interacțiuni sau &lt;40% acuratețe) · Intermediate (40–70%) · Advanced (&gt;70%)
 </div>
 
@@ -648,7 +648,7 @@ sequenceDiagram
     SRV->>SRV: Actualizează profilul AI al studentului
 ```
 
-<div style="margin-top:0.6rem; padding:0.5rem 0.8rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:0.90rem;">
+<div style="margin-top:0.6rem; padding:0.8rem 1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.3); font-size:1.2rem;">
   Soluțiile creative sunt acceptate — AI-ul judecă corectitudinea, nu potrivirea cu un șablon
 </div>
 
@@ -674,7 +674,7 @@ layoutClass: gap-6
 
 ::right::
 
-<img src="/web_creator_courses.png" class="rounded-xl shadow-lg mt-4" style="max-height: 380px; object-fit: cover; object-position: top;" />
+<img src="/web_creator_courses.png" class="rounded-xl shadow-lg mt-4" style="" />
 
 ---
 layout: default
@@ -682,24 +682,24 @@ layout: default
 
 # Sistem Obiective, Streak & Progres
 
-<div class="grid grid-cols-3 gap-4 mt-5">
+<div class="grid grid-cols-3 gap-5 mt-6">
 
-<div class="p-4 rounded-xl text-center" style="border:1px solid rgba(124,58,237,0.4); background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(124,58,237,0.04));">
-  <div style="font-size:2.2rem; margin-bottom:0.5rem;">🎯</div>
-  <h3 style="font-weight:700; color:#a78bfa; font-size:1.02rem;">Obiective Personalizate</h3>
-  <p style="font-size:0.90rem; color:#9ca3af; margin-top:0.4rem;">Părinții setează un prag de puncte sau un task specific. Notificare push la atingere.</p>
+<div class="p-6 rounded-xl text-center" style="border:1px solid rgba(124,58,237,0.4); background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(124,58,237,0.04));">
+  <div style="font-size:2.8rem; margin-bottom:0.5rem;">🎯</div>
+  <h3 style="font-weight:700; color:#a78bfa; font-size:1.15rem;">Obiective Personalizate</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.4rem;">Părinții setează un prag de puncte sau un task specific. Notificare push la atingere.</p>
 </div>
 
-<div class="p-4 rounded-xl text-center" style="border:1px solid rgba(245,158,11,0.4); background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04));">
-  <div style="font-size:2.2rem; margin-bottom:0.5rem;">🔥</div>
-  <h3 style="font-weight:700; color:#fbbf24; font-size:1.02rem;">Streak Zilnic</h3>
-  <p style="font-size:0.90rem; color:#9ca3af; margin-top:0.4rem;">Actualizat la fiecare sesiune de joc. <code>FetchChildStatsPacket</code> actualizează streak-ul; versiunea pentru părinți nu.</p>
+<div class="p-6 rounded-xl text-center" style="border:1px solid rgba(245,158,11,0.4); background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.04));">
+  <div style="font-size:2.8rem; margin-bottom:0.5rem;">🔥</div>
+  <h3 style="font-weight:700; color:#fbbf24; font-size:1.15rem;">Streak Zilnic</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.4rem;">Actualizat la fiecare sesiune de joc. <code>FetchChildStatsPacket</code> actualizează streak-ul; versiunea pentru părinți nu.</p>
 </div>
 
-<div class="p-4 rounded-xl text-center" style="border:1px solid rgba(16,185,129,0.4); background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04));">
-  <div style="font-size:2.2rem; margin-bottom:0.5rem;">📊</div>
-  <h3 style="font-weight:700; color:#34d399; font-size:1.02rem;">Progres în Timp Real</h3>
-  <p style="font-size:0.90rem; color:#9ca3af; margin-top:0.4rem;">Bara de progres în joc, istoricul task-urilor în app, rezumate AI generate la fiecare 5 minute.</p>
+<div class="p-6 rounded-xl text-center" style="border:1px solid rgba(16,185,129,0.4); background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.04));">
+  <div style="font-size:2.8rem; margin-bottom:0.5rem;">📊</div>
+  <h3 style="font-weight:700; color:#34d399; font-size:1.15rem;">Progres în Timp Real</h3>
+  <p style="font-size:1.2rem; color:#9ca3af; margin-top:0.4rem;">Bara de progres în joc, istoricul task-urilor în app, rezumate AI generate la fiecare 5 minute.</p>
 </div>
 
 </div>
@@ -731,7 +731,7 @@ layout: default
 
 </div>
 
-<div style="margin-top:0.8rem; padding:0.6rem 0.9rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.3); font-size:0.93rem;">
+<div style="margin-top:0.8rem; padding:0.9rem 1.1rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.3); font-size:1.2rem;">
   <strong style="color:#60a5fa;">Inovația cheie:</strong> primul ecosistem complet (joc 3D + app părinți + web creator) cu tutor AI Socratic care cunoaște istoricul complet al fiecărui student
 </div>
 
@@ -741,13 +741,13 @@ layout: default
 
 # Fundament Științific
 
-<div class="grid grid-cols-2 gap-6 mt-4" style="font-size:1.08rem;">
+<div class="grid grid-cols-2 gap-6 mt-6" style="font-size:1.2rem;">
 <div>
 
 
 
 <div style="margin-bottom:0.8rem;">
-<span style="font-size:0.85rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.06em;">Stanford CLT (2024–2026)</span>
+<span style="font-size:1.05rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.06em;">Stanford CLT (2024–2026)</span>
 <ul style="margin-top:0.3rem; padding-left:1rem;">
 <li>AI adaptiv → <strong>1.5–2× mai rapid</strong> la concepte cheie</li>
 <li>Reducere cu <strong>45%</strong> a abandonului din frustrare</li>
@@ -756,7 +756,7 @@ layout: default
 </div>
 
 <div>
-<span style="font-size:0.85rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.06em;">MDPI Education Sciences (2025)</span>
+<span style="font-size:1.05rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.06em;">MDPI Education Sciences (2025)</span>
 <ul style="margin-top:0.3rem; padding-left:1rem;">
 <li><strong>+58% retenție</strong> față de cursuri statice (6 luni)</li>
 <li>Avantaj de <strong>0.86 SD</strong> la evaluări finale</li>
@@ -772,7 +772,7 @@ layout: default
 
 
 <div style="margin-bottom:0.8rem;">
-<span style="font-size:0.85rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.06em;">CodeTutor Field Study — L@S 2024</span>
+<span style="font-size:1.05rem; font-weight:700; color:#60a5fa; text-transform:uppercase; letter-spacing:0.06em;">CodeTutor Field Study — L@S 2024</span>
 <ul style="margin-top:0.3rem; padding-left:1rem;">
 <li><strong>+15–20%</strong> la scoruri post-test</li>
 <li><strong>25% mai puține erori</strong> de sintaxă</li>
@@ -781,7 +781,7 @@ layout: default
 </div>
 
 <div>
-<span style="font-size:0.85rem; font-weight:700; color:#fbbf24; text-transform:uppercase; letter-spacing:0.06em;">Hamari et al. (2016)</span>
+<span style="font-size:1.05rem; font-weight:700; color:#fbbf24; text-transform:uppercase; letter-spacing:0.06em;">Hamari et al. (2016)</span>
 <ul style="margin-top:0.3rem; padding-left:1rem;">
 <li>Provocare → câștiguri: <strong>β = 0.348, p &lt; 0.001</strong></li>
 <li>Engagement mediază performanța: <strong>β = 0.368</strong></li>
@@ -810,7 +810,7 @@ layout: default
 <div class="grid grid-cols-2 gap-5 mt-3">
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Cerințe sistem</p>
+<p style="font-size:1.2rem; font-weight:700; color:#a78bfa; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Cerințe sistem</p>
 
 
 
@@ -827,7 +827,7 @@ layout: default
 </div>
 <div>
 
-<p style="font-size:0.90rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Pornire rapidă</p>
+<p style="font-size:1.2rem; font-weight:700; color:#34d399; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem;">Pornire rapidă</p>
 
 ```bash
 # Backend
@@ -846,17 +846,17 @@ npm run dev  # http://localhost:5173
 </div>
 </div>
 
-<div style="margin-top:1.2rem; display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; font-size:1.02rem; text-align:center;">
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
+<div style="margin-top:2rem; display:grid; grid-template-columns:repeat(4,1fr); gap:0.8rem; font-size:1.15rem; text-align:center;">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(124,58,237,0.1); border:1px solid rgba(167,139,250,0.25);">
     <div style="color:#a78bfa; font-weight:700;">:8085</div>HTTP REST
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.25);">
     <div style="color:#34d399; font-weight:700;">:49154</div>Binary WS
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(59,130,246,0.1); border:1px solid rgba(96,165,250,0.25);">
     <div style="color:#60a5fa; font-weight:700;">:5173</div>Web Creator
   </div>
-  <div style="padding:0.7rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
+  <div style="padding:1rem; border-radius:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(251,191,36,0.25);">
     <div style="color:#fbbf24; font-weight:700;">GitHub</div>Cod sursă public
   </div>
 </div>
@@ -877,25 +877,25 @@ class: text-center
 <div style="margin-top:2rem; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
   <div style="padding:0.6rem 1.2rem; border-radius:0.75rem; background:rgba(124,58,237,0.2); border:1px solid rgba(167,139,250,0.4); text-align:center;">
     <div style="font-size:1.6rem; font-weight:800; color:#a78bfa;">22</div>
-    <div style="font-size:0.85rem; color:#9ca3af;">task-uri built-in</div>
+    <div style="font-size:1.05rem; color:#9ca3af;">task-uri built-in</div>
   </div>
   <div style="padding:0.6rem 1.2rem; border-radius:0.75rem; background:rgba(16,185,129,0.2); border:1px solid rgba(52,211,153,0.4); text-align:center;">
     <div style="font-size:1.6rem; font-weight:800; color:#34d399;">44</div>
-    <div style="font-size:0.85rem; color:#9ca3af;">tipuri de pachete</div>
+    <div style="font-size:1.05rem; color:#9ca3af;">tipuri de pachete</div>
   </div>
   <div style="padding:0.6rem 1.2rem; border-radius:0.75rem; background:rgba(59,130,246,0.2); border:1px solid rgba(96,165,250,0.4); text-align:center;">
     <div style="font-size:1.6rem; font-weight:800; color:#60a5fa;">4</div>
-    <div style="font-size:0.85rem; color:#9ca3af;">componente integrate</div>
+    <div style="font-size:1.05rem; color:#9ca3af;">componente integrate</div>
   </div>
   <div style="padding:0.6rem 1.2rem; border-radius:0.75rem; background:rgba(245,158,11,0.2); border:1px solid rgba(251,191,36,0.4); text-align:center;">
     <div style="font-size:1.6rem; font-weight:800; color:#fbbf24;">70B</div>
-    <div style="font-size:0.85rem; color:#9ca3af;">parametri model AI</div>
+    <div style="font-size:1.05rem; color:#9ca3af;">parametri model AI</div>
   </div>
 </div>
 
 <div style="margin-top:2rem;">
   <img src="/logo.png" style="width:3.5rem; margin:0 auto; opacity:0.75;" />
-  <p style="color:#6b7280; font-size:0.90rem; margin-top:0.5rem;">InfoEducație 2026 · Secțiunea Software Educațional</p>
+  <p style="color:#6b7280; font-size:1.2rem; margin-top:0.5rem;">InfoEducație 2026 · Secțiunea Software Educațional</p>
 </div>
 
 <!--
