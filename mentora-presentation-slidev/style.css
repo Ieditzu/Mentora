@@ -1,0 +1,187 @@
+/* ── Global font & size overrides ── */
+:root {
+  --slidev-font-size: 1rem;
+}
+
+.slidev-layout {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+/* Tighter paragraph spacing */
+.slidev-layout p {
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Headings use Space Grotesk */
+.slidev-layout h1,
+.slidev-layout h2,
+.slidev-layout h3 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.slidev-layout h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 0.6rem;
+  /* Gradient text for all h1 */
+  background: linear-gradient(135deg, #a78bfa 0%, #34d399 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.slidev-layout h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.slidev-layout h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Bullet lists */
+.slidev-layout ul li,
+.slidev-layout ol li {
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.55;
+}
+
+/* Code blocks */
+.slidev-layout pre,
+.slidev-layout code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem !important;
+  line-height: 1.6 !important;
+}
+
+/* Tables */
+.slidev-layout table {
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.slidev-layout table th {
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+}
+
+.slidev-layout table td {
+  padding: 0.45rem 0.75rem;
+}
+
+.slidev-layout table tr:nth-child(even) {
+  background: rgba(255,255,255,0.03);
+}
+
+/* Section slides — override gradient for big centered text */
+.slidev-layout.section h1 {
+  font-size: 3rem;
+  font-weight: 800;
+}
+
+/* Cover slide — no gradient text override */
+.slidev-layout.cover h1 {
+  background: none;
+  -webkit-text-fill-color: white;
+  color: white;
+}
+
+/* Mermaid diagrams */
+.mermaid {
+  font-size: 0.85rem !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.4); border-radius: 2px; }
+
+
+/* Headings use Space Grotesk */
+.slidev-layout h1,
+.slidev-layout h2,
+.slidev-layout h3 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.slidev-layout h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  /* Gradient text for all h1 */
+  background: linear-gradient(135deg, #a78bfa 0%, #34d399 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.slidev-layout h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.slidev-layout h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Bullet lists */
+.slidev-layout ul li,
+.slidev-layout ol li {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Code blocks */
+.slidev-layout pre,
+.slidev-layout code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem !important;
+}
+
+/* Tables */
+.slidev-layout table {
+  font-size: 0.8rem;
+}
+
+.slidev-layout table th {
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+.slidev-layout table tr:nth-child(even) {
+  background: rgba(255,255,255,0.03);
+}
+
+/* Section slides — override gradient for big centered text */
+.slidev-layout.section h1 {
+  font-size: 2.8rem;
+  font-weight: 800;
+}
+
+/* Cover slide — no gradient text override */
+.slidev-layout.cover h1 {
+  background: none;
+  -webkit-text-fill-color: white;
+  color: white;
+}
+
+/* Mermaid diagrams */
+.mermaid {
+  font-size: 0.78rem !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.4); border-radius: 2px; }
