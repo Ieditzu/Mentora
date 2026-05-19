@@ -210,13 +210,9 @@ layout: two-cols
 
 ::right::
 
-<div class="media-stack">
-  <div class="media-frame tall">
-    <img src="/app_kids_screen.png" class="rounded-xl" />
-  </div>
-  <div class="media-frame tall">
-    <img src="/app_goals_screen.png" class="rounded-xl" />
-  </div>
+<div class="portrait-stack">
+  <img src="/app_kids_screen.png" class="portrait-photo" />
+  <img src="/app_goals_screen.png" class="portrait-photo" />
 </div>
 
 ---
@@ -238,13 +234,9 @@ layout: two-cols
 
 ::right::
 
-<div class="media-stack">
-  <div class="media-frame tall">
-    <img src="/app_ai_insight_of_child.png" class="rounded-xl" />
-  </div>
-  <div class="media-frame tall">
-    <img src="/app_task_history.png" class="rounded-xl" />
-  </div>
+<div class="portrait-stack">
+  <img src="/app_ai_insight_of_child.png" class="portrait-photo" />
+  <img src="/app_task_history.png" class="portrait-photo" />
 </div>
 
 ---
@@ -599,9 +591,7 @@ layoutClass: gap-6
   <div class="media-frame tall">
     <img src="/web_creator-fr.png" class="rounded-xl" />
   </div>
-  <div class="media-frame tall">
-    <img src="/app_kids_screen.png" class="rounded-xl" />
-  </div>
+  <img src="/app_kids_screen.png" class="portrait-photo" />
 </div>
 
 ---
