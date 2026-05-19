@@ -1,6 +1,6 @@
   Speech video, varianta lungă, aproximativ 5-6 minute
 
-  Mentora este un software educațional care îi ajută pe copiii de orice varsta să
+  Acesta este Mentora, un software educațional care îi ajută pe copiii de orice varsta să
   învețe programare reală, într-un mod interactiv, modern și adaptat nivelului fiecăruia.
 
   Ideea proiectului a pornit de la o problemă reală. În prezent, mulți copii învață primele noțiuni de programare prin
@@ -13,15 +13,14 @@
   Mentora nu este o singură aplicație, ci un ecosistem cu patru componente.
 
   Prima componentă este jocul 3D realizat în Unity. Aici copilul învață într-un mediu de tip joc, explorând insule
-  tematice și rezolvând task-uri de programare. Pe aceste insule, el scrie și rulează cod real în Python și C++. Asta
-  este foarte important: copilul nu apasă doar pe butoane și nu mută blocuri, ci lucrează efectiv cu cod adevărat.
+  tematice și rezolvând task-uri de programare. Pe aceste insule, el scrie și rulează cod real în Python și C++, dar si  invata logica din spatele acestora. 
+Asta este foarte important: copilul nu apasă doar pe butoane și nu mută blocuri, ci lucrează efectiv cu cod adevărat.
 
   A doua componentă este serverul Java, realizat cu Spring Boot. Dacă ar fi să explicăm foarte simplu, acesta este
   creierul sistemului. El primește cererile din joc, din aplicația mobilă și din platforma web, salvează datele, execută
   codul trimis de elev și gestionează logica generală a aplicației.
 
-  A treia componentă este aplicația Android pentru părinți. Aceasta oferă vizibilitate asupra progresului copilului: ce
-  task-uri a rezolvat, cum evoluează, ce obiective are și ce spune AI-ul despre nivelul lui.
+  A treia componentă este aplicația Android pentru părinți. Aceasta oferă vizibilitate asupra progresului copilului cum ar fi ce task-uri a rezolvat, cum evoluează, ce obiective are și ce spune AI-ul despre nivelul lui.
 
   A patra componentă este platforma web pentru creare de cursuri. Acolo, educatorii sau părinții pot crea quiz-uri și
   cursuri noi, pe care le publică, iar acestea apar direct în joc, în zona de conținut comunitar.
