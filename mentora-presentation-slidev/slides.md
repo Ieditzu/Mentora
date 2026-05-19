@@ -586,11 +586,9 @@ layoutClass: gap-6
 
 ::right::
 
-<div class="media-stack">
-  <div class="media-frame tall">
-    <img src="/web_creator-fr.png" class="rounded-xl" />
-  </div>
-  <img src="/app_kids_screen.png" class="portrait-photo centered" />
+<div class="screenshot-row">
+  <img src="/web_creator-fr.png" class="rounded-xl landscape-shot" />
+  <img src="/app_kids_screen.png" class="rounded-xl portrait-shot" />
 </div>
 
 ---

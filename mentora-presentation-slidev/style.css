@@ -180,6 +180,32 @@
   align-self: center;
 }
 
+.screenshot-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.screenshot-row img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  border-radius: 0.75rem;
+}
+
+.screenshot-row .landscape-shot {
+  flex: 1.45 1 0;
+}
+
+.screenshot-row .portrait-shot {
+  flex: 0.85 1 0;
+}
+
 
 /* Headings */
 .slidev-layout h1,
