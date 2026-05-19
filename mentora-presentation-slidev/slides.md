@@ -210,7 +210,7 @@ layout: two-cols
 
 ::right::
 
-<div class="portrait-stack">
+<div class="portrait-pair">
   <img src="/app_kids_screen.png" class="portrait-photo" />
   <img src="/app_goals_screen.png" class="portrait-photo" />
 </div>
@@ -234,7 +234,7 @@ layout: two-cols
 
 ::right::
 
-<div class="portrait-stack">
+<div class="portrait-pair">
   <img src="/app_ai_insight_of_child.png" class="portrait-photo" />
   <img src="/app_task_history.png" class="portrait-photo" />
 </div>

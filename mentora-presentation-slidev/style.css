@@ -155,12 +155,16 @@
   height: 19rem;
 }
 
-.portrait-stack {
-  display: flex;
-  flex-direction: column;
+.portrait-pair {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
   gap: 0.75rem;
   margin-top: 0.5rem;
-  align-items: center;
+  align-items: start;
+  align-content: center;
+  height: 100%;
+  width: 100%;
 }
 
 .portrait-photo {
