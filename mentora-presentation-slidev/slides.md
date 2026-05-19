@@ -586,9 +586,11 @@ layoutClass: gap-6
 
 ::right::
 
-<div class="screenshot-row">
-  <img src="/web_creator-fr.png" class="rounded-xl landscape-shot" />
-  <img src="/app_kids_screen.png" class="rounded-xl portrait-shot" />
+<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%;">
+  <div class="screenshot-row">
+    <img src="/web_creator-fr.png" class="rounded-xl landscape-shot" />
+    <img src="/app_kids_screen.png" class="rounded-xl portrait-shot" />
+  </div>
 </div>
 
 ---
@@ -678,8 +680,10 @@ layoutClass: gap-6
 
 ::right::
 
-<div class="media-frame medium" style="margin-top:1rem;">
-  <img src="/web_creator_courses.png" class="rounded-xl" />
+<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%;">
+  <div class="media-frame medium">
+    <img src="/web_creator_courses.png" class="rounded-xl" />
+  </div>
 </div>
 
 ---
