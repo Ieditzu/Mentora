@@ -139,6 +139,7 @@ transition: fade-out
 ---
 layout: image-right
 image: /entire_map_in_game.png
+backgroundSize: contain
 ---
 
 # Lumea 3D — Harta Completă
@@ -163,6 +164,7 @@ Harta completă a jocului — fiecare insulă corespunde unui domeniu de program
 ---
 layout: image-left
 image: /python_coding.png
+backgroundSize: contain
 ---
 
 # Coding Pad — Cod Real
@@ -208,9 +210,13 @@ layout: two-cols
 
 ::right::
 
-<div class="flex flex-col gap-3 mt-2">
-  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="" />
-  <img src="/app_goals_screen.png" class="rounded-xl shadow-lg w-full object-cover" style="" />
+<div class="media-stack">
+  <div class="media-frame tall">
+    <img src="/app_kids_screen.png" class="rounded-xl" />
+  </div>
+  <div class="media-frame tall">
+    <img src="/app_goals_screen.png" class="rounded-xl" />
+  </div>
 </div>
 
 ---
@@ -232,9 +238,13 @@ layout: two-cols
 
 ::right::
 
-<div class="flex flex-col gap-3 mt-2">
-  <img src="/app_ai_insight_of_child.png" class="rounded-xl shadow-lg w-full" style="" />
-  <img src="/app_task_history.png" class="rounded-xl shadow-lg w-full" style="" />
+<div class="media-stack">
+  <div class="media-frame tall">
+    <img src="/app_ai_insight_of_child.png" class="rounded-xl" />
+  </div>
+  <div class="media-frame tall">
+    <img src="/app_task_history.png" class="rounded-xl" />
+  </div>
 </div>
 
 ---
@@ -247,6 +257,7 @@ transition: fade-out
 ---
 layout: image-right
 image: /web_creator.png
+backgroundSize: contain
 ---
 
 # Creare Cursuri pentru Educatori
@@ -537,6 +548,7 @@ transition: fade-out
 ---
 layout: image-right
 image: /game_picture.png
+backgroundSize: contain
 ---
 
 # Interfața Jocului Unity
@@ -583,9 +595,13 @@ layoutClass: gap-6
 
 ::right::
 
-<div class="flex flex-col gap-3 mt-2">
-  <img src="/web_creator-fr.png" class="rounded-xl shadow-lg" style="" />
-  <img src="/app_kids_screen.png" class="rounded-xl shadow-lg" style="" />
+<div class="media-stack">
+  <div class="media-frame tall">
+    <img src="/web_creator-fr.png" class="rounded-xl" />
+  </div>
+  <div class="media-frame tall">
+    <img src="/app_kids_screen.png" class="rounded-xl" />
+  </div>
 </div>
 
 ---
@@ -598,6 +614,7 @@ transition: fade-out
 ---
 layout: image-right
 image: /ai_python.png
+backgroundSize: contain
 ---
 
 # Sistemul AI Adaptiv — Amprenta de Învățare
@@ -674,7 +691,9 @@ layoutClass: gap-6
 
 ::right::
 
-<img src="/web_creator_courses.png" class="rounded-xl shadow-lg mt-4" style="" />
+<div class="media-frame medium" style="margin-top:1rem;">
+  <img src="/web_creator_courses.png" class="rounded-xl" />
+</div>
 
 ---
 layout: default
