@@ -551,7 +551,6 @@ backgroundSize: contain
 - UI intuitiv: coding pad, bara de progres, chat AI accesibile direct din joc
 - **Bilingv** — română și engleză, comutare din setări
 - Animații cinematice la tranziții (Cinemachine)
-- Personaj 3D animat (robot Copernicus)
 
 
 
@@ -591,7 +590,7 @@ layoutClass: gap-6
   <div class="media-frame tall">
     <img src="/web_creator-fr.png" class="rounded-xl" />
   </div>
-  <img src="/app_kids_screen.png" class="portrait-photo" />
+  <img src="/app_kids_screen.png" class="portrait-photo centered" />
 </div>
 
 ---
