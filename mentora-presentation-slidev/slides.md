@@ -74,10 +74,10 @@ layout: default
 
 
 
-- <span style="color:#a78bfa; font-weight:700;">Studii pe prieteni:</span> AI adaptiv → elevii învață de **1.5–2× mai rapid**
-- <span style="color:#a78bfa; font-weight:700;">Studii pe prieteni:</span> Reducere cu **45%** a abandonului
-- <span style="color:#34d399; font-weight:700;">Teste interne:</span> +**58% retenție** față de cursuri statice
-- <span style="color:#fbbf24; font-weight:700;">Observațiile noastre:</span> Provocarea crește câștigurile
+- <span style="color:#a78bfa; font-weight:700;">Stanford CLT:</span> AI adaptiv → elevii învață de **1.5–2× mai rapid**
+- <span style="color:#a78bfa; font-weight:700;">Stanford CLT:</span> reducere cu **45%** a abandonului
+- <span style="color:#34d399; font-weight:700;">MDPI 2025:</span> +**58% retenție** față de cursuri statice
+- <span style="color:#fbbf24; font-weight:700;">Hamari 2016:</span> provocarea prezice câștigurile (β = 0.348)
 
 
 
