@@ -587,9 +587,9 @@ layoutClass: gap-6
 ::right::
 
 <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%;">
-  <div class="screenshot-row">
-    <img src="/web_creator-fr.png" class="rounded-xl landscape-shot" />
-    <img src="/app_kids_screen.png" class="rounded-xl portrait-shot" />
+  <div class="screenshot-row" style="width:100%; max-width:520px; align-items:center;">
+    <img src="/web_creator-fr.png" class="rounded-xl landscape-shot" style="width:100%; max-width:360px; max-height:52vh; object-fit:contain;" />
+    <img src="/app_kids_screen.png" class="rounded-xl portrait-shot" style="width:auto; max-width:150px; max-height:52vh; object-fit:contain;" />
   </div>
 </div>
 
