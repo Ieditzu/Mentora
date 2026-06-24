@@ -411,6 +411,129 @@ public class LearningProfileService {
         builder.append(compactEvents.isEmpty() ? "none yet" : String.join(" | ", compactEvents));
     }
 
+    /**
+     * Asks Groq to generate a personalized coding task for this child based on their weak spots.
+     * Returns a map with keys: title, description, codeTemplate, language, pointValue.
+     * Returns null if generation fails.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, String> generatePersonalizedTask(final Long childId, final String language) {
+        if (childId == null) return null;
+
+        Child child = childRepository.findById(childId).orElse(null);
+        if (child == null) return null;
+
+        String profileContext = buildAiHelpProfileContext(childId, language);
+        String safeLang = (language != null && language.equals("cpp")) ? "C++" : "Python";
+
+        String prompt =
+            "You are generating a personalized " + safeLang + " coding challenge for a child (age 9-13) learning programming.\n" +
+            "Student profile:\n" + profileContext + "\n\n" +
+            "Generate a " + safeLang + " challenge that targets their specific weak areas. " +
+            "It should be solvable in 5-20 lines of code.\n\n" +
+            "Respond in EXACTLY this format (no markdown, no extra text):\n" +
+            "TITLE: [max 55 chars, e.g. \"Python AI Challenge: Fix the Loop\"]\n" +
+            "DESCRIPTION: [2-3 sentences: what the student must write or fix, and what the program should do]\n" +
+            "TEMPLATE: [the starter code — broken or incomplete, 5-15 lines]\n" +
+            "EXPECTED: [one sentence: what the correct output or behavior should be]\n" +
+            "POINTS: [integer: 15, 20, 25, or 30]\n";
+
+        io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
+        String raw = ai.generate(prompt);
+        if (raw == null || raw.isBlank() || raw.startsWith("AI Error")) return null;
+
+        return parseGeneratedTask(raw, language);
+    }
+
+    private Map<String, String> parseGeneratedTask(final String raw, final String language) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        String[] markers = {"TITLE:", "DESCRIPTION:", "TEMPLATE:", "EXPECTED:", "POINTS:"};
+        String[] keys    = {"title",  "description",  "codeTemplate", "expected", "pointValue"};
+
+        for (int i = 0; i < markers.length; i++) {
+            int start = raw.indexOf(markers[i]);
+            if (start == -1) return null;
+            start += markers[i].length();
+            int end = raw.length();
+            if (i + 1 < markers.length) {
+                int next = raw.indexOf(markers[i + 1]);
+                if (next != -1) end = next;
+            }
+            result.put(keys[i], raw.substring(start, end).trim());
+        }
+
+        // Validate points is a sane integer
+        try {
+            int pts = Integer.parseInt(result.getOrDefault("pointValue", "20").replaceAll("[^0-9]", ""));
+            pts = Math.max(15, Math.min(35, pts));
+            result.put("pointValue", String.valueOf(pts));
+        } catch (Exception e) {
+            result.put("pointValue", "20");
+        }
+
+        result.put("language", language == null ? "python" : language);
+        return result;
+    }
+
+    /**
+     * Generates a short, profile-aware companion line for the robot NPC.
+     * trigger examples: "greet", "challenge_fail", "challenge_success",
+     * "idle", "entering_python", "entering_cpp", "task_complete", "hint_requested"
+     * Returns a two-element array: [line, emotion] or null on failure.
+     */
+    @Transactional(readOnly = true)
+    public String[] generateCompanionLine(final Long childId, final String trigger) {
+        String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
+
+        String emotion = emotionForTrigger(trigger);
+        String prompt =
+            "You are ARIA, a friendly robot companion inside a 3D educational game called Mentora.\n" +
+            "You are talking to a child aged 9-13 who is learning to code.\n" +
+            "Your personality: warm, a little witty, genuinely encouraging. You remember everything about this student.\n\n" +
+            "Student profile:\n" + profileContext + "\n\n" +
+            "Trigger event: \"" + (trigger == null ? "idle" : trigger) + "\"\n\n" +
+            "Write ONE short line (max 20 words) that ARIA says OUT LOUD in response to this event.\n" +
+            "Reference their actual stats if relevant (e.g. their streak, their struggles, their recent win).\n" +
+            "Do NOT use quotes around the line. Do NOT write anything except the line itself.\n" +
+            "Emotion to convey: " + emotion + ".";
+
+        io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
+        String line = ai.generate(prompt);
+        if (line == null || line.isBlank() || line.startsWith("AI Error")) {
+            line = fallbackCompanionLine(trigger);
+        }
+
+        // Strip surrounding quotes if model added them
+        line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        return new String[]{line, emotion};
+    }
+
+    private String emotionForTrigger(final String trigger) {
+        if (trigger == null) return "encouraging";
+        return switch (trigger) {
+            case "challenge_success", "task_complete" -> "excited";
+            case "challenge_fail" -> "concerned";
+            case "greet" -> "happy";
+            case "entering_python", "entering_cpp", "entering_community" -> "thinking";
+            case "hint_requested" -> "encouraging";
+            default -> "encouraging";
+        };
+    }
+
+    private String fallbackCompanionLine(final String trigger) {
+        if (trigger == null) return "I'm right here if you need me!";
+        return switch (trigger) {
+            case "challenge_success", "task_complete" -> "Yes! You nailed it!";
+            case "challenge_fail" -> "Don't give up — you're closer than you think.";
+            case "greet" -> "Hey! Ready to write some code today?";
+            case "entering_python" -> "Python island — my favourite!";
+            case "entering_cpp" -> "C++ territory. This is where things get interesting.";
+            case "entering_community" -> "Community courses ahead — let's see what others made.";
+            case "hint_requested" -> "Good call asking for help — that's how you learn faster.";
+            default -> "I'm right here if you need me!";
+        };
+    }
+
     private String deriveTopic(final String context, final String question) {
         String text = (context == null ? "" : context) + " " + (question == null ? "" : question);
         String normalized = text.toLowerCase();

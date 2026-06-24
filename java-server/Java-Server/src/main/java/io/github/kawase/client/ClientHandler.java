@@ -5,6 +5,10 @@ import io.github.kawase.cpp.CppExecutor;
 import io.github.kawase.packet.Packet;
 import io.github.kawase.packet.impl.ai.AiResponsePacket;
 import io.github.kawase.packet.impl.ai.AskAiPacket;
+import io.github.kawase.packet.impl.ai.GenerateAiTaskPacket;
+import io.github.kawase.packet.impl.ai.GenerateAiTaskResponsePacket;
+import io.github.kawase.packet.impl.companion.CompanionSpeakPacket;
+import io.github.kawase.packet.impl.companion.CompanionSpeakResponsePacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
 import io.github.kawase.packet.impl.course.FetchCourseDetailPacket;
@@ -53,6 +57,7 @@ public class ClientHandler {
                     && currentPacketId != 41
                     && currentPacketId != 43
                     && currentPacketId != 44
+                    && currentPacketId != 47 // CompanionSpeakPacket — ARIA greets before auth
                     && !client.isAuth()) {
                 connection.send(new ActionResponsePacket(currentPacketId, false, "Unauthorized. Please log in first.", -1).encode());
                 return;
@@ -567,6 +572,56 @@ public class ClientHandler {
                             recordLearningEventPacket.getCorrectness(),
                             recordLearningEventPacket.getDetails()
                     );
+                }
+
+                case GenerateAiTaskPacket generateAiTaskPacket -> {
+                    if (client.getChildId() == null) {
+                        throw new RuntimeException("Not logged in as a child.");
+                    }
+
+                    System.out.println("GenerateAiTask for child " + client.getChildId() + ", lang=" + generateAiTaskPacket.getLanguage());
+                    final java.util.Map<String, String> generated = Server.getInstance()
+                            .getLearningProfileService()
+                            .generatePersonalizedTask(client.getChildId(), generateAiTaskPacket.getLanguage());
+
+                    if (generated == null) {
+                        connection.send(new ActionResponsePacket(packet.getId(), false, "AI task generation failed — try again.", -1).encode());
+                        return;
+                    }
+
+                    // Persist as a real task so it can be completed and tracked
+                    io.github.kawase.database.entity.Task aiTask = new io.github.kawase.database.entity.Task();
+                    aiTask.setTitle(generated.get("title"));
+                    aiTask.setDescription(generated.get("description"));
+                    aiTask.setCodeTemplate(generated.get("codeTemplate"));
+                    aiTask.setAiGenerated(true);
+                    int pts = 20;
+                    try { pts = Integer.parseInt(generated.get("pointValue")); } catch (Exception ignored) {}
+                    aiTask.setPointValue(pts);
+
+                    io.github.kawase.database.entity.Task saved = Server.getInstance().getTaskService().saveTask(aiTask);
+
+                    connection.send(new GenerateAiTaskResponsePacket(
+                            saved.getId(),
+                            saved.getTitle(),
+                            generated.get("description"),
+                            generated.get("codeTemplate"),
+                            generated.getOrDefault("language", "python"),
+                            saved.getPointValue()
+                    ).encode());
+                }
+
+                case CompanionSpeakPacket companionSpeakPacket -> {
+                    // Companion lines are generated even before full auth (companion greets on load),
+                    // so we use childId if available, else null for a generic line.
+                    System.out.println("CompanionSpeak trigger=" + companionSpeakPacket.getTrigger());
+                    final String[] lineAndEmotion = Server.getInstance()
+                            .getLearningProfileService()
+                            .generateCompanionLine(client.getChildId(), companionSpeakPacket.getTrigger());
+
+                    String line = (lineAndEmotion != null) ? lineAndEmotion[0] : "Hey, I'm here if you need me!";
+                    String emotion = (lineAndEmotion != null) ? lineAndEmotion[1] : "encouraging";
+                    connection.send(new CompanionSpeakResponsePacket(line, emotion).encode());
                 }
 
                 default -> throw new IllegalStateException("Unexpected Packet: " + packet);

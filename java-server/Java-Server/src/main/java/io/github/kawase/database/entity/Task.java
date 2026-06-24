@@ -17,4 +17,13 @@ public class Task {
 
     @Column(name = "point_value", nullable = false)
     private Integer pointValue;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "code_template", columnDefinition = "TEXT")
+    private String codeTemplate;
+
+    @Column(name = "is_ai_generated", nullable = false, columnDefinition = "boolean default false")
+    private boolean aiGenerated = false;
 }

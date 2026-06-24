@@ -3,6 +3,10 @@ package io.github.kawase.packet;
 import io.github.kawase.exceptions.PacketException;
 import io.github.kawase.packet.impl.ai.AiResponsePacket;
 import io.github.kawase.packet.impl.ai.AskAiPacket;
+import io.github.kawase.packet.impl.ai.GenerateAiTaskPacket;
+import io.github.kawase.packet.impl.ai.GenerateAiTaskResponsePacket;
+import io.github.kawase.packet.impl.companion.CompanionSpeakPacket;
+import io.github.kawase.packet.impl.companion.CompanionSpeakResponsePacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
 import io.github.kawase.packet.impl.course.FetchCourseDetailPacket;
@@ -63,6 +67,10 @@ public class PacketManager {
             case 42 -> new FetchAllChildrenResponsePacket();
             case 43 -> new DevLoginAsChildPacket();
             case 44 -> new DevCreateChildProfilePacket();
+            case 45 -> new GenerateAiTaskPacket();
+            case 46 -> new GenerateAiTaskResponsePacket();
+            case 47 -> new CompanionSpeakPacket();
+            case 48 -> new CompanionSpeakResponsePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

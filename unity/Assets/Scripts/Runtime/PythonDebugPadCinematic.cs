@@ -296,6 +296,9 @@ public class PythonDebugPadCinematic : MonoBehaviour
             return;
         }
 
+        string padContext = "python_pad|" + (mode == ChallengeMode.Hard ? "Python Hard Visual challenges" : "Python Medium debugging challenges");
+        RobotCompanion.TriggerWithContext("entering_python", padContext);
+
         StartCoroutine(PlaySequence(sphere, fps));
     }
 

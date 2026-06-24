@@ -277,6 +277,8 @@ public class CppQuestionPadCinematic : MonoBehaviour
             return;
         }
 
+        RobotCompanion.TriggerWithContext("entering_cpp", "cpp_quiz|C++ Starter Quiz — 5 bilingual multiple choice questions");
+
         StartCoroutine(PlaySequence(sphere, fps));
     }
 

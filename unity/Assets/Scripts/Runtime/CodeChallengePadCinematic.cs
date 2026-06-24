@@ -296,6 +296,9 @@ public class CodeChallengePadCinematic : MonoBehaviour
             return;
         }
 
+        string padContext = "cpp_pad|" + (mode == ChallengeMode.Hard ? "C++ Hard code challenges" : "C++ Medium debugging challenges");
+        RobotCompanion.TriggerWithContext("entering_cpp", padContext);
+
         StartCoroutine(PlaySequence(sphere, fps));
     }
 

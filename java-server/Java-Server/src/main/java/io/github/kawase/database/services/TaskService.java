@@ -47,6 +47,11 @@ public class TaskService {
     }
 
     @Transactional
+    public Task saveTask(final Task task) {
+        return taskRepository.save(task);
+    }
+
+    @Transactional
     public void completeTask(final Long childId, final Long taskId) {
         final Child child = childRepository.findById(childId)
                 .orElseThrow(() -> new RuntimeException("Child not found with ID: " + childId));

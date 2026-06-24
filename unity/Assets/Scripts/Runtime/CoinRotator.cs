@@ -93,10 +93,7 @@ public class CoinRotator : MonoBehaviour
             }
         }
         if (spawned.GetComponent<RobotLookAt>() == null)
-        {
             spawned.AddComponent<RobotLookAt>();
-        }
-
     }
 
     public void ResetPickup()

@@ -45,6 +45,10 @@ namespace Mentora.Network
                 42 => new FetchAllChildrenResponsePacket(),
                 43 => new DevLoginAsChildPacket(),
                 44 => new DevCreateChildProfilePacket(),
+                45 => new GenerateAiTaskPacket(),
+                46 => new GenerateAiTaskResponsePacket(),
+                47 => new CompanionSpeakPacket(),
+                48 => new CompanionSpeakResponsePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -656,6 +660,65 @@ namespace Mentora.Network
             Topic = ReadString(reader);
             Correctness = ReadInt32BigEndian(reader);
             Details = ReadString(reader);
+        }
+    }
+
+    // ── AI-Generated Task Packets (45 / 46) ──────────────────────────────────
+
+    public class GenerateAiTaskPacket : Packet
+    {
+        public string Language; // "python" or "cpp"
+        public GenerateAiTaskPacket(string language = "python") : base(45) { Language = language; }
+        public GenerateAiTaskPacket() : base(45) { Language = "python"; }
+        protected override void Write(BinaryWriter writer) { PutString(writer, Language ?? "python"); }
+        protected override void Read(BinaryReader reader) { Language = ReadString(reader); }
+    }
+
+    public class GenerateAiTaskResponsePacket : Packet
+    {
+        public long TaskId;
+        public string Title;
+        public string Description;
+        public string CodeTemplate;
+        public string Language;
+        public int PointValue;
+
+        public GenerateAiTaskResponsePacket() : base(46) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] idBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(idBytes);
+            TaskId = BitConverter.ToInt64(idBytes, 0);
+            Title = ReadString(reader);
+            Description = ReadString(reader);
+            CodeTemplate = ReadString(reader);
+            Language = ReadString(reader);
+            PointValue = ReadInt32BigEndian(reader);
+        }
+    }
+
+    // ── Companion Speak Packets (47 / 48) ────────────────────────────────────
+
+    public class CompanionSpeakPacket : Packet
+    {
+        public string Trigger;
+        public CompanionSpeakPacket(string trigger) : base(47) { Trigger = trigger; }
+        public CompanionSpeakPacket() : base(47) { Trigger = "idle"; }
+        protected override void Write(BinaryWriter writer) { PutString(writer, Trigger ?? "idle"); }
+        protected override void Read(BinaryReader reader) { Trigger = ReadString(reader); }
+    }
+
+    public class CompanionSpeakResponsePacket : Packet
+    {
+        public string Line;
+        public string Emotion; // "happy" | "encouraging" | "concerned" | "excited" | "thinking"
+        public CompanionSpeakResponsePacket() : base(48) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader)
+        {
+            Line = ReadString(reader);
+            Emotion = ReadString(reader);
         }
     }
 }
