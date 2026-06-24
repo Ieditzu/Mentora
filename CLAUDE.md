@@ -11,7 +11,7 @@ Mentora is an educational platform for children learning programming (Python/C++
 - `java-server/` — Spring Boot 3.2.4 backend (Java 21, PostgreSQL)
 - `unity/` — HDRP Unity game client (Unity 2022.3.62f3, C#)
 - `kotlin-app/` — Android parent dashboard (Kotlin + Jetpack Compose)
-- `web-creator/` — Course authoring tool (Vite 7 + React 19)
+- `web-creator/` — Course authoring tool (Vite 7 + React 19 + Tailwind CSS v4 + Framer Motion)
 
 ## Commands
 
@@ -69,7 +69,8 @@ Web Creator (React)  Android App (Kotlin)   Unity Game (C#)
 | `unity/.../Network/GameClient.cs` | Unity WebSocket singleton, packet dispatch, `OnPacketReceived` event |
 | `unity/.../PauseMenuManager.cs` | Game-side UI hub: session restore, QR flow, task/goal fetch |
 | `unity/.../PythonDebugPadCinematic.cs` | Python challenge UI: execute → AI eval → learning event |
-| `unity/.../CodeChallengePadCinematic.cs` | C++ challenge UI (same pattern as Python) |
+| `unity/.../CodeChallengePadCinematic.cs` | C++ code-debugging pads (Medium/Hard modes); student edits and runs C++ code, bilingual Romanian/English |
+| `unity/.../CppQuestionPadCinematic.cs` | C++ multiple-choice quiz pad (5 bilingual MCQ questions, "C++ Starter Quiz" task) |
 | `kotlin-app/.../ui/SocketViewModel.kt` | Android state container: socket, login, children, goals, AI profiles |
 | `web-creator/src/App.jsx` | Full SPA: auth, course CRUD, question editor |
 
@@ -77,7 +78,7 @@ Web Creator (React)  Android App (Kotlin)   Unity Game (C#)
 
 **Protocol is not shared code.** There is no code generation or shared protocol library. Adding or changing a packet type requires edits in three places: Java server, Kotlin client, and Unity client.
 
-**Packet auth whitelist.** Packet IDs 1, 2, 3, 19, 25, 41, 43, 44 are allowed before authentication. All others return an auth error. This whitelist is in `ClientHandler.java`.
+**Packet auth whitelist.** Packet IDs 1, 2, 3, 11, 13, 15, 19, 25, 32, 41, 43, 44 are allowed before authentication. All others return an auth error. This whitelist is hardcoded in `ClientHandler.java` (there is a comment acknowledging it should not be hardcoded).
 
 **AI evaluation is excluded from learning counters.** When Unity sends `AskAiPacket` with `context="eval"` (during task grading), the server's `recordAiInteraction` skips updating hint/chat counters. This ensures the learning profile reflects student effort, not AI-assisted grading events.
 
@@ -95,5 +96,7 @@ Web Creator (React)  Android App (Kotlin)   Unity Game (C#)
 - 64 max processes (`ulimit -u`, prevents fork bombs)
 - 120s timeout + 2s grace period
 - Network isolated via `unshare --net`
+
+**Packets 41/42 are `FetchAllChildren` (admin/dev use).** IDs 41 (`FetchAllChildrenPacket`) and 42 (`FetchAllChildrenResponsePacket`) fetch children across all parents, not just the authenticated one. They are in the auth whitelist alongside the dev packets (43, 44).
 
 **No tests.** There are no unit, integration, or end-to-end tests in any component. All testing is manual.
