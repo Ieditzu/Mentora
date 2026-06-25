@@ -18,7 +18,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const string HostAddressPrefKey = "MultiplayerHostAddress";
     private const string PortPrefKey = "MultiplayerPort";
     private const int DefaultPort = 7777;
-    private const float SendIntervalSeconds = 0.05f;
+    private const float SendIntervalSeconds = 0.015f;
 
     private static MultiplayerSessionManager instance;
 
@@ -70,6 +70,9 @@ public class MultiplayerSessionManager : MonoBehaviour
         public GameObject Root;
         public Transform NameRoot;
         public TextMesh NameText;
+        public Vector3 TargetPosition;
+        public float TargetYaw;
+        public bool HasFirstPacket;
     }
 
     private sealed class BillboardToCamera : MonoBehaviour
@@ -163,7 +166,35 @@ public class MultiplayerSessionManager : MonoBehaviour
             _ = SendLocalStateAsync();
         }
 
+        InterpolateRemoteAvatars();
         RefreshLocalNameLabel();
+    }
+
+    private void InterpolateRemoteAvatars()
+    {
+        // Smooth = 20 means the avatar covers ~63% of the remaining gap per second,
+        // giving fluid motion at 66 Hz send rate with no visible rubber-banding.
+        const float posSpeed = 20f;
+        const float rotSpeed = 20f;
+        float dt = Time.unscaledDeltaTime;
+
+        foreach (RemoteAvatar avatar in remoteAvatars.Values)
+        {
+            if (avatar == null || avatar.Root == null || !avatar.HasFirstPacket)
+            {
+                continue;
+            }
+
+            avatar.Root.transform.position = Vector3.Lerp(
+                avatar.Root.transform.position,
+                avatar.TargetPosition,
+                1f - Mathf.Exp(-posSpeed * dt));
+
+            avatar.Root.transform.rotation = Quaternion.Slerp(
+                avatar.Root.transform.rotation,
+                Quaternion.Euler(0f, avatar.TargetYaw, 0f),
+                1f - Mathf.Exp(-rotSpeed * dt));
+        }
     }
 
     public void SetPlayerName(string playerName)
@@ -516,8 +547,16 @@ public class MultiplayerSessionManager : MonoBehaviour
             return;
         }
 
-        avatar.Root.transform.position = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
-        avatar.Root.transform.rotation = Quaternion.Euler(0f, statePacket.Yaw, 0f);
+        Vector3 newPos = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
+        if (!avatar.HasFirstPacket)
+        {
+            avatar.Root.transform.position = newPos;
+            avatar.Root.transform.rotation = Quaternion.Euler(0f, statePacket.Yaw, 0f);
+            avatar.HasFirstPacket = true;
+        }
+
+        avatar.TargetPosition = newPos;
+        avatar.TargetYaw = statePacket.Yaw;
         SetAvatarName(avatar, statePacket.PlayerName);
     }
 
