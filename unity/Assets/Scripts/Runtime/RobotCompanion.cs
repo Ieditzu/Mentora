@@ -51,7 +51,7 @@ public class RobotCompanion : MonoBehaviour
             spawnPos = existingFps.transform.position + Vector3.up * 3f;
 
         var go = UnityEngine.Object.Instantiate(model, spawnPos, Quaternion.identity);
-        go.name = "ARIA_Companion";
+        go.name = "Rudolf";
         go.transform.localScale = Vector3.one * 0.2f;
 
         // Strip the CoinRotator's RobotLookAt if it somehow got onto the model
@@ -104,6 +104,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void Start()
     {
+        BuildNametag();
         BuildBubble();
         ResolvePlayer();
         SetupPhysics();
@@ -175,8 +176,18 @@ public class RobotCompanion : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
         }
 
-        // ── Bubble: push in front of ARIA toward camera, always face camera ─────
+        // ── Nametag + Bubble — shared camera reference ────────────────────────
         var fpsCamForBubble = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
+
+        if (_nametag != null && fpsCamForBubble != null)
+        {
+            _nametag.position = transform.position + Vector3.up * 0.55f;
+            Vector3 nDir = _nametag.position - fpsCamForBubble.transform.position;
+            if (nDir.sqrMagnitude > 0.001f)
+                _nametag.rotation = Quaternion.LookRotation(nDir);
+        }
+
+        // ── Bubble: push in front of Rudolf toward camera, always face camera ───
         if (bubble != null && fpsCamForBubble != null)
         {
             // Offset bubble toward the camera so it floats in front of the robot
@@ -225,6 +236,36 @@ public class RobotCompanion : MonoBehaviour
 
     // ── Speech bubble builder ────────────────────────────────────────────────
 
+    private void BuildNametag()
+    {
+        var tag = new GameObject("Nametag");
+        tag.transform.SetParent(transform, false);
+        tag.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+
+        var canvas = tag.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        var rt = tag.GetComponent<RectTransform>();
+        rt.sizeDelta  = new Vector2(200f, 50f);
+        rt.localScale = Vector3.one * 0.006f;
+
+        var tgo = new GameObject("Text");
+        tgo.transform.SetParent(tag.transform, false);
+        var txt = tgo.AddComponent<UnityEngine.UI.Text>();
+        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        txt.text      = "Rudolf";
+        txt.fontSize  = 28;
+        txt.fontStyle = FontStyle.Bold;
+        txt.color     = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        var tRt = tgo.GetComponent<RectTransform>();
+        tRt.anchorMin = Vector2.zero; tRt.anchorMax = Vector2.one;
+        tRt.offsetMin = tRt.offsetMax = Vector2.zero;
+
+        _nametag = tag.transform;
+    }
+
+    private Transform _nametag;
+
     private void BuildBubble()
     {
         // Bubble is NOT parented to ARIA — we position it freely in Update()
@@ -254,7 +295,7 @@ public class RobotCompanion : MonoBehaviour
         nameGo.transform.SetParent(bubble.transform, false);
         var nameTxt = nameGo.AddComponent<Text>();
         nameTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        nameTxt.text = "ARIA";
+        nameTxt.text = "Rudolf";
         nameTxt.fontSize = 11;
         nameTxt.fontStyle = FontStyle.Bold;
         nameTxt.color = new Color(0.85f, 0.65f, 1f);
