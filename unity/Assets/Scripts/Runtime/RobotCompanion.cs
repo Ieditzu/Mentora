@@ -36,16 +36,21 @@ public class RobotCompanion : MonoBehaviour
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "SampleScene")
             return;
 
-        // Load model from Resources/Robot/low.obj
-        var model = Resources.Load<GameObject>("Robot/low");
+        // Load the wrapper prefab (correctly centred, avoids raw .obj import offset issues)
+        var model = Resources.Load<GameObject>("Robot/ARIA");
         if (model == null)
         {
-            Debug.LogWarning("[RobotCompanion] Could not load Resources/Robot/low — companion won't spawn.");
+            Debug.LogWarning("[RobotCompanion] Could not load Resources/Robot/ARIA — companion won't spawn.");
             return;
         }
 
-        // Spawn near the player start; companion will move to follow immediately
-        var go = Instantiate(model, new Vector3(0f, 0f, 0f), Quaternion.identity);
+        // Spawn at the same position FpsBootstrap uses so ARIA starts next to the player
+        Vector3 spawnPos = new Vector3(75f, 3f, 222f); // matches FpsBootstrap default + hover height
+        var existingFps = UnityEngine.Object.FindObjectOfType<FirstPersonControllerSimple>();
+        if (existingFps != null)
+            spawnPos = existingFps.transform.position + Vector3.up * 3f;
+
+        var go = UnityEngine.Object.Instantiate(model, spawnPos, Quaternion.identity);
         go.name = "ARIA_Companion";
         go.transform.localScale = Vector3.one * 0.2f;
 
@@ -64,7 +69,7 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float rotSpeed        = 6f;
 
     [Header("Float")]
-    [SerializeField] private float hoverHeight     = 1.6f;   // above player's y
+    [SerializeField] private float hoverHeight     = 3.8f;   // match FPS eyeHeight (4.0) minus a bit so ARIA is at eye level
     [SerializeField] private float bobAmplitude    = 0.18f;  // up/down bob range
     [SerializeField] private float bobSpeed        = 1.8f;   // bob cycles per second
     [SerializeField] private float tiltAngle       = 12f;    // gentle tilt while moving
@@ -77,6 +82,7 @@ public class RobotCompanion : MonoBehaviour
     // ── Internal ─────────────────────────────────────────────────────────────
 
     private Transform  player;
+    private bool       snappedToPlayer;  // first-frame teleport so ARIA starts next to player
     private GameObject bubble;
     private Text       bubbleText;
     private CanvasGroup bubbleCg;
@@ -119,6 +125,14 @@ public class RobotCompanion : MonoBehaviour
     {
         if (player == null) { ResolvePlayer(); return; }
 
+        // ── Snap to player on first frame so ARIA never rubber-bands from afar ─
+        if (!snappedToPlayer)
+        {
+            snappedToPlayer = true;
+            Vector3 sideForwardSnap = (player.forward + player.right).normalized;
+            transform.position = player.position + Vector3.up * hoverHeight + sideForwardSnap * followDistance;
+        }
+
         // ── Float target position ─────────────────────────────────────────────
         // Stay forward-right so ARIA is always in the player's field of view.
         // 45° between forward and right = always visible without blocking the view.
@@ -136,15 +150,19 @@ public class RobotCompanion : MonoBehaviour
                 transform.position, targetPos, followSpeed * Time.deltaTime);
         }
 
-        // ── Face the player ──────────────────────────────────────────────────
-        Vector3 lookDir = player.position - transform.position;
+        // ── Face the player's head — use the FPS camera, not Camera.main ────────
+        // Camera.main in this project is an overview cam far from the player.
+        // The real player camera is a child of the FPS controller.
+        Vector3 headPos = player.position + Vector3.up * 4f; // FPS eyeHeight default
+        var fpsCam = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
+        if (fpsCam != null)
+            headPos = fpsCam.transform.position;
+
+        Vector3 lookDir = headPos - transform.position;
         if (lookDir.sqrMagnitude > 0.001f)
         {
             Quaternion desiredRot = Quaternion.LookRotation(lookDir.normalized);
-            // Add a gentle tilt based on lateral velocity
-            float lateral = Vector3.Dot(
-                (transform.position - (transform.position - player.right)) , player.right);
-            desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Sign(lateral) * Mathf.Clamp01(dist));
+            desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(dist - followDistance));
             transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
         }
 

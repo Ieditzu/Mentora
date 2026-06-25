@@ -11,31 +11,6 @@ using Mentora.Network;
 [RequireComponent(typeof(Collider))]
 public class AiChallengePad : MonoBehaviour
 {
-    // ── Auto-spawn ───────────────────────────────────────────────────────────
-
-    // Sakura tree world position from SampleScene + a few units offset so the
-    // pad sits in front of the tree rather than inside it.
-    private static readonly Vector3 SpawnPosition = new Vector3(76.93f, 0.56f, 215.5f);
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void AutoSpawn()
-    {
-        // Only spawn if the main game scene is loaded (not Oculus sample scenes etc.)
-        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "SampleScene")
-            return;
-
-        var go = new GameObject("AiChallengePad");
-        go.transform.position = SpawnPosition;
-
-        // Trigger collider — a 3×3×3 box the player walks into
-        var col = go.AddComponent<BoxCollider>();
-        col.isTrigger = true;
-        col.size = new Vector3(3f, 3f, 3f);
-        col.center = new Vector3(0f, 1.5f, 0f);
-
-        go.AddComponent<AiChallengePad>();
-    }
-
     // ── State ────────────────────────────────────────────────────────────────
 
     [SerializeField] private string language = "python";
@@ -63,6 +38,17 @@ public class AiChallengePad : MonoBehaviour
         BuildProximityPrompt();
         BuildPadPanel();
         GameClient.Instance.OnPacketReceived += OnPacket;
+    }
+
+    private void Update()
+    {
+        // Keep the proximity prompt always facing the player camera
+        if (promptOverlay != null && promptOverlay.activeSelf && Camera.main != null)
+        {
+            Vector3 dir = promptOverlay.transform.position - Camera.main.transform.position;
+            if (dir.sqrMagnitude > 0.001f)
+                promptOverlay.transform.rotation = Quaternion.LookRotation(dir);
+        }
     }
 
     private void OnDestroy()

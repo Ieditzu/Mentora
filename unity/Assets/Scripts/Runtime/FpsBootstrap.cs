@@ -33,8 +33,40 @@ public static class FpsBootstrap
 
     private static void AddBeanBody(GameObject player, CharacterController cc)
     {
-        // No visual proxy for the FPS player; skip spawning FPS_BeanBody.
-        return;
+        var beanPrefab = Resources.Load<GameObject>("Characters/SM_Bean_Female_01");
+        if (beanPrefab == null)
+        {
+            Debug.LogWarning("[FpsBootstrap] Bean prefab not found in Resources/Characters/");
+            return;
+        }
+
+        var body = Object.Instantiate(beanPrefab, player.transform);
+        body.name = "BeanBody";
+        // eyeHeight = 4.0f in FirstPersonControllerSimple, bean natural height ≈ 1.72 units at scale 1
+        // scale so head sits just below the camera: 4.0 / 1.72 ≈ 2.32, use 2.2 for a slight gap
+        body.transform.localPosition = new Vector3(0f, 0f, 0f);
+        body.transform.localRotation = Quaternion.identity;
+        body.transform.localScale    = Vector3.one * 2.2f;
+
+        // Remove any colliders on the body so they don't fight the CharacterController
+        foreach (var col in body.GetComponentsInChildren<Collider>())
+            Object.Destroy(col);
+
+        // Put the bean body on the "PlayerBody" layer (layer 3) so the
+        // first-person camera can cull it — player shouldn't see their own body
+        SetLayerRecursively(body, 3);
+
+        // Exclude layer 3 from the FP camera so the bean is invisible in first person
+        var fpCam = player.GetComponentInChildren<Camera>();
+        if (fpCam != null)
+            fpCam.cullingMask &= ~(1 << 3);
+    }
+
+    private static void SetLayerRecursively(GameObject go, int layer)
+    {
+        go.layer = layer;
+        foreach (Transform child in go.transform)
+            SetLayerRecursively(child.gameObject, layer);
     }
 
     private static Vector3 GuessSpawnPosition()
