@@ -49,6 +49,10 @@ namespace Mentora.Network
                 46 => new GenerateAiTaskResponsePacket(),
                 47 => new CompanionSpeakPacket(),
                 48 => new CompanionSpeakResponsePacket(),
+                49 => new MultiplayerJoinPacket(),
+                50 => new MultiplayerWelcomePacket(),
+                51 => new MultiplayerPlayerStatePacket(),
+                52 => new MultiplayerPlayerLeftPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -720,5 +724,80 @@ namespace Mentora.Network
             Line = ReadString(reader);
             Emotion = ReadString(reader);
         }
+    }
+
+    public class MultiplayerJoinPacket : Packet
+    {
+        public string PlayerName;
+        public MultiplayerJoinPacket(string playerName) : base(49) { PlayerName = playerName; }
+        public MultiplayerJoinPacket() : base(49) { }
+        protected override void Write(BinaryWriter writer) { PutString(writer, PlayerName ?? string.Empty); }
+        protected override void Read(BinaryReader reader) { PlayerName = ReadString(reader); }
+    }
+
+    public class MultiplayerWelcomePacket : Packet
+    {
+        public string ClientId;
+        public string PlayerName;
+        public MultiplayerWelcomePacket(string clientId, string playerName) : base(50) { ClientId = clientId; PlayerName = playerName; }
+        public MultiplayerWelcomePacket() : base(50) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            PutString(writer, PlayerName ?? string.Empty);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            PlayerName = ReadString(reader);
+        }
+    }
+
+    public class MultiplayerPlayerStatePacket : Packet
+    {
+        public string ClientId;
+        public string PlayerName;
+        public float PositionX;
+        public float PositionY;
+        public float PositionZ;
+        public float Yaw;
+
+        public MultiplayerPlayerStatePacket(string clientId, string playerName, UnityEngine.Vector3 position, float yaw) : base(51)
+        {
+            ClientId = clientId;
+            PlayerName = playerName;
+            PositionX = position.x;
+            PositionY = position.y;
+            PositionZ = position.z;
+            Yaw = yaw;
+        }
+        public MultiplayerPlayerStatePacket() : base(51) { }
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            PutString(writer, PlayerName ?? string.Empty);
+            writer.Write(PositionX);
+            writer.Write(PositionY);
+            writer.Write(PositionZ);
+            writer.Write(Yaw);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            PlayerName = ReadString(reader);
+            PositionX = reader.ReadSingle();
+            PositionY = reader.ReadSingle();
+            PositionZ = reader.ReadSingle();
+            Yaw = reader.ReadSingle();
+        }
+    }
+
+    public class MultiplayerPlayerLeftPacket : Packet
+    {
+        public string ClientId;
+        public MultiplayerPlayerLeftPacket(string clientId) : base(52) { ClientId = clientId; }
+        public MultiplayerPlayerLeftPacket() : base(52) { }
+        protected override void Write(BinaryWriter writer) { PutString(writer, ClientId ?? string.Empty); }
+        protected override void Read(BinaryReader reader) { ClientId = ReadString(reader); }
     }
 }

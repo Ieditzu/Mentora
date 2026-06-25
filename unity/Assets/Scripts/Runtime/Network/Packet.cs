@@ -48,6 +48,34 @@ namespace Mentora.Network
             }
         }
 
+        // Plain (unencrypted) encode for peer-to-peer multiplayer frames.
+        // Format: [4-byte big-endian packet ID][field bytes...]
+        public byte[] EncodeRaw()
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                WriteInt32BigEndian(writer, id);
+                Write(writer);
+                writer.Flush();
+                return ms.ToArray();
+            }
+        }
+
+        // Decode a plain (unencrypted) multiplayer frame produced by EncodeRaw().
+        public static Packet DecodeRaw(byte[] frame, PacketManager manager)
+        {
+            int packetId = BigEndianToInt(frame, 0);
+            Packet packet = manager.CreatePacket(packetId);
+            using (var ms = new MemoryStream(frame))
+            using (var reader = new BinaryReader(ms))
+            {
+                ms.Position = 4;
+                packet.Read(reader);
+            }
+            return packet;
+        }
+
         public static Packet Decode(byte[] bytes, PacketManager manager)
         {
             int seedLength = BigEndianToInt(bytes, 0);
