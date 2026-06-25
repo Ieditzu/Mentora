@@ -707,6 +707,45 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(140f, 42f);
         multiplayerBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
 
+        GameObject multiplayerLeft = CreateUiObject("MultiplayerLeft", multiplayerPanel.transform);
+        RectTransform multiplayerLeftRect = multiplayerLeft.GetComponent<RectTransform>();
+        multiplayerLeftRect.anchorMin = new Vector2(0.08f, 0.18f);
+        multiplayerLeftRect.anchorMax = new Vector2(0.43f, 0.80f);
+        multiplayerLeftRect.offsetMin = Vector2.zero;
+        multiplayerLeftRect.offsetMax = Vector2.zero;
+        multiplayerLeft.AddComponent<Image>().color = new Color(0.94f, 0.95f, 0.97f, 1f);
+        multiplayerLeft.AddComponent<Outline>().effectColor = new Color(0.0f, 0.0f, 0.0f, 0.10f);
+
+        CreateText("MultiplayerLeftTitle", multiplayerLeft.transform, "Play", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.08f, 0.10f, 0.14f, 1f), new Vector2(0f, 150f), new Vector2(220f, 40f));
+
+        Button hostGameBtn = CreateButton(multiplayerLeft.transform, "HostGameBtn", "Host Game", new Vector2(0f, 52f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        hostGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(240f, 48f);
+        hostGameBtn.onClick.AddListener(() => { });
+
+        Button joinGameBtn = CreateButton(multiplayerLeft.transform, "JoinGameBtn", "Join Game", new Vector2(0f, -16f), new Color(0.24f, 0.62f, 0.36f, 1f));
+        joinGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(240f, 48f);
+        joinGameBtn.onClick.AddListener(() => { });
+
+        CreateText("MultiplayerLeftHint", multiplayerLeft.transform, "Host a local server or join one later.", 14, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.20f, 0.24f, 0.30f, 1f), new Vector2(0f, -92f), new Vector2(240f, 32f));
+
+        GameObject multiplayerRight = CreateUiObject("MultiplayerRight", multiplayerPanel.transform);
+        RectTransform multiplayerRightRect = multiplayerRight.GetComponent<RectTransform>();
+        multiplayerRightRect.anchorMin = new Vector2(0.50f, 0.18f);
+        multiplayerRightRect.anchorMax = new Vector2(0.92f, 0.80f);
+        multiplayerRightRect.offsetMin = Vector2.zero;
+        multiplayerRightRect.offsetMax = Vector2.zero;
+        multiplayerRight.AddComponent<Image>().color = new Color(0.97f, 0.97f, 0.97f, 1f);
+        multiplayerRight.AddComponent<Outline>().effectColor = new Color(0.0f, 0.0f, 0.0f, 0.10f);
+
+        CreateText("NameLabel", multiplayerRight.transform, "Name", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.08f, 0.10f, 0.14f, 1f), new Vector2(0f, 150f), new Vector2(220f, 40f));
+        CreateText("NameHelper", multiplayerRight.transform, "This will appear above your bean later.", 14, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.20f, 0.24f, 0.30f, 1f), new Vector2(0f, 112f), new Vector2(260f, 28f));
+
+        InputField nameInput = CreateInputField(multiplayerRight.transform, "PlayerNameInput", "Enter your name", new Vector2(0f, 40f), new Vector2(280f, 46f), false);
+        nameInput.contentType = InputField.ContentType.Standard;
+        nameInput.characterLimit = 18;
+
+        CreateText("NamePreview", multiplayerRight.transform, "Name preview: Player", 15, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(0.08f, 0.10f, 0.14f, 1f), new Vector2(0f, -28f), new Vector2(260f, 24f));
+
         multiplayerPanel.SetActive(false);
 
         // GOALS PANEL
