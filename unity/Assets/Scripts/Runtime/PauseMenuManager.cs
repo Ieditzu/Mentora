@@ -36,6 +36,7 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject tasksPanel;
     private GameObject goalsPanel;
     private GameObject serverPanel;
+    private GameObject multiplayerPanel;
 
     private CanvasGroup menuGroup;
     private Coroutine menuAnim;
@@ -587,18 +588,18 @@ public class PauseMenuManager : MonoBehaviour
         // Actions stack
         GameObject actions = CreateUiObject("Actions", body.transform);
         RectTransform actionsRect = actions.GetComponent<RectTransform>();
-        actionsRect.sizeDelta = new Vector2(260f, 300f);
+        actionsRect.sizeDelta = new Vector2(260f, 340f);
         actionsRect.anchoredPosition = new Vector2(190f, 20f);
         actions.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
         actions.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
 
         CreateText("ActionsTitle", actions.transform, "Quick Actions", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 115f), new Vector2(200f, 30f));
 
-        Button resumeButton = CreateButton(actions.transform, "ResumeButton", "Resume", new Vector2(0f, 55f), new Color(0.18f, 0.63f, 0.43f, 1f));
+        Button resumeButton = CreateButton(actions.transform, "ResumeButton", "Resume", new Vector2(0f, 78f), new Color(0.18f, 0.63f, 0.43f, 1f));
         resumeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         resumeButton.onClick.AddListener(ResumeGame);
 
-        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, 0f), new Color(0.6f, 0.4f, 0.8f, 1f));
+        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, 26f), new Color(0.6f, 0.4f, 0.8f, 1f));
         goalsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         goalsBtn.onClick.AddListener(() => {
             if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
@@ -607,11 +608,18 @@ public class PauseMenuManager : MonoBehaviour
             ShowPanel(goalsPanel);
         });
 
-        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -55f), new Color(0.72f, 0.24f, 0.26f, 1f));
+        Button multiplayerButton = CreateButton(actions.transform, "MultiplayerBtn", "Multiplayer", new Vector2(0f, -26f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        multiplayerButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        multiplayerButton.GetComponentInChildren<Text>().color = Color.white;
+        multiplayerButton.GetComponentInChildren<Text>().fontSize = 14;
+        multiplayerButton.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0.15f, 0.25f, 0.7f);
+        multiplayerButton.onClick.AddListener(() => ShowPanel(multiplayerPanel));
+
+        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -78f), new Color(0.72f, 0.24f, 0.26f, 1f));
         quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         quitButton.onClick.AddListener(QuitGame);
 
-        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -110f), new Color(0.45f, 0.45f, 0.5f, 1f));
+        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -130f), new Color(0.45f, 0.45f, 0.5f, 1f));
         devOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
         devOptionsButton.onClick.AddListener(() => {
             if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
@@ -687,6 +695,20 @@ public class PauseMenuManager : MonoBehaviour
 
         serverPanel.SetActive(false);
 
+        // MULTIPLAYER PANEL
+        multiplayerPanel = CreateUiObject("MultiplayerPanel", canvas.transform);
+        RectTransform multiplayerRect = multiplayerPanel.GetComponent<RectTransform>();
+        multiplayerRect.anchorMin = Vector2.zero;
+        multiplayerRect.anchorMax = Vector2.one;
+        StretchToFullscreen(multiplayerRect);
+        multiplayerPanel.AddComponent<Image>().color = Color.white;
+
+        Button multiplayerBackBtn = CreateButton(multiplayerPanel.transform, "MultiplayerBackBtn", "Back", new Vector2(-840f, 470f), new Color(0.12f, 0.12f, 0.12f, 1f));
+        multiplayerBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(140f, 42f);
+        multiplayerBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
+
+        multiplayerPanel.SetActive(false);
+
         // GOALS PANEL
         goalsPanel = CreateUiObject("GoalsPanel", canvas.transform);
         RectTransform goalsRect = goalsPanel.GetComponent<RectTransform>();
@@ -720,6 +742,7 @@ public class PauseMenuManager : MonoBehaviour
         if (tasksPanel != null) tasksPanel.SetActive(false);
         if (goalsPanel != null) goalsPanel.SetActive(false);
         if (serverPanel != null) serverPanel.SetActive(false);
+        if (multiplayerPanel != null) multiplayerPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
         if (panel == tasksPanel)
         {
@@ -728,6 +751,10 @@ public class PauseMenuManager : MonoBehaviour
         else if (panel == serverPanel)
         {
             RefreshServerStatusLabel();
+        }
+        else if (panel == multiplayerPanel)
+        {
+            // Placeholder screen for the future multiplayer flow.
         }
     }
 
