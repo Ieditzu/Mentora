@@ -70,6 +70,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         public GameObject Root;
         public Transform NameRoot;
         public TextMesh NameText;
+        public TextMesh BadgeText;
         public Vector3 TargetPosition;
         public float TargetYaw;
         public bool HasFirstPacket;
@@ -512,6 +513,9 @@ public class MultiplayerSessionManager : MonoBehaviour
         switch (packet)
         {
             case MultiplayerWelcomePacket welcomePacket:
+                // Set localClientId on the receive thread immediately — the state-send
+                // loop checks it on the main thread, but the filter below also reads it
+                // from the receive thread, so volatile-ish assignment is fine for a string.
                 localClientId = welcomePacket.ClientId;
                 localPlayerName = NormalizePlayerName(welcomePacket.PlayerName);
                 EnqueueMainThread(() =>
@@ -522,7 +526,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                 break;
 
             case MultiplayerPlayerStatePacket statePacket:
-                if (!string.IsNullOrEmpty(localClientId) && statePacket.ClientId == localClientId)
+                // Drop packets with no clientId (malformed) or that echo our own position back.
+                if (string.IsNullOrEmpty(statePacket.ClientId))
+                {
+                    break;
+                }
+                if (statePacket.ClientId == localClientId)
                 {
                     break;
                 }
@@ -613,22 +622,71 @@ public class MultiplayerSessionManager : MonoBehaviour
         textMesh.color = Color.black;
         textMesh.text = NormalizePlayerName(playerName);
 
+        // Chest badge — a small quad with a dark backing + name text, parented to the
+        // bean body at chest height, facing forward (no billboard, rotates with body).
+        // At scale 2.2 the bean's chest sits at roughly local y=1.1, z=0.28 forward.
+        TextMesh badgeText = CreateChestBadge(root.transform, playerName);
+
         return new RemoteAvatar
         {
             Root = root,
             NameRoot = labelRoot.transform,
-            NameText = textMesh
+            NameText = textMesh,
+            BadgeText = badgeText
         };
+    }
+
+    private TextMesh CreateChestBadge(Transform parent, string playerName)
+    {
+        // Badge backing quad
+        GameObject badge = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        badge.name = "ChestBadge";
+        badge.transform.SetParent(parent, false);
+        // chest height ~1.1, slightly in front of the body surface
+        badge.transform.localPosition = new Vector3(0f, 1.1f, 0.32f);
+        badge.transform.localRotation = Quaternion.identity;
+        badge.transform.localScale = new Vector3(0.55f, 0.22f, 1f);
+
+        Collider badgeCol = badge.GetComponent<Collider>();
+        if (badgeCol != null) Destroy(badgeCol);
+
+        Renderer badgeRend = badge.GetComponent<Renderer>();
+        if (badgeRend != null)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                         ?? Shader.Find("Unlit/Color")
+                         ?? Shader.Find("Standard");
+            Material mat = new Material(shader);
+            mat.color = new Color(0.08f, 0.10f, 0.14f, 1f);
+            badgeRend.material = mat;
+            badgeRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            badgeRend.receiveShadows = false;
+        }
+
+        // Badge text sits just in front of the quad
+        GameObject textObj = new GameObject("BadgeText");
+        textObj.transform.SetParent(parent, false);
+        textObj.transform.localPosition = new Vector3(0f, 1.1f, 0.33f);
+        textObj.transform.localRotation = Quaternion.identity;
+
+        TextMesh tm = textObj.AddComponent<TextMesh>();
+        tm.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        tm.fontSize = 28;
+        tm.characterSize = 0.028f;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.alignment = TextAlignment.Center;
+        tm.color = Color.white;
+        tm.text = NormalizePlayerName(playerName);
+
+        return tm;
     }
 
     private void SetAvatarName(RemoteAvatar avatar, string playerName)
     {
-        if (avatar == null || avatar.NameText == null)
-        {
-            return;
-        }
-
-        avatar.NameText.text = NormalizePlayerName(playerName);
+        if (avatar == null) return;
+        string name = NormalizePlayerName(playerName);
+        if (avatar.NameText != null) avatar.NameText.text = name;
+        if (avatar.BadgeText != null) avatar.BadgeText.text = name;
     }
 
     private void RemoveRemoteAvatar(string clientId)
@@ -647,6 +705,13 @@ public class MultiplayerSessionManager : MonoBehaviour
     private async Task SendLocalStateAsync()
     {
         if (!IsClientConnected)
+        {
+            return;
+        }
+
+        // Don't send state until the server has assigned us a clientId via WelcomePacket.
+        // Early state packets with an empty clientId create ghost avatars on the remote side.
+        if (string.IsNullOrEmpty(localClientId))
         {
             return;
         }

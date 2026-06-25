@@ -65,8 +65,8 @@ public class RobotCompanion : MonoBehaviour
 
     [Header("Follow")]
     [SerializeField] private float followDistance  = 1.8f;
-    [SerializeField] private float followSpeed     = 5f;
-    [SerializeField] private float rotSpeed        = 6f;
+    [SerializeField] private float followSpeed     = 12f;
+    [SerializeField] private float rotSpeed        = 8f;
 
     [Header("Float")]
     [SerializeField] private float hoverHeight     = 3.8f;   // match FPS eyeHeight (4.0) minus a bit so ARIA is at eye level
@@ -148,12 +148,10 @@ public class RobotCompanion : MonoBehaviour
             + Vector3.up * (hoverHeight + bob)
             + orbitDir * followDistance;
 
-        // ── Obstacle avoidance — steer around anything in the path ───────────
-        Vector3 moveDir  = (targetPos - transform.position).normalized;
-        float   moveDist = followSpeed * Time.deltaTime;
-        Vector3 steer    = SteerAround(transform.position, moveDir);
-
-        Vector3 next = transform.position + steer * moveDist;
+        // ── Move toward orbit target — exponential smoothing, no snapping ───────
+        float t = 1f - Mathf.Exp(-followSpeed * Time.deltaTime);
+        Vector3 steer = SteerAround(transform.position, (targetPos - transform.position).normalized);
+        Vector3 next = Vector3.Lerp(transform.position, transform.position + steer * Vector3.Distance(transform.position, targetPos), t);
         if (rb != null && rb.isKinematic)
             rb.MovePosition(next);
         else
@@ -277,17 +275,27 @@ public class RobotCompanion : MonoBehaviour
     {
         bounceVelocity = col.contacts[0].normal * 3.5f;
         bounceVelocity.y = Mathf.Abs(bounceVelocity.y) + 1.2f;
-        // Briefly go non-kinematic so physics handles the bounce naturally
         StartCoroutine(BounceRoutine());
     }
 
     private System.Collections.IEnumerator BounceRoutine()
     {
-        rb.isKinematic = false;
-        rb.useGravity  = false;
-        rb.velocity    = bounceVelocity;
-        yield return new WaitForSeconds(0.45f);
-        rb.isKinematic = true;
+        float elapsed = 0f;
+        const float duration = 0.45f;
+        Vector3 startVel = bounceVelocity;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            // Decay the bounce velocity over time and apply it as a positional offset
+            float frac = 1f - elapsed / duration;
+            Vector3 offset = startVel * frac * Time.deltaTime;
+            Vector3 next = transform.position + offset;
+            if (rb != null && rb.isKinematic)
+                rb.MovePosition(next);
+            else
+                transform.position = next;
+            yield return null;
+        }
         bounceVelocity = Vector3.zero;
     }
 
