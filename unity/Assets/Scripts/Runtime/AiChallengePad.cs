@@ -141,13 +141,13 @@ public class AiChallengePad : MonoBehaviour
         var header = AddRect(padPanel.transform, "Header",
             new Vector2(0, 0.88f), new Vector2(1, 1f), Vector2.zero, Vector2.zero);
         AddBG(header.transform, new Color(0.18f, 0.06f, 0.42f, 1f));
-        var headerTxt = AddText(header.transform, "✦ AI Challenge", 22, Color.white, Vector2.zero);
+        var headerTxt = AddText(header.transform, "✦ AI Challenge", 32, Color.white, Vector2.zero);
         headerTxt.alignment = TextAnchor.MiddleLeft;
         var headerRt = headerTxt.GetComponent<RectTransform>();
         headerRt.anchorMin = Vector2.zero; headerRt.anchorMax = Vector2.one;
         headerRt.offsetMin = new Vector2(24, 0); headerRt.offsetMax = Vector2.zero;
 
-        pointsText = AddText(header.transform, "+? pts", 18, new Color(0.9f, 0.75f, 0.2f), Vector2.zero);
+        pointsText = AddText(header.transform, "+? pts", 28, new Color(0.9f, 0.75f, 0.2f), Vector2.zero);
         pointsText.alignment = TextAnchor.MiddleRight;
         var ptRt = pointsText.GetComponent<RectTransform>();
         ptRt.anchorMin = Vector2.zero; ptRt.anchorMax = Vector2.one;
@@ -155,13 +155,13 @@ public class AiChallengePad : MonoBehaviour
 
         // Title
         titleText = AddText(padPanel.transform, "Generating your challenge…",
-            20, new Color(0.85f, 0.65f, 1f), Vector2.zero);
+            30, new Color(0.85f, 0.65f, 1f), Vector2.zero);
         titleText.fontStyle = FontStyle.Bold;
         SetAnchors(titleText.GetComponent<RectTransform>(),
             new Vector2(0.02f, 0.78f), new Vector2(0.98f, 0.88f), Vector2.zero, Vector2.zero);
 
         // Description
-        descriptionText = AddText(padPanel.transform, "", 14, new Color(0.78f, 0.78f, 0.9f), Vector2.zero);
+        descriptionText = AddText(padPanel.transform, "", 22, new Color(0.78f, 0.78f, 0.9f), Vector2.zero);
         descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
         SetAnchors(descriptionText.GetComponent<RectTransform>(),
             new Vector2(0.02f, 0.70f), new Vector2(0.98f, 0.78f), Vector2.zero, Vector2.zero);
@@ -170,28 +170,28 @@ public class AiChallengePad : MonoBehaviour
         var editorBg = AddRect(padPanel.transform, "EditorBg",
             new Vector2(0.01f, 0.22f), new Vector2(0.58f, 0.70f), Vector2.zero, Vector2.zero);
         AddBG(editorBg.transform, new Color(0.08f, 0.06f, 0.14f, 1f));
-        var editorLabel = AddText(editorBg.transform, "Code", 12, new Color(0.5f, 0.4f, 0.8f), Vector2.zero);
+        var editorLabel = AddText(editorBg.transform, "Code", 20, new Color(0.5f, 0.4f, 0.8f), Vector2.zero);
         SetAnchors(editorLabel.GetComponent<RectTransform>(),
             new Vector2(0, 0.92f), new Vector2(1, 1f), new Vector2(8, 0), Vector2.zero);
 
         codeEditor = AddInputField(editorBg.transform);
         SetAnchors(codeEditor.GetComponent<RectTransform>(),
-            Vector2.zero, Vector2.one, new Vector2(6, 6), new Vector2(-6, -26));
+            Vector2.zero, Vector2.one, new Vector2(6, 6), new Vector2(-6, -32));
 
         // Output (right half)
         var outputBg = AddRect(padPanel.transform, "OutputBg",
             new Vector2(0.60f, 0.22f), new Vector2(0.99f, 0.70f), Vector2.zero, Vector2.zero);
         AddBG(outputBg.transform, new Color(0.05f, 0.08f, 0.06f, 1f));
-        AddText(outputBg.transform, "Output", 12, new Color(0.3f, 0.7f, 0.4f), Vector2.zero);
+        AddText(outputBg.transform, "Output", 20, new Color(0.3f, 0.7f, 0.4f), Vector2.zero);
 
-        outputText = AddText(outputBg.transform, "", 13, new Color(0.7f, 0.95f, 0.7f), Vector2.zero);
+        outputText = AddText(outputBg.transform, "", 20, new Color(0.7f, 0.95f, 0.7f), Vector2.zero);
         outputText.horizontalOverflow = HorizontalWrapMode.Wrap;
         outputText.verticalOverflow = VerticalWrapMode.Overflow;
         SetAnchors(outputText.GetComponent<RectTransform>(),
-            Vector2.zero, Vector2.one, new Vector2(8, 8), new Vector2(-8, -26));
+            Vector2.zero, Vector2.one, new Vector2(8, 8), new Vector2(-8, -32));
 
         // Status text
-        statusText = AddText(padPanel.transform, "", 18, Color.white, Vector2.zero);
+        statusText = AddText(padPanel.transform, "", 36, Color.white, Vector2.zero);
         statusText.alignment = TextAnchor.MiddleCenter;
         statusText.fontStyle = FontStyle.Bold;
         SetAnchors(statusText.GetComponent<RectTransform>(),
@@ -199,12 +199,12 @@ public class AiChallengePad : MonoBehaviour
 
         // Run button
         runButton = AddButton(padPanel.transform, "▶  Run",
-            new Color(0.18f, 0.42f, 0.18f), new Vector2(0.35f, 0.04f), new Vector2(0.65f, 0.12f));
+            new Color(0.18f, 0.42f, 0.18f), new Vector2(0.35f, 0.04f), new Vector2(0.65f, 0.12f), 28);
         runButton.onClick.AddListener(OnRunClicked);
 
         // Exit button
         var exitBtn = AddButton(padPanel.transform, "✕  Exit",
-            new Color(0.35f, 0.1f, 0.1f), new Vector2(0.80f, 0.04f), new Vector2(0.99f, 0.12f));
+            new Color(0.35f, 0.1f, 0.1f), new Vector2(0.80f, 0.04f), new Vector2(0.99f, 0.12f), 28);
         exitBtn.onClick.AddListener(OnExitClicked);
 
         padPanel.transform.parent.gameObject.SetActive(false); // hide canvas until needed
@@ -398,7 +398,7 @@ public class AiChallengePad : MonoBehaviour
         textGo.transform.SetParent(go.transform, false);
         var txt = textGo.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        txt.fontSize = 13;
+        txt.fontSize = 20;
         txt.color = new Color(0.9f, 0.95f, 1f);
         txt.supportRichText = false;
         var txtRt = textGo.GetComponent<RectTransform>();
@@ -411,7 +411,7 @@ public class AiChallengePad : MonoBehaviour
     }
 
     private static Button AddButton(Transform parent, string label, Color bg,
-        Vector2 anchorMin, Vector2 anchorMax)
+        Vector2 anchorMin, Vector2 anchorMax, int fontSize = 28)
     {
         var go = new GameObject("Button_" + label);
         go.transform.SetParent(parent, false);
@@ -426,7 +426,7 @@ public class AiChallengePad : MonoBehaviour
         txtGo.transform.SetParent(go.transform, false);
         var txt = txtGo.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        txt.text = label; txt.fontSize = 16;
+        txt.text = label; txt.fontSize = fontSize;
         txt.color = Color.white; txt.alignment = TextAnchor.MiddleCenter;
         var tRt = txtGo.GetComponent<RectTransform>();
         tRt.anchorMin = Vector2.zero; tRt.anchorMax = Vector2.one;

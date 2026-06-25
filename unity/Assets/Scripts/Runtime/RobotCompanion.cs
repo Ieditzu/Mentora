@@ -83,7 +83,9 @@ public class RobotCompanion : MonoBehaviour
 
     private Transform  player;
     private bool       snappedToPlayer;
-    private float      orbitAngle;       // current orbit angle in degrees around player
+    private float      orbitAngle;
+    private Rigidbody  rb;
+    private Vector3    bounceVelocity;   // extra velocity from collision impacts
     private GameObject bubble;
     private Text       bubbleText;
     private CanvasGroup bubbleCg;
@@ -104,6 +106,7 @@ public class RobotCompanion : MonoBehaviour
     {
         BuildBubble();
         ResolvePlayer();
+        SetupPhysics();
 
         if (GameClient.Instance != null)
             GameClient.Instance.OnPacketReceived += OnPacket;
@@ -145,13 +148,16 @@ public class RobotCompanion : MonoBehaviour
             + Vector3.up * (hoverHeight + bob)
             + orbitDir * followDistance;
 
-        // ── Smooth follow ────────────────────────────────────────────────────
+        // ── Smooth follow via Rigidbody velocity ─────────────────────────────
         float dist = Vector3.Distance(transform.position, targetPos);
-        if (dist > 0.05f)
-        {
-            transform.position = Vector3.Lerp(
-                transform.position, targetPos, followSpeed * Time.deltaTime);
-        }
+        Vector3 desiredVel = (targetPos - transform.position) * followSpeed;
+        desiredVel += bounceVelocity;
+        bounceVelocity = Vector3.Lerp(bounceVelocity, Vector3.zero, 6f * Time.deltaTime);
+
+        if (rb != null)
+            rb.velocity = Vector3.Lerp(rb.velocity, desiredVel, followSpeed * Time.deltaTime);
+        else
+            transform.position = Vector3.Lerp(transform.position, targetPos, followSpeed * Time.deltaTime);
 
         // ── Face the player's head — use the FPS camera, not Camera.main ────────
         // Camera.main in this project is an overview cam far from the player.
@@ -180,6 +186,41 @@ public class RobotCompanion : MonoBehaviour
             bubble.transform.rotation = Quaternion.LookRotation(
                 bubble.transform.position - fpsCamForBubble.transform.position);
         }
+    }
+
+    // ── Physics setup ────────────────────────────────────────────────────────
+
+    private void SetupPhysics()
+    {
+        // Sphere collider — small so she doesn't snag on doorframes
+        var col = gameObject.AddComponent<SphereCollider>();
+        col.radius = 0.4f;
+        col.center = Vector3.zero;
+
+        // Bouncy physics material
+        var mat = new PhysicMaterial("ARIABounce");
+        mat.bounciness         = 0.72f;
+        mat.dynamicFriction    = 0.05f;
+        mat.staticFriction     = 0.05f;
+        mat.bounceCombine      = PhysicMaterialCombine.Maximum;
+        mat.frictionCombine    = PhysicMaterialCombine.Minimum;
+        col.material = mat;
+
+        // Non-kinematic Rigidbody — gravity OFF, she floats
+        rb = gameObject.AddComponent<Rigidbody>();
+        rb.useGravity  = false;
+        rb.drag        = 3f;      // damps velocity quickly so she doesn't drift forever
+        rb.angularDrag = 999f;    // we control rotation manually
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
+    }
+
+    private void OnCollisionEnter(Collision col)
+    {
+        // Bounce away from whatever was hit
+        Vector3 bounce = col.contacts[0].normal * 4.5f;
+        bounce.y = Mathf.Abs(bounce.y) + 1.5f; // always bounce a bit upward
+        bounceVelocity = bounce;
     }
 
     // ── Speech bubble builder ────────────────────────────────────────────────
