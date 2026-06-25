@@ -6,29 +6,19 @@ public static class FpsBootstrap
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Spawn()
     {
-        // If a bean-based player already exists in the scene, keep using it and avoid spawning a duplicate FPS rig.
-        if (Object.FindObjectOfType<BeanController>() != null)
-        {
-            return;
-        }
+        // FPS_Player is now a permanent scene object — no runtime spawning needed.
+        // This method is kept only to attach the bean body and camera culling mask
+        // in case the scene object's Start() hasn't done so yet.
+        var fps = Object.FindObjectOfType<FirstPersonControllerSimple>();
+        if (fps == null) return;
 
-        if (Object.FindObjectOfType<FirstPersonControllerSimple>() != null)
-        {
-            return;
-        }
+        // If bean body doesn't exist yet (fresh scene start), add it
+        if (fps.transform.Find("BeanBody") == null)
+            AddBeanBody(fps.gameObject, fps.GetComponent<CharacterController>());
 
-        Vector3 spawnPos = GuessSpawnPosition();
-        GameObject player = new GameObject("FPS_Player");
-        CharacterController cc = player.AddComponent<CharacterController>();
-        cc.height = 1.42f;
-        cc.radius = 0.18f;
-        cc.center = new Vector3(0f, cc.height * 0.5f, 0f);
-
-        player.transform.position = spawnPos;
-        player.AddComponent<FirstPersonControllerSimple>();
-        AddBeanBody(player, cc);
-
-        // Ensure the bean is not disabled when FPS is spawned!
+        // Always ensure FP camera excludes layer 3 (PlayerBody)
+        var fpCam = fps.GetComponentInChildren<Camera>();
+        if (fpCam != null) fpCam.cullingMask &= ~(1 << 3);
     }
 
     private static void AddBeanBody(GameObject player, CharacterController cc)

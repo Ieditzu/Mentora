@@ -82,7 +82,8 @@ public class RobotCompanion : MonoBehaviour
     // ── Internal ─────────────────────────────────────────────────────────────
 
     private Transform  player;
-    private bool       snappedToPlayer;  // first-frame teleport so ARIA starts next to player
+    private bool       snappedToPlayer;
+    private float      orbitAngle;       // current orbit angle in degrees around player
     private GameObject bubble;
     private Text       bubbleText;
     private CanvasGroup bubbleCg;
@@ -125,22 +126,24 @@ public class RobotCompanion : MonoBehaviour
     {
         if (player == null) { ResolvePlayer(); return; }
 
-        // ── Snap to player on first frame so ARIA never rubber-bands from afar ─
+        // ── Snap to player on first frame ────────────────────────────────────
         if (!snappedToPlayer)
         {
             snappedToPlayer = true;
-            Vector3 sideForwardSnap = (player.forward + player.right).normalized;
-            transform.position = player.position + Vector3.up * hoverHeight + sideForwardSnap * followDistance;
+            orbitAngle = 45f;
+            Vector3 snapDir = Quaternion.Euler(0f, orbitAngle, 0f) * Vector3.forward;
+            transform.position = player.position + Vector3.up * hoverHeight + snapDir * followDistance;
         }
 
-        // ── Float target position ─────────────────────────────────────────────
-        // Stay forward-right so ARIA is always in the player's field of view.
-        // 45° between forward and right = always visible without blocking the view.
+        // ── Orbit slowly so ARIA is never locked to one corner ───────────────
+        // ~15°/sec = full orbit every 24s, always drifting into new positions
+        orbitAngle = (orbitAngle + 15f * Time.deltaTime) % 360f;
+
         float bob = Mathf.Sin(Time.time * bobSpeed) * bobAmplitude;
-        Vector3 sideForward = (player.forward + player.right).normalized; // 45° forward-right
+        Vector3 orbitDir = Quaternion.Euler(0f, orbitAngle, 0f) * Vector3.forward;
         Vector3 targetPos = player.position
             + Vector3.up * (hoverHeight + bob)
-            + sideForward * followDistance;
+            + orbitDir * followDistance;
 
         // ── Smooth follow ────────────────────────────────────────────────────
         float dist = Vector3.Distance(transform.position, targetPos);
@@ -166,33 +169,41 @@ public class RobotCompanion : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
         }
 
-        // ── Bubble always faces camera ───────────────────────────────────────
-        if (bubble != null && bubble.activeSelf && Camera.main != null)
+        // ── Bubble: push in front of ARIA toward camera, always face camera ─────
+        var fpsCamForBubble = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
+        if (bubble != null && fpsCamForBubble != null)
+        {
+            // Offset bubble toward the camera so it floats in front of the robot
+            Vector3 toCamera = (fpsCamForBubble.transform.position - transform.position).normalized;
+            bubble.transform.position = transform.position + toCamera * 0.55f + Vector3.up * 0.3f;
+            // Face the camera
             bubble.transform.rotation = Quaternion.LookRotation(
-                bubble.transform.position - Camera.main.transform.position);
+                bubble.transform.position - fpsCamForBubble.transform.position);
+        }
     }
 
     // ── Speech bubble builder ────────────────────────────────────────────────
 
     private void BuildBubble()
     {
+        // Bubble is NOT parented to ARIA — we position it freely in Update()
+        // so it always floats between ARIA and the camera without clipping
         bubble = new GameObject("ARIA_Bubble");
-        bubble.transform.SetParent(transform, false);
-        bubble.transform.localPosition = new Vector3(0f, 2.6f, 0f);
+        bubble.transform.position = transform.position + Vector3.up * 0.5f;
 
         var canvas = bubble.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         var rt = bubble.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(340f, 90f);
-        rt.localScale = Vector3.one * 0.009f;
+        rt.sizeDelta = new Vector2(280f, 70f);
+        rt.localScale = Vector3.one * 0.007f;
 
         bubbleCg = bubble.AddComponent<CanvasGroup>();
 
-        // Dark rounded-ish background
+        // Solid dark background — fully opaque so text never clips into the robot
         var bg = new GameObject("BG");
         bg.transform.SetParent(bubble.transform, false);
         var bgImg = bg.AddComponent<Image>();
-        bgImg.color = new Color(0.06f, 0.04f, 0.14f, 0.92f);
+        bgImg.color = new Color(0.04f, 0.02f, 0.12f, 0.97f);
         var bgRt = bg.GetComponent<RectTransform>();
         bgRt.anchorMin = Vector2.zero; bgRt.anchorMax = Vector2.one;
         bgRt.offsetMin = bgRt.offsetMax = Vector2.zero;
@@ -203,9 +214,9 @@ public class RobotCompanion : MonoBehaviour
         var nameTxt = nameGo.AddComponent<Text>();
         nameTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         nameTxt.text = "ARIA";
-        nameTxt.fontSize = 14;
+        nameTxt.fontSize = 11;
         nameTxt.fontStyle = FontStyle.Bold;
-        nameTxt.color = new Color(0.7f, 0.5f, 1f);
+        nameTxt.color = new Color(0.85f, 0.65f, 1f);
         var nameRt = nameGo.GetComponent<RectTransform>();
         nameRt.anchorMin = new Vector2(0, 0.65f); nameRt.anchorMax = Vector2.one;
         nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, -4);
@@ -215,7 +226,7 @@ public class RobotCompanion : MonoBehaviour
         textGo.transform.SetParent(bubble.transform, false);
         bubbleText = textGo.AddComponent<Text>();
         bubbleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        bubbleText.fontSize = 13;
+        bubbleText.fontSize = 14;
         bubbleText.color = Color.white;
         bubbleText.alignment = TextAnchor.UpperLeft;
         bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
