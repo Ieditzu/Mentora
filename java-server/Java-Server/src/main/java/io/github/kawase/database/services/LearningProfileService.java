@@ -431,10 +431,10 @@ public class LearningProfileService {
             "Student profile:\n" + profileContext + "\n\n" +
             "Generate a " + safeLang + " challenge that targets their specific weak areas. " +
             "It should be solvable in 5-20 lines of code.\n\n" +
-            "Respond in EXACTLY this format (no markdown, no extra text):\n" +
-            "TITLE: [max 55 chars, e.g. \"Python AI Challenge: Fix the Loop\"]\n" +
-            "DESCRIPTION: [2-3 sentences: what the student must write or fix, and what the program should do]\n" +
-            "TEMPLATE: [the starter code — broken or incomplete, 5-15 lines]\n" +
+            "Respond in EXACTLY this format. No markdown. No code fences. No ``` anywhere. Plain text only:\n" +
+            "TITLE: [max 55 chars]\n" +
+            "DESCRIPTION: [2-3 sentences: what the student must write or fix]\n" +
+            "TEMPLATE: [raw source code only — NO backticks, NO ``` fences, just the code lines]\n" +
             "EXPECTED: [one sentence: what the correct output or behavior should be]\n" +
             "POINTS: [integer: 15, 20, 25, or 30]\n";
 
@@ -459,7 +459,14 @@ public class LearningProfileService {
                 int next = raw.indexOf(markers[i + 1]);
                 if (next != -1) end = next;
             }
-            result.put(keys[i], raw.substring(start, end).trim());
+            String value = raw.substring(start, end).trim();
+
+            // Strip markdown code fences the LLM sometimes adds (```python ... ``` etc.)
+            if (keys[i].equals("codeTemplate")) {
+                value = stripCodeFences(value);
+            }
+
+            result.put(keys[i], value);
         }
 
         // Validate points is a sane integer
@@ -481,6 +488,16 @@ public class LearningProfileService {
      * "idle", "entering_python", "entering_cpp", "task_complete", "hint_requested"
      * Returns a two-element array: [line, emotion] or null on failure.
      */
+    private String stripCodeFences(final String value) {
+        if (value == null) return "";
+        String s = value.trim();
+        // Remove opening fence: ```python, ```cpp, ```c++, ``` (with any language tag)
+        s = s.replaceAll("(?m)^```[a-zA-Z+#]*\\s*\\n?", "");
+        // Remove closing fence
+        s = s.replaceAll("(?m)^```\\s*$", "");
+        return s.trim();
+    }
+
     @Transactional(readOnly = true)
     public String[] generateCompanionLine(final Long childId, final String trigger) {
         String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
