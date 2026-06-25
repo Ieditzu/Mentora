@@ -118,7 +118,14 @@ public class AiChallengePad : MonoBehaviour
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 50;
         canvasGo.AddComponent<GraphicRaycaster>();
-        // Only add EventSystem if there isn't one already in the scene
+
+        // Scale UI with screen size so it looks correct at any resolution
+        var scaler = canvasGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+
         if (FindObjectOfType<UnityEngine.EventSystems.EventSystem>() == null)
             canvasGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
 
