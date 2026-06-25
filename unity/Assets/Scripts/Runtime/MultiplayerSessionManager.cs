@@ -175,16 +175,25 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private void InterpolateRemoteAvatars()
     {
-        // Smooth = 20 means the avatar covers ~63% of the remaining gap per second,
-        // giving fluid motion at 66 Hz send rate with no visible rubber-banding.
-        const float posSpeed = 20f;
-        const float rotSpeed = 20f;
+        const float posSpeed = 60f;
+        const float rotSpeed = 40f;
         float dt = Time.unscaledDeltaTime;
 
         foreach (RemoteAvatar avatar in remoteAvatars.Values)
         {
             if (avatar == null || avatar.Root == null || !avatar.HasFirstPacket)
             {
+                continue;
+            }
+
+            float dist = Vector3.Distance(avatar.Root.transform.position, avatar.TargetPosition);
+
+            // If we're more than 2 units behind just snap — avoids visible lag spikes
+            // after a packet loss or stall.
+            if (dist > 2f)
+            {
+                avatar.Root.transform.position = avatar.TargetPosition;
+                avatar.Root.transform.rotation = Quaternion.Euler(0f, avatar.TargetYaw, 0f);
                 continue;
             }
 
