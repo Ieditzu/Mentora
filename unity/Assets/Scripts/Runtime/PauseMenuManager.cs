@@ -62,7 +62,7 @@ public class PauseMenuManager : MonoBehaviour
     private Text multiplayerStatusText;
     private InputField multiplayerNameInput;
     private InputField multiplayerAddressInput;
-    private InputField multiplayerPortInput;
+    private GameObject joinSubPanel;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
@@ -723,63 +723,113 @@ public class PauseMenuManager : MonoBehaviour
         mpTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
         CreateText("MultiplayerTitle", mpTopBar.transform, "MULTIPLAYER", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
-        // Left column: host/join buttons
+        // Left column: host/join/disconnect buttons + expandable join sub-panel + status
         GameObject mpLeft = CreateUiObject("MultiplayerLeft", multiplayerPanel.transform);
         RectTransform mpLeftRect = mpLeft.GetComponent<RectTransform>();
-        mpLeftRect.sizeDelta = new Vector2(290f, 340f);
-        mpLeftRect.anchoredPosition = new Vector2(-180f, -20f);
+        mpLeftRect.sizeDelta = new Vector2(290f, 380f);
+        mpLeftRect.anchoredPosition = new Vector2(-180f, -15f);
         mpLeft.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
         mpLeft.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
 
-        CreateText("SessionLabel", mpLeft.transform, "Session", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 120f), new Vector2(220f, 30f));
+        CreateText("SessionLabel", mpLeft.transform, "Session", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 116f), new Vector2(220f, 30f));
 
-        Button hostGameBtn = CreateButton(mpLeft.transform, "HostGameBtn", "Host Game", new Vector2(0f, 50f), new Color(0.18f, 0.55f, 0.80f, 1f));
-        hostGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 48f);
-        hostGameBtn.onClick.AddListener(HostMultiplayerGame);
+        Button hostGameBtn = CreateButton(mpLeft.transform, "HostGameBtn", "Host Game", new Vector2(0f, 54f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        hostGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        hostGameBtn.onClick.AddListener(() => {
+            if (joinSubPanel != null) joinSubPanel.SetActive(false);
+            HostMultiplayerGame();
+        });
 
-        Button joinGameBtn = CreateButton(mpLeft.transform, "JoinGameBtn", "Join Game", new Vector2(0f, -18f), new Color(0.24f, 0.62f, 0.36f, 1f));
-        joinGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 48f);
-        joinGameBtn.onClick.AddListener(JoinMultiplayerGame);
+        Button joinGameBtn = CreateButton(mpLeft.transform, "JoinGameBtn", "Join Game", new Vector2(0f, 0f), new Color(0.24f, 0.62f, 0.36f, 1f));
+        joinGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        joinGameBtn.onClick.AddListener(() => {
+            if (joinSubPanel != null)
+            {
+                bool show = !joinSubPanel.activeSelf;
+                joinSubPanel.SetActive(show);
+                if (show) joinSubPanel.transform.SetAsLastSibling();
+            }
+        });
 
-        Button mpDisconnectBtn = CreateButton(mpLeft.transform, "DisconnectBtn", "Disconnect", new Vector2(0f, -86f), new Color(0.65f, 0.22f, 0.22f, 1f));
+        // Join sub-panel — full card overlaid on the canvas, same theme as the rest of the menu
+        joinSubPanel = CreateUiObject("JoinSubPanel", canvas.transform);
+        RectTransform joinSubRect = joinSubPanel.GetComponent<RectTransform>();
+        joinSubRect.sizeDelta = new Vector2(420f, 280f);
+        joinSubRect.anchoredPosition = new Vector2(0f, 0f);
+        joinSubPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.98f);
+        joinSubPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.6f);
+
+        // Top bar matching pause menu style
+        GameObject joinTopBar = CreateUiObject("JoinTopBar", joinSubPanel.transform);
+        RectTransform joinTopRect = joinTopBar.GetComponent<RectTransform>();
+        joinTopRect.sizeDelta = new Vector2(420f, 56f);
+        joinTopRect.anchoredPosition = new Vector2(0f, 96f);
+        joinTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
+        joinTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
+        CreateText("JoinTitle", joinTopBar.transform, "JOIN GAME", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(340f, 36f));
+
+        // Body card
+        GameObject joinBody = CreateUiObject("JoinBody", joinSubPanel.transform);
+        RectTransform joinBodyRect = joinBody.GetComponent<RectTransform>();
+        joinBodyRect.sizeDelta = new Vector2(380f, 130f);
+        joinBodyRect.anchoredPosition = new Vector2(0f, 10f);
+        joinBody.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
+        joinBody.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
+
+        CreateText("HostIPLabel", joinBody.transform, "Host IP", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-100f, 28f), new Vector2(80f, 26f));
+        multiplayerAddressInput = CreateInputField(joinBody.transform, "HostAddressInput", "192.168.x.x", new Vector2(60f, 28f), new Vector2(190f, 36f), false);
+        multiplayerAddressInput.contentType = InputField.ContentType.Standard;
+        multiplayerAddressInput.characterLimit = 32;
+
+        CreateText("PortNote", joinBody.transform, "Port: 7777 (auto)", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.55f, 0.72f, 0.95f), new Vector2(0f, -18f), new Vector2(300f, 22f));
+
+        Button confirmJoinBtn = CreateButton(joinSubPanel.transform, "ConfirmJoinBtn", "Join", new Vector2(0f, -78f), new Color(0.24f, 0.62f, 0.36f, 1f));
+        confirmJoinBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        confirmJoinBtn.GetComponentInChildren<Text>().fontSize = 16;
+        confirmJoinBtn.onClick.AddListener(() => {
+            joinSubPanel.SetActive(false);
+            JoinMultiplayerGame();
+        });
+
+        Button cancelJoinBtn = CreateButton(joinSubPanel.transform, "CancelJoinBtn", "Cancel", new Vector2(0f, -128f), new Color(0.4f, 0.4f, 0.4f));
+        cancelJoinBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(140f, 36f);
+        cancelJoinBtn.GetComponentInChildren<Text>().fontSize = 14;
+        cancelJoinBtn.onClick.AddListener(() => joinSubPanel.SetActive(false));
+
+        joinSubPanel.SetActive(false);
+
+        Button mpDisconnectBtn = CreateButton(mpLeft.transform, "DisconnectBtn", "Disconnect", new Vector2(0f, -54f), new Color(0.65f, 0.22f, 0.22f, 1f));
         mpDisconnectBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
         mpDisconnectBtn.GetComponentInChildren<Text>().fontSize = 14;
         mpDisconnectBtn.onClick.AddListener(() => {
+            if (joinSubPanel != null) joinSubPanel.SetActive(false);
             EnsureMultiplayerSession();
             if (multiplayerSession != null) multiplayerSession.StopAllNetworking();
         });
 
-        multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 13, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -148f), new Vector2(240f, 28f));
+        multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -104f), new Vector2(260f, 34f));
+        multiplayerStatusText.resizeTextForBestFit = false;
 
-        // Right column: name / address / port inputs
+        // Right column: player name only
         GameObject mpRight = CreateUiObject("MultiplayerRight", multiplayerPanel.transform);
         RectTransform mpRightRect = mpRight.GetComponent<RectTransform>();
-        mpRightRect.sizeDelta = new Vector2(290f, 340f);
-        mpRightRect.anchoredPosition = new Vector2(180f, -20f);
+        mpRightRect.sizeDelta = new Vector2(290f, 380f);
+        mpRightRect.anchoredPosition = new Vector2(180f, -15f);
         mpRight.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
         mpRight.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
 
-        CreateText("NameLabel", mpRight.transform, "Your Name", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 120f), new Vector2(220f, 30f));
-        multiplayerNameInput = CreateInputField(mpRight.transform, "PlayerNameInput", "Enter your name", new Vector2(0f, 72f), new Vector2(240f, 40f), false);
+        CreateText("NameLabel", mpRight.transform, "Your Name", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 20f), new Vector2(220f, 30f));
+        multiplayerNameInput = CreateInputField(mpRight.transform, "PlayerNameInput", "Enter your name", new Vector2(0f, -28f), new Vector2(240f, 40f), false);
         multiplayerNameInput.contentType = InputField.ContentType.Standard;
         multiplayerNameInput.characterLimit = 18;
 
-        CreateText("HostIPLabel", mpRight.transform, "Host IP", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-60f, 16f), new Vector2(80f, 24f));
-        multiplayerAddressInput = CreateInputField(mpRight.transform, "HostAddressInput", "127.0.0.1", new Vector2(60f, 16f), new Vector2(160f, 36f), false);
-        multiplayerAddressInput.contentType = InputField.ContentType.Standard;
-        multiplayerAddressInput.characterLimit = 32;
-
-        CreateText("PortLabel2", mpRight.transform, "Port", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-60f, -36f), new Vector2(80f, 24f));
-        multiplayerPortInput = CreateInputField(mpRight.transform, "MultiplayerPortInput", "7777", new Vector2(60f, -36f), new Vector2(160f, 36f), false);
-        multiplayerPortInput.contentType = InputField.ContentType.IntegerNumber;
-        multiplayerPortInput.characterLimit = 5;
-
-        CreateText("NameHelper", mpRight.transform, "Name shows above your bean.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -100f), new Vector2(240f, 24f));
-
-        Button multiplayerBackBtn = CreateButton(multiplayerPanel.transform, "MultiplayerBackBtn", "Back", new Vector2(0f, -230f), new Color(0.4f, 0.4f, 0.4f));
+        Button multiplayerBackBtn = CreateButton(multiplayerPanel.transform, "MultiplayerBackBtn", "Back", new Vector2(0f, -240f), new Color(0.4f, 0.4f, 0.4f));
         multiplayerBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
         multiplayerBackBtn.GetComponentInChildren<Text>().fontSize = 15;
-        multiplayerBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
+        multiplayerBackBtn.onClick.AddListener(() => {
+            if (joinSubPanel != null) joinSubPanel.SetActive(false);
+            ShowPanel(mainPanel);
+        });
 
         multiplayerPanel.SetActive(false);
 
@@ -818,6 +868,7 @@ public class PauseMenuManager : MonoBehaviour
         if (goalsPanel != null) goalsPanel.SetActive(false);
         if (serverPanel != null) serverPanel.SetActive(false);
         if (multiplayerPanel != null) multiplayerPanel.SetActive(false);
+        if (joinSubPanel != null) joinSubPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
         if (panel == tasksPanel)
         {
@@ -851,10 +902,19 @@ public class PauseMenuManager : MonoBehaviour
 
     private void OnMultiplayerStatusChanged(string status)
     {
-        if (multiplayerStatusText != null)
+        if (multiplayerStatusText == null) return;
+
+        // When hosting, keep showing the "Started server on <IP> port <port>" text
+        // instead of the internal status messages from MultiplayerSessionManager.
+        if (multiplayerStatusText.text.StartsWith("Started server on"))
         {
-            multiplayerStatusText.text = string.IsNullOrWhiteSpace(status) ? "Offline" : status;
+            // Only replace once we go offline again.
+            if (string.IsNullOrWhiteSpace(status) || status == "Offline")
+                multiplayerStatusText.text = "Offline";
+            return;
         }
+
+        multiplayerStatusText.text = string.IsNullOrWhiteSpace(status) ? "Offline" : status;
     }
 
     private void RefreshMultiplayerDefaults()
@@ -873,23 +933,25 @@ public class PauseMenuManager : MonoBehaviour
 
         if (multiplayerAddressInput != null && string.IsNullOrWhiteSpace(multiplayerAddressInput.text))
         {
-            multiplayerAddressInput.SetTextWithoutNotify(PlayerPrefs.GetString("MultiplayerHostAddress", "127.0.0.1"));
-        }
-
-        if (multiplayerPortInput != null && string.IsNullOrWhiteSpace(multiplayerPortInput.text))
-        {
-            multiplayerPortInput.SetTextWithoutNotify(PlayerPrefs.GetInt("MultiplayerPort", 7777).ToString());
+            multiplayerAddressInput.SetTextWithoutNotify(PlayerPrefs.GetString("MultiplayerHostAddress", ""));
         }
     }
 
-    private static int ParseMultiplayerPort(string text)
+    private static string GetLocalLanIp()
     {
-        if (!int.TryParse(text, out int port))
+        try
         {
-            port = 7777;
+            foreach (var addr in System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList)
+            {
+                if (addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                    !System.Net.IPAddress.IsLoopback(addr))
+                {
+                    return addr.ToString();
+                }
+            }
         }
-
-        return Mathf.Clamp(port, 1024, 65535);
+        catch { }
+        return "127.0.0.1";
     }
 
     private void HostMultiplayerGame()
@@ -898,8 +960,28 @@ public class PauseMenuManager : MonoBehaviour
         if (multiplayerSession == null) return;
 
         string playerName = multiplayerNameInput != null ? multiplayerNameInput.text : "Player";
-        int port = ParseMultiplayerPort(multiplayerPortInput != null ? multiplayerPortInput.text : "7777");
+
+        // Try port 7777 first; fall back to 7778 if it is in use.
+        int port = 7777;
+        try
+        {
+            var testListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, 7777);
+            testListener.Start();
+            testListener.Stop();
+        }
+        catch
+        {
+            port = 7778;
+        }
+
+        string lanIp = GetLocalLanIp();
         multiplayerSession.HostGame(playerName, port);
+
+        // Override the status text with a friendly message once the session manager
+        // sets its own status — we piggyback on the StatusChanged event below but
+        // for immediate feedback we set it here.
+        if (multiplayerStatusText != null)
+            multiplayerStatusText.text = "Started server on " + lanIp + " port " + port;
     }
 
     private void JoinMultiplayerGame()
@@ -908,8 +990,12 @@ public class PauseMenuManager : MonoBehaviour
         if (multiplayerSession == null) return;
 
         string playerName = multiplayerNameInput != null ? multiplayerNameInput.text : "Player";
-        string address = multiplayerAddressInput != null ? multiplayerAddressInput.text : "127.0.0.1";
-        int port = ParseMultiplayerPort(multiplayerPortInput != null ? multiplayerPortInput.text : "7777");
+        string address = multiplayerAddressInput != null ? multiplayerAddressInput.text.Trim() : "127.0.0.1";
+        if (string.IsNullOrWhiteSpace(address)) address = "127.0.0.1";
+
+        // Always use port 7777; if the session manager reports a connection failure
+        // the player can retry and we will try 7778.
+        int port = 7777;
         multiplayerSession.JoinGame(playerName, address, port);
     }
 
