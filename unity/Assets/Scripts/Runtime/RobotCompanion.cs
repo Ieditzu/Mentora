@@ -139,26 +139,25 @@ public class RobotCompanion : MonoBehaviour
             transform.position = player.position + Vector3.up * hoverHeight + snapDir * followDistance;
         }
 
-        // ── Orbit slowly so ARIA is never locked to one corner ───────────────
-        // ~15°/sec = full orbit every 24s, always drifting into new positions
-        orbitAngle = (orbitAngle + 15f * Time.deltaTime) % 360f;
+        // ── Orbit slowly — smooth world-space angle, no snapping ─────────────
+        orbitAngle = (orbitAngle + 12f * Time.deltaTime) % 360f;
 
-        float bob = Mathf.Sin(Time.time * bobSpeed) * bobAmplitude;
-        Vector3 orbitDir = Quaternion.Euler(0f, orbitAngle, 0f) * Vector3.forward;
+        float bob        = Mathf.Sin(Time.time * bobSpeed) * bobAmplitude;
+        Vector3 orbitDir  = Quaternion.Euler(0f, orbitAngle, 0f) * Vector3.forward;
         Vector3 targetPos = player.position
             + Vector3.up * (hoverHeight + bob)
             + orbitDir * followDistance;
 
-        // ── Smooth follow via Rigidbody velocity ─────────────────────────────
-        float dist = Vector3.Distance(transform.position, targetPos);
-        Vector3 desiredVel = (targetPos - transform.position) * followSpeed;
-        desiredVel += bounceVelocity;
-        bounceVelocity = Vector3.Lerp(bounceVelocity, Vector3.zero, 6f * Time.deltaTime);
+        // ── Obstacle avoidance — steer around anything in the path ───────────
+        Vector3 moveDir  = (targetPos - transform.position).normalized;
+        float   moveDist = followSpeed * Time.deltaTime;
+        Vector3 steer    = SteerAround(transform.position, moveDir);
 
-        if (rb != null)
-            rb.velocity = Vector3.Lerp(rb.velocity, desiredVel, followSpeed * Time.deltaTime);
+        Vector3 next = transform.position + steer * moveDist;
+        if (rb != null && rb.isKinematic)
+            rb.MovePosition(next);
         else
-            transform.position = Vector3.Lerp(transform.position, targetPos, followSpeed * Time.deltaTime);
+            transform.position = next;
 
         // ── Face the player's head — use the FPS camera, not Camera.main ────────
         // Camera.main in this project is an overview cam far from the player.
@@ -172,8 +171,13 @@ public class RobotCompanion : MonoBehaviour
         if (lookDir.sqrMagnitude > 0.001f)
         {
             Quaternion desiredRot = Quaternion.LookRotation(lookDir.normalized);
-            desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(dist - followDistance));
-            transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
+            desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(
+                Vector3.Distance(transform.position, targetPos) - followDistance));
+            Quaternion smoothRot = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
+            if (rb != null && rb.isKinematic)
+                rb.MoveRotation(smoothRot);
+            else
+                transform.rotation = smoothRot;
         }
 
         // ── Nametag + Bubble — shared camera reference ────────────────────────
@@ -199,39 +203,92 @@ public class RobotCompanion : MonoBehaviour
         }
     }
 
+    // ── Obstacle avoidance ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// SphereCasts forward. If blocked, tries 8 escape directions (left, right,
+    /// up, diagonals). Returns the best clear direction, or the original if all
+    /// are blocked (so Rudolf at least doesn't clip — he'll slow to a crawl).
+    /// </summary>
+    private Vector3 SteerAround(Vector3 origin, Vector3 desired)
+    {
+        const float probeRadius  = 0.35f; // slightly smaller than the collider
+        const float probeLength  = 1.2f;  // how far ahead to look
+
+        // Happy path — nothing ahead
+        if (!Physics.SphereCast(origin, probeRadius, desired, out _, probeLength,
+                ~LayerMask.GetMask("Rudolf", "Ignore Raycast")))
+            return desired;
+
+        // Try escape directions in priority order
+        Vector3 right = Vector3.Cross(desired, Vector3.up).normalized;
+        Vector3[] candidates =
+        {
+            right,                                          // right
+            -right,                                         // left
+            Vector3.up,                                     // up
+            (right   + Vector3.up).normalized,              // right-up
+            (-right  + Vector3.up).normalized,              // left-up
+            (desired + Vector3.up).normalized,              // forward-up
+            (desired + right).normalized,                   // forward-right
+            (desired - right).normalized,                   // forward-left
+        };
+
+        foreach (var dir in candidates)
+        {
+            if (!Physics.SphereCast(origin, probeRadius, dir, out _, probeLength,
+                    ~LayerMask.GetMask("Rudolf", "Ignore Raycast")))
+                return dir;
+        }
+
+        // Everything blocked — move upward to escape
+        return Vector3.up;
+    }
+
     // ── Physics setup ────────────────────────────────────────────────────────
 
     private void SetupPhysics()
     {
-        // Sphere collider — small so she doesn't snag on doorframes
+        // Put Rudolf on his own layer so the SteerAround SphereCast (which masks
+        // out "Rudolf") never trips on his own collider while probing for walls.
+        int rudolfLayer = LayerMask.NameToLayer("Rudolf");
+        if (rudolfLayer >= 0) gameObject.layer = rudolfLayer;
+
         var col = gameObject.AddComponent<SphereCollider>();
         col.radius = 0.4f;
         col.center = Vector3.zero;
 
-        // Bouncy physics material
-        var mat = new PhysicMaterial("ARIABounce");
-        mat.bounciness         = 0.72f;
-        mat.dynamicFriction    = 0.05f;
-        mat.staticFriction     = 0.05f;
-        mat.bounceCombine      = PhysicMaterialCombine.Maximum;
-        mat.frictionCombine    = PhysicMaterialCombine.Minimum;
+        var mat = new PhysicMaterial("RudolfBounce");
+        mat.bounciness      = 0.75f;
+        mat.dynamicFriction = 0.05f;
+        mat.staticFriction  = 0.05f;
+        mat.bounceCombine   = PhysicMaterialCombine.Maximum;
+        mat.frictionCombine = PhysicMaterialCombine.Minimum;
         col.material = mat;
 
-        // Non-kinematic Rigidbody — gravity OFF, she floats
+        // Kinematic — we drive position manually, no physics fighting the movement
         rb = gameObject.AddComponent<Rigidbody>();
-        rb.useGravity  = false;
-        rb.drag        = 3f;      // damps velocity quickly so she doesn't drift forever
-        rb.angularDrag = 999f;    // we control rotation manually
-        rb.constraints = RigidbodyConstraints.FreezeRotation;
+        rb.useGravity    = false;
+        rb.isKinematic   = true;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
     }
 
     private void OnCollisionEnter(Collision col)
     {
-        // Bounce away from whatever was hit
-        Vector3 bounce = col.contacts[0].normal * 4.5f;
-        bounce.y = Mathf.Abs(bounce.y) + 1.5f; // always bounce a bit upward
-        bounceVelocity = bounce;
+        bounceVelocity = col.contacts[0].normal * 3.5f;
+        bounceVelocity.y = Mathf.Abs(bounceVelocity.y) + 1.2f;
+        // Briefly go non-kinematic so physics handles the bounce naturally
+        StartCoroutine(BounceRoutine());
+    }
+
+    private System.Collections.IEnumerator BounceRoutine()
+    {
+        rb.isKinematic = false;
+        rb.useGravity  = false;
+        rb.velocity    = bounceVelocity;
+        yield return new WaitForSeconds(0.45f);
+        rb.isKinematic = true;
+        bounceVelocity = Vector3.zero;
     }
 
     // ── Speech bubble builder ────────────────────────────────────────────────

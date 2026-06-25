@@ -65,6 +65,17 @@ public sealed class VrHandTracking : MonoBehaviour
 
     private void Update()
     {
+        // Hand-tracking visuals are built in Awake. If they're missing, this
+        // instance never finished initializing (e.g. running on desktop with no
+        // VR runtime, where the OVR stack can fault during startup). Bail out so
+        // we don't spam NullReferenceExceptions every frame. Real VR builds
+        // complete Awake, so this guard never trips there.
+        if (leftVisual?.Root == null || rightVisual?.Root == null ||
+            leftRayVisual?.Root == null || rightRayVisual?.Root == null)
+        {
+            return;
+        }
+
         TryConfigureRuntimeHandMode();
 
         cachedFps = PlayerCache.GetFps();

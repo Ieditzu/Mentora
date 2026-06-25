@@ -112,6 +112,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     private string hostAddress = "127.0.0.1";
     private int hostPort = DefaultPort;
     private float lastSendTime = -999f;
+    private readonly SemaphoreSlim clientSendLock = new SemaphoreSlim(1, 1);
+    private int stateSendInFlight;
     private bool localLabelAttached;
     private Transform localNameLabelRoot;
     private TextMesh localNameLabelText;
@@ -649,15 +651,31 @@ public class MultiplayerSessionManager : MonoBehaviour
             return;
         }
 
-        Transform player = PlayerCache.ResolvePlayerTransform();
-        if (player == null)
+        // Drop this tick if the previous state send is still in flight. Player
+        // state is latest-wins, so skipping a stale frame is correct — and it
+        // stops a backlog of overlapping writes from piling up at the ~66 Hz
+        // send rate, which is what was corrupting the stream and desyncing.
+        if (Interlocked.Exchange(ref stateSendInFlight, 1) == 1)
         {
             return;
         }
 
-        Vector3 position = player.position;
-        float yaw = player.eulerAngles.y;
-        await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
+        try
+        {
+            Transform player = PlayerCache.ResolvePlayerTransform();
+            if (player == null)
+            {
+                return;
+            }
+
+            Vector3 position = player.position;
+            float yaw = player.eulerAngles.y;
+            await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
+        }
+        finally
+        {
+            Interlocked.Exchange(ref stateSendInFlight, 0);
+        }
     }
 
     private async Task SendClientPacketAsync(Packet packet)
@@ -674,12 +692,16 @@ public class MultiplayerSessionManager : MonoBehaviour
         Buffer.BlockCopy(payload, 0, frame, 4, payload.Length);
 
         NetworkStream stream = clientStream;
-        CancellationTokenSource cts = clientCts;
-        if (stream == null || cts == null)
+        if (stream == null)
         {
             return;
         }
 
+        // Serialize every write to the client socket. Without this, the periodic
+        // state send and the join handshake can issue overlapping WriteAsync
+        // calls on the same NetworkStream, interleaving the length-prefixed
+        // frames and permanently desyncing the receiver's frame parser.
+        await clientSendLock.WaitAsync();
         try
         {
             await stream.WriteAsync(frame, 0, frame.Length, CancellationToken.None);
@@ -687,6 +709,10 @@ public class MultiplayerSessionManager : MonoBehaviour
         catch (Exception ex)
         {
             EnqueueMainThread(() => SetStatus("Send failed: " + ex.Message));
+        }
+        finally
+        {
+            clientSendLock.Release();
         }
     }
 
