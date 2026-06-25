@@ -523,26 +523,44 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private RemoteAvatar CreateRemoteAvatar(string playerName)
     {
-        GameObject root = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        root.name = "RemoteBean_" + playerName;
-        root.transform.localScale = new Vector3(1.3f, 1.7f, 1.3f);
+        GameObject root = new GameObject("RemoteBean_" + playerName);
 
-        Collider collider = root.GetComponent<Collider>();
-        if (collider != null)
+        GameObject beanPrefab = Resources.Load<GameObject>("Characters/SM_Bean_Female_01");
+        if (beanPrefab != null)
         {
-            Destroy(collider);
+            GameObject body = UnityEngine.Object.Instantiate(beanPrefab, root.transform);
+            body.name = "BeanBody";
+            body.transform.localPosition = Vector3.zero;
+            body.transform.localRotation = Quaternion.identity;
+            body.transform.localScale = Vector3.one * 2.2f;
+
+            foreach (Collider col in body.GetComponentsInChildren<Collider>())
+            {
+                Destroy(col);
+            }
         }
-
-        Renderer renderer = root.GetComponent<Renderer>();
-        if (renderer != null)
+        else
         {
-            Material material = CreateBeanMaterial(playerName);
-            renderer.material = material;
+            // Fallback: tinted capsule if prefab is missing
+            GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            capsule.transform.SetParent(root.transform, false);
+            capsule.transform.localScale = new Vector3(1.3f, 1.7f, 1.3f);
+            Collider col = capsule.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            Renderer rend = capsule.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                int hash = Mathf.Abs((playerName ?? "Player").GetHashCode());
+                float hue = (hash % 360) / 360f;
+                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                mat.color = Color.HSVToRGB(hue, 0.45f, 0.95f);
+                rend.material = mat;
+            }
         }
 
         GameObject labelRoot = new GameObject("NameLabel");
         labelRoot.transform.SetParent(root.transform, false);
-        labelRoot.transform.localPosition = new Vector3(0f, 2.35f, 0f);
+        labelRoot.transform.localPosition = new Vector3(0f, 2.4f, 0f);
         labelRoot.AddComponent<BillboardToCamera>();
 
         TextMesh textMesh = labelRoot.AddComponent<TextMesh>();
@@ -570,22 +588,6 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
 
         avatar.NameText.text = NormalizePlayerName(playerName);
-    }
-
-    private Material CreateBeanMaterial(string playerName)
-    {
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null)
-        {
-            shader = Shader.Find("Standard");
-        }
-
-        Material material = new Material(shader);
-        int hash = Mathf.Abs((playerName ?? "Player").GetHashCode());
-        float hue = (hash % 360) / 360f;
-        Color color = Color.HSVToRGB(hue, 0.45f, 0.95f);
-        material.color = color;
-        return material;
     }
 
     private void RemoveRemoteAvatar(string clientId)
