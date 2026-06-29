@@ -37,6 +37,9 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject goalsPanel;
     private GameObject serverPanel;
     private GameObject multiplayerPanel;
+    private GameObject hostGamePanel;
+    private GameObject quizOptionsPanel;
+    private Button quizOptionsButton;
     private MultiplayerSessionManager multiplayerSession;
 
     private CanvasGroup menuGroup;
@@ -737,7 +740,7 @@ public class PauseMenuManager : MonoBehaviour
         hostGameBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
         hostGameBtn.onClick.AddListener(() => {
             if (joinSubPanel != null) joinSubPanel.SetActive(false);
-            HostMultiplayerGame();
+            ShowPanel(hostGamePanel);
         });
 
         Button joinGameBtn = CreateButton(mpLeft.transform, "JoinGameBtn", "Join Game", new Vector2(0f, 0f), new Color(0.24f, 0.62f, 0.36f, 1f));
@@ -803,6 +806,9 @@ public class PauseMenuManager : MonoBehaviour
         mpDisconnectBtn.GetComponentInChildren<Text>().fontSize = 14;
         mpDisconnectBtn.onClick.AddListener(() => {
             if (joinSubPanel != null) joinSubPanel.SetActive(false);
+            if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
+            PlayerPrefs.SetInt("MP_UseCustomSpawn", 0);
+            PlayerPrefs.Save();
             EnsureMultiplayerSession();
             if (multiplayerSession != null) multiplayerSession.StopAllNetworking();
         });
@@ -823,6 +829,13 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerNameInput.contentType = InputField.ContentType.Standard;
         multiplayerNameInput.characterLimit = 18;
 
+        // Quiz Options button — only visible to host when Quiz Island is selected
+        quizOptionsButton = CreateButton(mpRight.transform, "QuizOptionsBtn", "Quiz Options", new Vector2(0f, 100f), new Color(0.45f, 0.18f, 0.72f, 1f));
+        quizOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        quizOptionsButton.GetComponentInChildren<Text>().fontSize = 16;
+        quizOptionsButton.onClick.AddListener(() => ShowPanel(quizOptionsPanel));
+        quizOptionsButton.gameObject.SetActive(false);
+
         Button multiplayerBackBtn = CreateButton(multiplayerPanel.transform, "MultiplayerBackBtn", "Back", new Vector2(0f, -240f), new Color(0.4f, 0.4f, 0.4f));
         multiplayerBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
         multiplayerBackBtn.GetComponentInChildren<Text>().fontSize = 15;
@@ -833,7 +846,137 @@ public class PauseMenuManager : MonoBehaviour
 
         multiplayerPanel.SetActive(false);
 
-        // GOALS PANEL
+        // HOST GAME PANEL
+        hostGamePanel = CreateUiObject("HostGamePanel", canvas.transform);
+        RectTransform hostGameRect = hostGamePanel.GetComponent<RectTransform>();
+        hostGameRect.sizeDelta = new Vector2(720f, 560f);
+        hostGameRect.anchoredPosition = Vector2.zero;
+        hostGamePanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
+        hostGamePanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+
+        // Top bar
+        GameObject hgTopBar = CreateUiObject("TopBar", hostGamePanel.transform);
+        RectTransform hgTopRect = hgTopBar.GetComponent<RectTransform>();
+        hgTopRect.sizeDelta = new Vector2(720f, 88f);
+        hgTopRect.anchoredPosition = new Vector2(0f, 216f);
+        hgTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
+        hgTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
+        CreateText("HostGameTitle", hgTopBar.transform, "HOST GAME", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+
+        // Subtitle
+        CreateText("HostGameSub", hostGamePanel.transform, "Choose which island to host on:", 20, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.7f, 0.85f, 1f), new Vector2(0f, 140f), new Vector2(560f, 30f));
+
+        // Local Island button
+        Button localIslandBtn = CreateButton(hostGamePanel.transform, "LocalIslandBtn", "Local Island", new Vector2(0f, 60f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        localIslandBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
+        localIslandBtn.GetComponentInChildren<Text>().fontSize = 22;
+        localIslandBtn.onClick.AddListener(() => {
+            HostMultiplayerGame();
+            if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
+            PlayerPrefs.SetInt("MP_UseCustomSpawn", 0);
+            PlayerPrefs.Save();
+            ShowPanel(multiplayerPanel);
+        });
+
+        // Description under Local Island
+        CreateText("LocalIslandDesc", hostGamePanel.transform, "Host on the main island. Players spawn at the default location.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.6f, 0.75f, 0.9f), new Vector2(0f, 22f), new Vector2(500f, 26f));
+
+        // Quiz Island button
+        Button quizIslandBtn = CreateButton(hostGamePanel.transform, "QuizIslandBtn", "Quiz Island", new Vector2(0f, -60f), new Color(0.45f, 0.18f, 0.72f, 1f));
+        quizIslandBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
+        quizIslandBtn.GetComponentInChildren<Text>().fontSize = 22;
+        quizIslandBtn.onClick.AddListener(() => {
+            HostMultiplayerGame();
+            TeleportPlayerToQuizIsland();
+            if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(true);
+            ShowPanel(multiplayerPanel);
+        });
+
+        // Description under Quiz Island
+        CreateText("QuizIslandDesc", hostGamePanel.transform, "Host on the Quiz Island. All players will spawn there.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.6f, 1f), new Vector2(0f, -98f), new Vector2(500f, 26f));
+
+        // Back button
+        Button hgBackBtn = CreateButton(hostGamePanel.transform, "HGBackBtn", "Back", new Vector2(0f, -210f), new Color(0.4f, 0.4f, 0.4f));
+        hgBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
+        hgBackBtn.GetComponentInChildren<Text>().fontSize = 15;
+        hgBackBtn.onClick.AddListener(() => ShowPanel(multiplayerPanel));
+
+        hostGamePanel.SetActive(false);
+
+        // QUIZ OPTIONS PANEL — same size/theme as every other panel
+        quizOptionsPanel = CreateUiObject("QuizOptionsPanel", canvas.transform);
+        RectTransform qopRect = quizOptionsPanel.GetComponent<RectTransform>();
+        qopRect.sizeDelta = new Vector2(720f, 560f);
+        qopRect.anchoredPosition = Vector2.zero;
+        quizOptionsPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
+        quizOptionsPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+
+        // Top bar — identical to every other panel
+        GameObject qopTopBar = CreateUiObject("TopBar", quizOptionsPanel.transform);
+        RectTransform qopTopRect = qopTopBar.GetComponent<RectTransform>();
+        qopTopRect.sizeDelta = new Vector2(720f, 88f);
+        qopTopRect.anchoredPosition = new Vector2(0f, 216f);
+        qopTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
+        qopTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
+        CreateText("QOPTitle", qopTopBar.transform, "QUIZ OPTIONS", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f), Vector2.zero, new Vector2(480f, 52f));
+
+        // Left column: fetch + start controls
+        GameObject qopLeft = CreateUiObject("QOPLeft", quizOptionsPanel.transform);
+        RectTransform qopLeftRect = qopLeft.GetComponent<RectTransform>();
+        qopLeftRect.sizeDelta = new Vector2(290f, 380f);
+        qopLeftRect.anchoredPosition = new Vector2(-180f, -15f);
+        qopLeft.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
+        qopLeft.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
+
+        CreateText("QOPActionsLabel", qopLeft.transform, "Quiz Controls", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 116f), new Vector2(220f, 30f));
+
+        Button qopFetchBtn = CreateButton(qopLeft.transform, "FetchBtn", "↻  Fetch Quizzes", new Vector2(0f, 66f), new Color(0.18f, 0.45f, 0.72f, 1f));
+        qopFetchBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        qopFetchBtn.GetComponentInChildren<Text>().fontSize = 14;
+
+        Button qopStartBtn = CreateButton(qopLeft.transform, "StartBtn", "▶  Start Quiz", new Vector2(0f, 12f), new Color(0.18f, 0.63f, 0.30f, 1f));
+        qopStartBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        qopStartBtn.GetComponentInChildren<Text>().fontSize = 14;
+        qopStartBtn.interactable = false;
+
+        Button qopPrevBtn = CreateButton(qopLeft.transform, "PrevBtn", "◀", new Vector2(-70f, -42f), new Color(0.25f, 0.30f, 0.42f, 1f));
+        qopPrevBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(64f, 36f);
+        qopPrevBtn.gameObject.SetActive(false);
+
+        Button qopNextBtn = CreateButton(qopLeft.transform, "NextBtn", "▶", new Vector2(70f, -42f), new Color(0.25f, 0.30f, 0.42f, 1f));
+        qopNextBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(64f, 36f);
+        qopNextBtn.gameObject.SetActive(false);
+
+        // Right column: status + course list
+        GameObject qopRight = CreateUiObject("QOPRight", quizOptionsPanel.transform);
+        RectTransform qopRightRect = qopRight.GetComponent<RectTransform>();
+        qopRightRect.sizeDelta = new Vector2(290f, 380f);
+        qopRightRect.anchoredPosition = new Vector2(180f, -15f);
+        qopRight.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
+        qopRight.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
+
+        Text qopStatusTxt = CreateText("QOPStatus", qopRight.transform, "Press Fetch to load quizzes.", 13, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.88f, 1f), new Vector2(0f, 80f), new Vector2(250f, 60f));
+        qopStatusTxt.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+        Text qopCourseTxt = CreateText("QOPCourseList", qopRight.transform, "", 12, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.85f, 0.90f, 1f), new Vector2(0f, 0f), new Vector2(250f, 160f));
+        qopCourseTxt.horizontalOverflow = HorizontalWrapMode.Wrap;
+        qopCourseTxt.verticalOverflow   = VerticalWrapMode.Overflow;
+
+        Text qopSelectedTxt = CreateText("QOPSelected", qopRight.transform, "", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.4f, 1f, 0.55f), new Vector2(0f, -120f), new Vector2(260f, 34f));
+
+        // Back button
+        Button qopBackBtn = CreateButton(quizOptionsPanel.transform, "QOPBackBtn", "Back", new Vector2(0f, -240f), new Color(0.4f, 0.4f, 0.4f));
+        qopBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
+        qopBackBtn.GetComponentInChildren<Text>().fontSize = 15;
+        qopBackBtn.onClick.AddListener(() => ShowPanel(multiplayerPanel));
+
+        quizOptionsPanel.SetActive(false);
+
+        // Wire all quiz UI refs into MultiplayerQuizManager
+        MultiplayerQuizManager.InjectQuizUI(qopStatusTxt, qopCourseTxt, qopSelectedTxt,
+                                             qopFetchBtn, qopStartBtn, qopPrevBtn, qopNextBtn);
+        qopStartBtn.onClick.AddListener(MultiplayerQuizManager.HostStartQuiz);
+
         goalsPanel = CreateUiObject("GoalsPanel", canvas.transform);
         RectTransform goalsRect = goalsPanel.GetComponent<RectTransform>();
         goalsRect.sizeDelta = new Vector2(620f, 460f);
@@ -868,8 +1011,14 @@ public class PauseMenuManager : MonoBehaviour
         if (goalsPanel != null) goalsPanel.SetActive(false);
         if (serverPanel != null) serverPanel.SetActive(false);
         if (multiplayerPanel != null) multiplayerPanel.SetActive(false);
+        if (hostGamePanel != null) hostGamePanel.SetActive(false);
+        if (quizOptionsPanel != null) quizOptionsPanel.SetActive(false);
         if (joinSubPanel != null) joinSubPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
+
+        // Always keep cursor visible and unlocked while any menu panel is open
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
         if (panel == tasksPanel)
         {
             FetchProfilesForDevOptions();
@@ -982,6 +1131,23 @@ public class PauseMenuManager : MonoBehaviour
         // for immediate feedback we set it here.
         if (multiplayerStatusText != null)
             multiplayerStatusText.text = "Started server on " + lanIp + " port " + port;
+    }
+
+    private static readonly Vector3 QuizIslandSpawn = new Vector3(76f, 9f, 426f);
+
+    private static void TeleportPlayerToQuizIsland()
+    {
+        // Move the local player to the quiz island spawn point
+        Transform player = PlayerCache.ResolvePlayerTransform();
+        if (player != null)
+            player.position = QuizIslandSpawn;
+
+        // Store spawn so joining clients also spawn there
+        PlayerPrefs.SetFloat("MP_SpawnX", QuizIslandSpawn.x);
+        PlayerPrefs.SetFloat("MP_SpawnY", QuizIslandSpawn.y);
+        PlayerPrefs.SetFloat("MP_SpawnZ", QuizIslandSpawn.z);
+        PlayerPrefs.SetInt("MP_UseCustomSpawn", 1);
+        PlayerPrefs.Save();
     }
 
     private void JoinMultiplayerGame()

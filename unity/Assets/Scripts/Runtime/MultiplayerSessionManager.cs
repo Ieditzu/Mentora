@@ -281,6 +281,16 @@ public class MultiplayerSessionManager : MonoBehaviour
     }
 
     /// <summary>Host: send a quiz packet to all connected clients.</summary>
+    private static void ApplyCustomSpawnIfSet()
+    {
+        if (PlayerPrefs.GetInt("MP_UseCustomSpawn", 0) != 1) return;
+        float x = PlayerPrefs.GetFloat("MP_SpawnX", 0f);
+        float y = PlayerPrefs.GetFloat("MP_SpawnY", 0f);
+        float z = PlayerPrefs.GetFloat("MP_SpawnZ", 0f);
+        Transform player = PlayerCache.ResolvePlayerTransform();
+        if (player != null) player.position = new Vector3(x, y, z);
+    }
+
     public void BroadcastQuizPacket(Packet packet)
     {
         BroadcastServerPacket(packet);
@@ -545,15 +555,13 @@ public class MultiplayerSessionManager : MonoBehaviour
         switch (packet)
         {
             case MultiplayerWelcomePacket welcomePacket:
-                // Set localClientId on the receive thread immediately — the state-send
-                // loop checks it on the main thread, but the filter below also reads it
-                // from the receive thread, so volatile-ish assignment is fine for a string.
                 localClientId = welcomePacket.ClientId;
                 localPlayerName = NormalizePlayerName(welcomePacket.PlayerName);
                 EnqueueMainThread(() =>
                 {
                     RefreshLocalNameLabel();
                     SetStatus("Connected as " + localPlayerName);
+                    ApplyCustomSpawnIfSet();
                 });
                 break;
 

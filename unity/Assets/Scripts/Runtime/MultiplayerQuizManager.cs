@@ -40,24 +40,39 @@ public class MultiplayerQuizManager : MonoBehaviour
     private Text   theaterSubText;
     private Text[] theaterAnswerTexts = new Text[4];
     private Image[] theaterAnswerBgs  = new Image[4];
+    private int    hoveredAnswerIndex = -1;
 
-    // Personal answer tablet (screen-space)
-    private Canvas   answerCanvas;
-    private Text     answerTimerText;
-    private Text     answerQuestionText;
-    private Button[] answerButtons     = new Button[4];
-    private Text[]   answerButtonTexts = new Text[4];
-    private bool     answerLocked;
+    // Crosshair dot (tiny always-on screen-space canvas, just a white dot at center)
+    private Canvas crosshairCanvas;
+    private Image  crosshairDot;
+    private bool   quizInteractionActive;
+    private bool   answerLocked;
+    private int    lockedAnswerIndex = -1;
 
-    // Host panel
-    private Canvas hostCanvas;
+    // Host panel — UI references injected by PauseMenuManager
     private Text   hostStatusText;
-    private Text   courseListText;        // shows fetched course names
+    private Text   courseListText;
     private Button startQuizButton;
     private Button prevCourseButton;
     private Button nextCourseButton;
     private Text   selectedCourseLabel;
-    private bool   hostPanelOpen;
+
+    // Called by PauseMenuManager after it builds the quiz options panel
+    public static void InjectQuizUI(Text status, Text courseList, Text selectedLabel,
+                                     Button fetch, Button start, Button prev, Button next)
+    {
+        if (instance == null) return;
+        instance.hostStatusText      = status;
+        instance.courseListText      = courseList;
+        instance.selectedCourseLabel = selectedLabel;
+        instance.startQuizButton     = start;
+        instance.prevCourseButton    = prev;
+        instance.nextCourseButton    = next;
+        if (fetch != null) fetch.onClick.AddListener(instance.OnFetchCommunityClicked);
+        if (start != null) start.onClick.AddListener(instance.OnStartQuizClicked);
+        if (prev  != null) prev.onClick.AddListener(instance.OnPrevCourse);
+        if (next  != null) next.onClick.AddListener(instance.OnNextCourse);
+    }
 
     // Community courses
     private CourseItemDto[]  availableCourses;
@@ -77,6 +92,18 @@ public class MultiplayerQuizManager : MonoBehaviour
     private readonly Dictionary<string, int> scores         = new Dictionary<string, int>();
     private readonly Dictionary<string, int> pendingAnswers = new Dictionary<string, int>();
 
+    // ── Static entry point called from PauseMenuManager ──────────────────────
+
+    /// <summary>
+    /// Opens the host fetch panel so the host can load a community quiz and start it.
+    /// Called from the Quiz Options panel in the pause menu.
+    /// </summary>
+    public static void HostStartQuiz()
+    {
+        if (instance == null) return;
+        instance.isHost = true;
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     private void Awake()
@@ -88,8 +115,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private void Start()
     {
         BuildTheaterScreen();
-        BuildAnswerWindow();
-        BuildHostPanel();
+        BuildCrosshair();
         EnsureTrigger();
         SubscribeQuizPackets();
     }
@@ -102,21 +128,108 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     private void Update()
     {
-        if (!timerActive) return;
-        timerRemaining -= Time.deltaTime;
-
-        if (answerCanvas != null && answerCanvas.gameObject.activeSelf && answerTimerText != null)
+        if (timerActive)
         {
-            int secs = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
-            answerTimerText.text  = secs.ToString();
-            answerTimerText.color = timerRemaining < 5f ? new Color(1f, 0.3f, 0.3f) : Color.white;
+            timerRemaining -= Time.deltaTime;
+
+            // Show countdown on theater screen
+            if (theaterSubText != null && quizInteractionActive)
+            {
+                int secs = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
+                // Rebuild sub-text with live timer
+                int qNum = isHost ? currentQuestionIndex + 1 : currentQuestionIndex + 1;
+                theaterSubText.text  = "Question " + qNum + " of " + totalQuestions + "  |  " + secs + "s";
+                theaterSubText.color = timerRemaining < 5f ? new Color(1f, 0.4f, 0.4f) : new Color(0.7f, 0.7f, 1f);
+            }
+
+            if (timerRemaining <= 0f && isHost)
+            {
+                timerActive = false;
+                BroadcastResults();
+            }
         }
 
-        if (timerRemaining <= 0f && isHost)
+        if (quizInteractionActive)
         {
-            timerActive = false;
-            BroadcastResults();
+            UpdateCrosshairRaycast();
         }
+    }
+
+    private void UpdateCrosshairRaycast()
+    {
+        Camera cam = Camera.main ?? FindObjectOfType<Camera>();
+        if (cam == null) return;
+
+        // Show crosshair dot at screen center
+        if (crosshairDot != null)
+            crosshairDot.gameObject.SetActive(true);
+
+        // Raycast from screen center into the world
+        Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        int newHover = -1;
+
+        // Check each answer box collider on the theater screen
+        for (int i = 0; i < 4; i++)
+        {
+            if (theaterAnswerBgs[i] == null) continue;
+            RectTransform rt = theaterAnswerBgs[i].rectTransform;
+
+            // Get the 4 world-space corners of this answer box
+            Vector3[] corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+
+            // Build a plane from the first 3 corners
+            Vector3 normal = Vector3.Cross(corners[1] - corners[0], corners[3] - corners[0]).normalized;
+            Plane plane = new Plane(normal, corners[0]);
+
+            if (plane.Raycast(ray, out float dist))
+            {
+                Vector3 hit = ray.GetPoint(dist);
+                // Check if hit is inside the rect bounds
+                if (IsPointInRect(hit, corners))
+                {
+                    newHover = i;
+                    break;
+                }
+            }
+        }
+
+        // Update hover highlight
+        if (newHover != hoveredAnswerIndex)
+        {
+            // Restore old hover
+            if (hoveredAnswerIndex >= 0 && theaterAnswerBgs[hoveredAnswerIndex] != null)
+                theaterAnswerBgs[hoveredAnswerIndex].color = answerLocked
+                    ? (hoveredAnswerIndex == lockedAnswerIndex ? AnswerColors[hoveredAnswerIndex] : AnswerColors[hoveredAnswerIndex] * 0.35f)
+                    : AnswerColors[hoveredAnswerIndex] * 0.7f;
+
+            hoveredAnswerIndex = newHover;
+
+            // Brighten new hover
+            if (hoveredAnswerIndex >= 0 && theaterAnswerBgs[hoveredAnswerIndex] != null && !answerLocked)
+                theaterAnswerBgs[hoveredAnswerIndex].color = AnswerColors[hoveredAnswerIndex];
+        }
+
+        // Click to answer
+        if (!answerLocked && hoveredAnswerIndex >= 0 && UnityEngine.InputSystem.Mouse.current != null
+            && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            OnAnswerChosen(hoveredAnswerIndex);
+        }
+    }
+
+    private static bool IsPointInRect(Vector3 point, Vector3[] corners)
+    {
+        // corners: [0]=BL, [1]=TL, [2]=TR, [3]=BR
+        Vector3 bl = corners[0], tl = corners[1], tr = corners[2], br = corners[3];
+        // Project onto the rect's local axes
+        Vector3 right = (br - bl).normalized;
+        Vector3 up    = (tl - bl).normalized;
+        float w = Vector3.Dot(tr - bl, right);
+        float h = Vector3.Dot(tl - bl, up);
+        float px = Vector3.Dot(point - bl, right);
+        float py = Vector3.Dot(point - bl, up);
+        return px >= 0 && px <= w && py >= 0 && py <= h;
     }
 
     // ── Trigger ──────────────────────────────────────────────────────────────
@@ -135,28 +248,12 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.GetComponent<BeanController>() == null &&
-            other.GetComponent<FirstPersonControllerSimple>() == null) return;
-
-        // Open host panel for the host (anyone who started the server).
-        // Also allow opening in single-player / editor so you can test without a second client.
-        bool hosting = MultiplayerSessionManager.Instance == null ||
-                       MultiplayerSessionManager.Instance.CurrentStatus.Contains("Hosting") ||
-                       MultiplayerSessionManager.Instance.CurrentStatus.Contains("Offline");
-
-        if (hosting && !quizRunning)
-        {
-            isHost = true;
-            OpenHostPanel();
-        }
+        // Trigger zone kept for future use (e.g. visual effects when entering the quiz area).
+        // Host panel is now opened exclusively from the pause menu Quiz Options button.
     }
 
     private void OnTriggerExit(Collider other)
     {
-        if (other.GetComponent<BeanController>() == null &&
-            other.GetComponent<FirstPersonControllerSimple>() == null) return;
-
-        if (!quizRunning && hostPanelOpen) CloseHostPanel();
     }
 
     // ── Theater Screen ───────────────────────────────────────────────────────
@@ -266,217 +363,88 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
     }
 
-    // ── Answer Tablet (screen-space, per player) ─────────────────────────────
+    // ── Crosshair ─────────────────────────────────────────────────────────────
 
-    private void BuildAnswerWindow()
+    private void BuildCrosshair()
     {
-        var go = new GameObject("QuizAnswerCanvas");
+        var go = new GameObject("QuizCrosshair");
         DontDestroyOnLoad(go);
-        answerCanvas             = go.AddComponent<Canvas>();
-        answerCanvas.renderMode  = RenderMode.ScreenSpaceOverlay;
-        answerCanvas.sortingOrder = 55;
-        go.AddComponent<GraphicRaycaster>();
-        var sc = go.AddComponent<CanvasScaler>();
-        sc.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        sc.referenceResolution = new Vector2(1920f, 1080f);
-        sc.matchWidthOrHeight  = 0.5f;
-        EnsureEventSystem();
+        crosshairCanvas              = go.AddComponent<Canvas>();
+        crosshairCanvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        crosshairCanvas.sortingOrder = 60;
 
-        // Semi-transparent backdrop — bottom half of screen
-        var backdrop = MakeImage(go.transform, "Backdrop", new Color(0.04f, 0.03f, 0.10f, 0.93f));
-        backdrop.rectTransform.anchorMin = new Vector2(0f, 0f);
-        backdrop.rectTransform.anchorMax = new Vector2(1f, 0.5f);
-        backdrop.rectTransform.offsetMin = backdrop.rectTransform.offsetMax = Vector2.zero;
+        // Small white dot at exact screen center
+        crosshairDot = MakeImage(go.transform, "Dot", Color.white);
+        crosshairDot.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+        crosshairDot.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        crosshairDot.rectTransform.sizeDelta = new Vector2(10f, 10f);
+        crosshairDot.rectTransform.anchoredPosition = Vector2.zero;
 
-        // Timer top-right
-        answerTimerText = MakeText(backdrop.transform, "20", 72, Color.white, FontStyle.Bold);
-        answerTimerText.rectTransform.anchorMin = new Vector2(0.85f, 0.75f);
-        answerTimerText.rectTransform.anchorMax = Vector2.one;
-        answerTimerText.rectTransform.offsetMin = answerTimerText.rectTransform.offsetMax = Vector2.zero;
-        answerTimerText.alignment = TextAnchor.MiddleCenter;
+        // Thin horizontal line
+        var hLine = MakeImage(go.transform, "H", new Color(1f, 1f, 1f, 0.7f));
+        hLine.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+        hLine.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        hLine.rectTransform.sizeDelta = new Vector2(20f, 2f);
+        hLine.rectTransform.anchoredPosition = Vector2.zero;
 
-        // Question echo top-left
-        answerQuestionText = MakeText(backdrop.transform, "", 22, new Color(0.8f, 0.8f, 1f), FontStyle.Normal);
-        answerQuestionText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        answerQuestionText.rectTransform.anchorMin = new Vector2(0f, 0.78f);
-        answerQuestionText.rectTransform.anchorMax = new Vector2(0.84f, 1f);
-        answerQuestionText.rectTransform.offsetMin = new Vector2(16f, 0f);
-        answerQuestionText.rectTransform.offsetMax = new Vector2(-8f, -4f);
-        answerQuestionText.alignment = TextAnchor.MiddleLeft;
-
-        // 4 answer buttons — 2x2
-        Vector2[] bMins = { new Vector2(0.01f, 0.42f), new Vector2(0.51f, 0.42f), new Vector2(0.01f, 0.02f), new Vector2(0.51f, 0.02f) };
-        Vector2[] bMaxs = { new Vector2(0.49f, 0.76f), new Vector2(0.99f, 0.76f), new Vector2(0.49f, 0.38f), new Vector2(0.99f, 0.38f) };
-
-        for (int i = 0; i < 4; i++)
-        {
-            int idx = i;
-            var btn = MakeButton(backdrop.transform, AnswerLabels[i], AnswerColors[i]);
-            var rt  = btn.GetComponent<RectTransform>();
-            rt.anchorMin = bMins[i]; rt.anchorMax = bMaxs[i];
-            rt.offsetMin = new Vector2(6f, 6f); rt.offsetMax = new Vector2(-6f, -6f);
-            var txt = btn.GetComponentInChildren<Text>();
-            txt.fontSize = 30; txt.fontStyle = FontStyle.Bold;
-            answerButtonTexts[i] = txt;
-            answerButtons[i]     = btn;
-            btn.onClick.AddListener(() => OnAnswerChosen(idx));
-        }
+        // Thin vertical line
+        var vLine = MakeImage(go.transform, "V", new Color(1f, 1f, 1f, 0.7f));
+        vLine.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+        vLine.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        vLine.rectTransform.sizeDelta = new Vector2(2f, 20f);
+        vLine.rectTransform.anchoredPosition = Vector2.zero;
 
         go.SetActive(false);
     }
 
-    private void ShowAnswerWindow(string question, string[] options)
+    private void ShowInteraction(string[] options)
     {
-        answerLocked = false;
-        if (answerQuestionText != null) answerQuestionText.text = question;
+        answerLocked      = false;
+        lockedAnswerIndex = -1;
+        hoveredAnswerIndex = -1;
+        quizInteractionActive = true;
+
+        // Reset theater answer box colors
         for (int i = 0; i < 4; i++)
         {
             bool has = options != null && i < options.Length;
-            if (answerButtons[i] != null)     answerButtons[i].gameObject.SetActive(has);
-            if (answerButtonTexts[i] != null) answerButtonTexts[i].text = has ? AnswerLabels[i] + "  " + options[i] : "";
-            var img = answerButtons[i]?.GetComponent<Image>();
-            if (img != null) img.color = AnswerColors[i];
-            if (answerButtons[i] != null) answerButtons[i].interactable = true;
+            if (theaterAnswerBgs[i] != null)
+                theaterAnswerBgs[i].color = has ? AnswerColors[i] * 0.7f : new Color(0.1f, 0.1f, 0.18f, 1f);
         }
-        if (answerCanvas != null) answerCanvas.gameObject.SetActive(true);
-        SetPlayerMovement(false);
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible   = true;
-    }
 
-    private void HideAnswerWindow()
-    {
-        if (answerCanvas != null) answerCanvas.gameObject.SetActive(false);
-        SetPlayerMovement(true);
+        if (crosshairCanvas != null) crosshairCanvas.gameObject.SetActive(true);
+
+        // Keep cursor locked so camera still moves freely
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible   = false;
+    }
+
+    private void HideInteraction()
+    {
+        quizInteractionActive = false;
+        hoveredAnswerIndex    = -1;
+        if (crosshairCanvas != null) crosshairCanvas.gameObject.SetActive(false);
     }
 
     private void OnAnswerChosen(int idx)
     {
         if (answerLocked) return;
-        answerLocked = true;
+        answerLocked      = true;
+        lockedAnswerIndex = idx;
+
+        // Dim all except chosen
         for (int i = 0; i < 4; i++)
         {
-            var img = answerButtons[i]?.GetComponent<Image>();
-            if (img != null) img.color = (i == idx) ? AnswerColors[i] : AnswerColors[i] * 0.35f;
-            if (answerButtons[i] != null) answerButtons[i].interactable = false;
+            if (theaterAnswerBgs[i] != null)
+                theaterAnswerBgs[i].color = (i == idx) ? AnswerColors[i] : AnswerColors[i] * 0.3f;
         }
+
         string myId = MultiplayerSessionManager.Instance?.LocalClientId ?? string.Empty;
         if (!string.IsNullOrEmpty(myId))
             MultiplayerSessionManager.Instance?.SendQuizPacketToHost(new QuizAnswerPacket(myId, idx));
     }
 
-    // ── Host Panel ────────────────────────────────────────────────────────────
-
-    private void BuildHostPanel()
-    {
-        var go = new GameObject("QuizHostCanvas");
-        DontDestroyOnLoad(go);
-        hostCanvas             = go.AddComponent<Canvas>();
-        hostCanvas.renderMode  = RenderMode.ScreenSpaceOverlay;
-        hostCanvas.sortingOrder = 56;
-        go.AddComponent<GraphicRaycaster>();
-        var sc = go.AddComponent<CanvasScaler>();
-        sc.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        sc.referenceResolution = new Vector2(1920f, 1080f);
-        sc.matchWidthOrHeight  = 0.5f;
-        EnsureEventSystem();
-
-        // Panel
-        var panel = MakeImage(go.transform, "Panel", new Color(0.06f, 0.04f, 0.14f, 0.97f));
-        panel.rectTransform.anchorMin = new Vector2(0.25f, 0.15f);
-        panel.rectTransform.anchorMax = new Vector2(0.75f, 0.85f);
-        panel.rectTransform.offsetMin = panel.rectTransform.offsetMax = Vector2.zero;
-
-        // Header
-        var header = MakeImage(panel.transform, "Header", new Color(0.18f, 0.08f, 0.40f, 1f));
-        header.rectTransform.anchorMin = new Vector2(0f, 0.88f);
-        header.rectTransform.anchorMax = Vector2.one;
-        header.rectTransform.offsetMin = header.rectTransform.offsetMax = Vector2.zero;
-        var hTxt = MakeText(header.transform, "Quiz Island — Host", 28, Color.white, FontStyle.Bold);
-        StretchFull(hTxt.rectTransform);
-        hTxt.alignment = TextAnchor.MiddleCenter;
-
-        // Status
-        hostStatusText = MakeText(panel.transform, "Press Fetch to load community quizzes.", 20, new Color(0.7f, 0.85f, 1f), FontStyle.Normal);
-        hostStatusText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        hostStatusText.rectTransform.anchorMin = new Vector2(0.02f, 0.76f);
-        hostStatusText.rectTransform.anchorMax = new Vector2(0.98f, 0.88f);
-        hostStatusText.rectTransform.offsetMin = hostStatusText.rectTransform.offsetMax = Vector2.zero;
-        hostStatusText.alignment = TextAnchor.MiddleCenter;
-
-        // Course list display
-        courseListText = MakeText(panel.transform, "", 22, new Color(0.9f, 0.9f, 1f), FontStyle.Normal);
-        courseListText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        courseListText.verticalOverflow   = VerticalWrapMode.Overflow;
-        courseListText.rectTransform.anchorMin = new Vector2(0.02f, 0.30f);
-        courseListText.rectTransform.anchorMax = new Vector2(0.98f, 0.76f);
-        courseListText.rectTransform.offsetMin = courseListText.rectTransform.offsetMax = Vector2.zero;
-        courseListText.alignment = TextAnchor.UpperLeft;
-
-        // Selected course highlight
-        selectedCourseLabel = MakeText(panel.transform, "", 24, new Color(0.4f, 1f, 0.6f), FontStyle.Bold);
-        selectedCourseLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
-        selectedCourseLabel.rectTransform.anchorMin = new Vector2(0.02f, 0.20f);
-        selectedCourseLabel.rectTransform.anchorMax = new Vector2(0.98f, 0.30f);
-        selectedCourseLabel.rectTransform.offsetMin = selectedCourseLabel.rectTransform.offsetMax = Vector2.zero;
-        selectedCourseLabel.alignment = TextAnchor.MiddleCenter;
-
-        // Prev / Next course picker
-        prevCourseButton = MakeButton(panel.transform, "◀", new Color(0.20f, 0.20f, 0.35f, 1f));
-        prevCourseButton.GetComponent<RectTransform>().anchorMin = new Vector2(0.02f, 0.12f);
-        prevCourseButton.GetComponent<RectTransform>().anchorMax = new Vector2(0.18f, 0.20f);
-        prevCourseButton.GetComponent<RectTransform>().offsetMin = prevCourseButton.GetComponent<RectTransform>().offsetMax = Vector2.zero;
-        prevCourseButton.onClick.AddListener(OnPrevCourse);
-        prevCourseButton.gameObject.SetActive(false);
-
-        nextCourseButton = MakeButton(panel.transform, "▶", new Color(0.20f, 0.20f, 0.35f, 1f));
-        nextCourseButton.GetComponent<RectTransform>().anchorMin = new Vector2(0.82f, 0.12f);
-        nextCourseButton.GetComponent<RectTransform>().anchorMax = new Vector2(0.98f, 0.20f);
-        nextCourseButton.GetComponent<RectTransform>().offsetMin = nextCourseButton.GetComponent<RectTransform>().offsetMax = Vector2.zero;
-        nextCourseButton.onClick.AddListener(OnNextCourse);
-        nextCourseButton.gameObject.SetActive(false);
-
-        // Buttons row
-        var fetchBtn = MakeButton(panel.transform, "↻  Fetch Quizzes", new Color(0.13f, 0.40f, 0.60f, 1f));
-        fetchBtn.GetComponent<RectTransform>().anchorMin = new Vector2(0.02f, 0.02f);
-        fetchBtn.GetComponent<RectTransform>().anchorMax = new Vector2(0.42f, 0.10f);
-        fetchBtn.GetComponent<RectTransform>().offsetMin = fetchBtn.GetComponent<RectTransform>().offsetMax = Vector2.zero;
-        fetchBtn.onClick.AddListener(OnFetchCommunityClicked);
-
-        startQuizButton = MakeButton(panel.transform, "▶  Start Quiz", new Color(0.13f, 0.55f, 0.20f, 1f));
-        startQuizButton.GetComponent<RectTransform>().anchorMin = new Vector2(0.44f, 0.02f);
-        startQuizButton.GetComponent<RectTransform>().anchorMax = new Vector2(0.76f, 0.10f);
-        startQuizButton.GetComponent<RectTransform>().offsetMin = startQuizButton.GetComponent<RectTransform>().offsetMax = Vector2.zero;
-        startQuizButton.onClick.AddListener(OnStartQuizClicked);
-        startQuizButton.interactable = false;
-
-        var closeBtn = MakeButton(panel.transform, "✕", new Color(0.40f, 0.12f, 0.12f, 1f));
-        closeBtn.GetComponent<RectTransform>().anchorMin = new Vector2(0.78f, 0.02f);
-        closeBtn.GetComponent<RectTransform>().anchorMax = new Vector2(0.98f, 0.10f);
-        closeBtn.GetComponent<RectTransform>().offsetMin = closeBtn.GetComponent<RectTransform>().offsetMax = Vector2.zero;
-        closeBtn.onClick.AddListener(CloseHostPanel);
-
-        go.SetActive(false);
-    }
-
-    private void OpenHostPanel()
-    {
-        if (hostPanelOpen) return;
-        hostPanelOpen = true;
-        if (hostCanvas != null) hostCanvas.gameObject.SetActive(true);
-        SetPlayerMovement(false);
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible   = true;
-    }
-
-    private void CloseHostPanel()
-    {
-        hostPanelOpen = false;
-        if (hostCanvas != null) hostCanvas.gameObject.SetActive(false);
-        if (!quizRunning) { SetPlayerMovement(true); Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; }
-    }
+    // ── Quiz course controls ──────────────────────────────────────────────────
 
     private void OnPrevCourse()
     {
@@ -522,8 +490,6 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         if (fetchedCourse != null && fetchedCourse.questions != null && fetchedCourse.questions.Length > 0)
         {
-            // Already loaded — start immediately
-            CloseHostPanel();
             StartQuiz(fetchedCourse.questions);
             return;
         }
@@ -566,8 +532,8 @@ public class MultiplayerQuizManager : MonoBehaviour
         pendingAnswers.Clear();
         var q = questions[currentQuestionIndex];
 
-        SetTheaterQuestion(q.prompt, q.options, "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions);
-        ShowAnswerWindow(q.prompt, q.options);
+        SetTheaterQuestion(q.prompt, q.options, "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions + "  |  " + QuizTimerSeconds + "s");
+        ShowInteraction(q.options);
         timerRemaining = QuizTimerSeconds;
         timerActive    = true;
 
@@ -579,7 +545,7 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     private void BroadcastResults()
     {
-        HideAnswerWindow();
+        HideInteraction();
         if (currentQuestionIndex >= totalQuestions) { EndQuiz(); return; }
 
         var q = questions[currentQuestionIndex];
@@ -617,7 +583,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         quizRunning = false;
         timerActive = false;
-        HideAnswerWindow();
+        HideInteraction();
 
         if (theaterSubText != null)      theaterSubText.text      = "Quiz Over! Final Scores:";
         if (theaterQuestionText != null) theaterQuestionText.text = "";
@@ -677,8 +643,8 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         quizRunning  = true;
         string[] opts = p.OptionsStr.Split('|');
-        SetTheaterQuestion(p.Prompt, opts, "Question " + (p.QuestionIndex + 1) + " of " + p.Total);
-        ShowAnswerWindow(p.Prompt, opts);
+        SetTheaterQuestion(p.Prompt, opts, "Question " + (p.QuestionIndex + 1) + " of " + p.Total + "  |  " + p.TimerSeconds + "s");
+        ShowInteraction(opts);
         timerRemaining = p.TimerSeconds;
         timerActive    = true;
         answerLocked   = false;
@@ -687,7 +653,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private void HandleQuizResult(QuizResultPacket p)
     {
         timerActive = false;
-        HideAnswerWindow();
+        HideInteraction();
         SetTheaterResult(p.CorrectIndex);
 
         // Parse scores
@@ -775,7 +741,6 @@ public class MultiplayerQuizManager : MonoBehaviour
                 list.Add(new QuizQuestion { prompt = q.prompt, options = q.options, correctIndex = q.correctIndex });
 
             fetchedCourse = new CommunityQuizData { title = detail.title, questions = list.ToArray() };
-            CloseHostPanel();
             StartQuiz(fetchedCourse.questions);
         }
         catch (Exception ex) { SetHostStatus("Parse error: " + ex.Message); if (startQuizButton != null) startQuizButton.interactable = true; }
