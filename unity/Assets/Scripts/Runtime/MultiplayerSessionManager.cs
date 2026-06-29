@@ -46,6 +46,10 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     public event Action<string> StatusChanged;
 
+    public event Action<Packet> OnQuizPacket;
+
+    public string LocalClientId => localClientId;
+
     private enum SessionMode
     {
         Idle,
@@ -276,8 +280,21 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
     }
 
-    public void StopAllNetworking()
+    /// <summary>Host: send a quiz packet to all connected clients.</summary>
+    public void BroadcastQuizPacket(Packet packet)
     {
+        BroadcastServerPacket(packet);
+        // Also deliver locally so the host's own QuizManager receives it.
+        EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
+    }
+
+    /// <summary>Client: send a quiz answer packet to the host.</summary>
+    public void SendQuizPacketToHost(Packet packet)
+    {
+        _ = SendClientPacketAsync(packet);
+    }
+
+    public void StopAllNetworking()    {
         mode = SessionMode.Idle;
         localClientId = string.Empty;
 
@@ -449,6 +466,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                         peer.Yaw = statePacket.Yaw;
                         BroadcastServerPacket(statePacket, excludeClientId: peer.ClientId);
                         break;
+
+                    case QuizAnswerPacket quizAnswer:
+                        // Forward the client's answer to the host's local client connection
+                        // by broadcasting to all — the host's own client loop receives it.
+                        BroadcastServerPacket(quizAnswer);
+                        break;
                 }
             }
         }
@@ -550,6 +573,17 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             case MultiplayerPlayerLeftPacket leftPacket:
                 EnqueueMainThread(() => RemoveRemoteAvatar(leftPacket.ClientId));
+                break;
+
+            case QuizStartPacket _:
+            case QuizResultPacket _:
+                // Delivered to all clients by the host
+                EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
+                break;
+
+            case QuizAnswerPacket answerPacket:
+                // Route answer back to host's quiz manager (host receives its own broadcast echo)
+                EnqueueMainThread(() => OnQuizPacket?.Invoke(answerPacket));
                 break;
         }
     }

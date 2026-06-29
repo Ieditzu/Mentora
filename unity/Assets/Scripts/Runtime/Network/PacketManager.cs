@@ -53,6 +53,9 @@ namespace Mentora.Network
                 50 => new MultiplayerWelcomePacket(),
                 51 => new MultiplayerPlayerStatePacket(),
                 52 => new MultiplayerPlayerLeftPacket(),
+                53 => new QuizStartPacket(),
+                54 => new QuizAnswerPacket(),
+                55 => new QuizResultPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -799,5 +802,89 @@ namespace Mentora.Network
         public MultiplayerPlayerLeftPacket() : base(52) { }
         protected override void Write(BinaryWriter writer) { PutString(writer, ClientId ?? string.Empty); }
         protected override void Read(BinaryReader reader) { ClientId = ReadString(reader); }
+    }
+
+    // ── Quiz Packets (53 / 54 / 55) ──────────────────────────────────────────
+
+    /// <summary>Host → all: start a question round.</summary>
+    public class QuizStartPacket : Packet
+    {
+        public string Prompt;
+        public string OptionsStr; // pipe-delimited: "Option A|Option B|Option C|Option D"
+        public int CorrectIndex;
+        public int QuestionIndex;
+        public int Total;
+        public int TimerSeconds;
+
+        public QuizStartPacket(string prompt, string optionsStr, int correctIndex,
+            int questionIndex, int total, int timerSeconds) : base(53)
+        {
+            Prompt = prompt; OptionsStr = optionsStr; CorrectIndex = correctIndex;
+            QuestionIndex = questionIndex; Total = total; TimerSeconds = timerSeconds;
+        }
+        public QuizStartPacket() : base(53) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, Prompt ?? string.Empty);
+            PutString(writer, OptionsStr ?? string.Empty);
+            WriteInt32BigEndian(writer, CorrectIndex);
+            WriteInt32BigEndian(writer, QuestionIndex);
+            WriteInt32BigEndian(writer, Total);
+            WriteInt32BigEndian(writer, TimerSeconds);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            Prompt = ReadString(reader);
+            OptionsStr = ReadString(reader);
+            CorrectIndex = ReadInt32BigEndian(reader);
+            QuestionIndex = ReadInt32BigEndian(reader);
+            Total = ReadInt32BigEndian(reader);
+            TimerSeconds = ReadInt32BigEndian(reader);
+        }
+    }
+
+    /// <summary>Client → host: player submits their answer.</summary>
+    public class QuizAnswerPacket : Packet
+    {
+        public string ClientId;
+        public int AnswerIndex;
+
+        public QuizAnswerPacket(string clientId, int answerIndex) : base(54)
+        { ClientId = clientId; AnswerIndex = answerIndex; }
+        public QuizAnswerPacket() : base(54) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            WriteInt32BigEndian(writer, AnswerIndex);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            AnswerIndex = ReadInt32BigEndian(reader);
+        }
+    }
+
+    /// <summary>Host → all: reveal correct answer and current scores.</summary>
+    public class QuizResultPacket : Packet
+    {
+        public int CorrectIndex;
+        public string ScoresJson; // "clientId:score,clientId:score"
+
+        public QuizResultPacket(int correctIndex, string scoresJson) : base(55)
+        { CorrectIndex = correctIndex; ScoresJson = scoresJson; }
+        public QuizResultPacket() : base(55) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            WriteInt32BigEndian(writer, CorrectIndex);
+            PutString(writer, ScoresJson ?? string.Empty);
+        }
+        protected override void Read(BinaryReader reader)
+        {
+            CorrectIndex = ReadInt32BigEndian(reader);
+            ScoresJson = ReadString(reader);
+        }
     }
 }
