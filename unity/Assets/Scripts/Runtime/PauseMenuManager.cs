@@ -517,8 +517,10 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform mainRect = mainPanel.GetComponent<RectTransform>();
         mainRect.sizeDelta = new Vector2(720f, 560f);
         mainRect.anchoredPosition = Vector2.zero;
-        mainPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
-        mainPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+        mainPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var mainOutline = mainPanel.AddComponent<Outline>();
+        mainOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        mainOutline.effectDistance = new Vector2(2f, -2f);
 
         menuGroup = mainPanel.AddComponent<CanvasGroup>();
         menuGroup.alpha = 0f;
@@ -529,9 +531,9 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform topRect = topBar.GetComponent<RectTransform>();
         topRect.sizeDelta = new Vector2(720f, 88f);
         topRect.anchoredPosition = new Vector2(0f, 216f);
-        topBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        topBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("PauseTitle", topBar.transform, "PAUSED", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(420f, 52f));
+        topBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        topBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("PauseTitle", topBar.transform, "PAUSED", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(420f, 52f));
 
         // Body container
         GameObject body = CreateUiObject("Body", mainPanel.transform);
@@ -655,16 +657,18 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform settingsRect = settingsPanel.GetComponent<RectTransform>();
         settingsRect.sizeDelta = new Vector2(720f, 560f);
         settingsRect.anchoredPosition = Vector2.zero;
-        settingsPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
-        settingsPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+        settingsPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var settingsOutline = settingsPanel.AddComponent<Outline>();
+        settingsOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        settingsOutline.effectDistance = new Vector2(2f, -2f);
 
         GameObject settingsTopBar = CreateUiObject("TopBar", settingsPanel.transform);
         RectTransform settingsTopRect = settingsTopBar.GetComponent<RectTransform>();
         settingsTopRect.sizeDelta = new Vector2(720f, 88f);
         settingsTopRect.anchoredPosition = new Vector2(0f, 216f);
-        settingsTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        settingsTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+        settingsTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        settingsTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
         CreateSensitivitySection(settingsPanel.transform);
         CreateGlobalVoiceSettingsSection(settingsPanel.transform);
@@ -748,17 +752,19 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform multiplayerRect = multiplayerPanel.GetComponent<RectTransform>();
         multiplayerRect.sizeDelta = new Vector2(720f, 560f);
         multiplayerRect.anchoredPosition = Vector2.zero;
-        multiplayerPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
-        multiplayerPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+        multiplayerPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var mpOutline = multiplayerPanel.AddComponent<Outline>();
+        mpOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        mpOutline.effectDistance = new Vector2(2f, -2f);
 
         // Top bar
         GameObject mpTopBar = CreateUiObject("TopBar", multiplayerPanel.transform);
         RectTransform mpTopRect = mpTopBar.GetComponent<RectTransform>();
         mpTopRect.sizeDelta = new Vector2(720f, 88f);
         mpTopRect.anchoredPosition = new Vector2(0f, 216f);
-        mpTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        mpTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("MultiplayerTitle", mpTopBar.transform, "MULTIPLAYER", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+        mpTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        mpTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("MultiplayerTitle", mpTopBar.transform, "MULTIPLAYER", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
         // Left column: host/join/disconnect buttons + expandable join sub-panel + status
         GameObject mpLeft = CreateUiObject("MultiplayerLeft", multiplayerPanel.transform);
@@ -793,17 +799,19 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform joinSubRect = joinSubPanel.GetComponent<RectTransform>();
         joinSubRect.sizeDelta = new Vector2(420f, 280f);
         joinSubRect.anchoredPosition = new Vector2(0f, 0f);
-        joinSubPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.98f);
-        joinSubPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.6f);
+        joinSubPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var joinOutline = joinSubPanel.AddComponent<Outline>();
+        joinOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        joinOutline.effectDistance = new Vector2(2f, -2f);
 
         // Top bar matching pause menu style
         GameObject joinTopBar = CreateUiObject("JoinTopBar", joinSubPanel.transform);
         RectTransform joinTopRect = joinTopBar.GetComponent<RectTransform>();
         joinTopRect.sizeDelta = new Vector2(420f, 56f);
         joinTopRect.anchoredPosition = new Vector2(0f, 96f);
-        joinTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        joinTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("JoinTitle", joinTopBar.transform, "JOIN GAME", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(340f, 36f));
+        joinTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        joinTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("JoinTitle", joinTopBar.transform, "JOIN GAME", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(340f, 36f));
 
         // Body card
         GameObject joinBody = CreateUiObject("JoinBody", joinSubPanel.transform);
@@ -892,17 +900,19 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform hostGameRect = hostGamePanel.GetComponent<RectTransform>();
         hostGameRect.sizeDelta = new Vector2(720f, 560f);
         hostGameRect.anchoredPosition = Vector2.zero;
-        hostGamePanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
-        hostGamePanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+        hostGamePanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var hgOutline = hostGamePanel.AddComponent<Outline>();
+        hgOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        hgOutline.effectDistance = new Vector2(2f, -2f);
 
         // Top bar
         GameObject hgTopBar = CreateUiObject("TopBar", hostGamePanel.transform);
         RectTransform hgTopRect = hgTopBar.GetComponent<RectTransform>();
         hgTopRect.sizeDelta = new Vector2(720f, 88f);
         hgTopRect.anchoredPosition = new Vector2(0f, 216f);
-        hgTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        hgTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("HostGameTitle", hgTopBar.transform, "HOST GAME", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+        hgTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        hgTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("HostGameTitle", hgTopBar.transform, "HOST GAME", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
         // Subtitle
         CreateText("HostGameSub", hostGamePanel.transform, "Choose which island to host on:", 20, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.7f, 0.85f, 1f), new Vector2(0f, 140f), new Vector2(560f, 30f));
@@ -949,17 +959,19 @@ public class PauseMenuManager : MonoBehaviour
         RectTransform qopRect = quizOptionsPanel.GetComponent<RectTransform>();
         qopRect.sizeDelta = new Vector2(720f, 560f);
         qopRect.anchoredPosition = Vector2.zero;
-        quizOptionsPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
-        quizOptionsPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+        quizOptionsPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var qopOutline = quizOptionsPanel.AddComponent<Outline>();
+        qopOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        qopOutline.effectDistance = new Vector2(2f, -2f);
 
         // Top bar — identical to every other panel
         GameObject qopTopBar = CreateUiObject("TopBar", quizOptionsPanel.transform);
         RectTransform qopTopRect = qopTopBar.GetComponent<RectTransform>();
         qopTopRect.sizeDelta = new Vector2(720f, 88f);
         qopTopRect.anchoredPosition = new Vector2(0f, 216f);
-        qopTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
-        qopTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
-        CreateText("QOPTitle", qopTopBar.transform, "QUIZ OPTIONS", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f), Vector2.zero, new Vector2(480f, 52f));
+        qopTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        qopTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("QOPTitle", qopTopBar.transform, "QUIZ OPTIONS", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
         // Left column: fetch + start controls
         GameObject qopLeft = CreateUiObject("QOPLeft", quizOptionsPanel.transform);
@@ -2526,14 +2538,66 @@ public class PauseMenuManager : MonoBehaviour
         return t;
     }
 
+    private static Sprite _roundedSprite;
+    private static Sprite GetRoundedSprite()
+    {
+        if (_roundedSprite != null) return _roundedSprite;
+        // Build a small rounded-rect texture and slice it
+        int w = 64, h = 64, r = 20;
+        var tex = new Texture2D(w, h, TextureFormat.ARGB32, false);
+        var pixels = new Color32[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int cx = Mathf.Min(x < r ? r - x : x >= w - r ? x - (w - r - 1) : 0,
+                               y < r ? r - y : y >= h - r ? y - (h - r - 1) : 0);
+            int cy = Mathf.Min(x < r ? r - x : x >= w - r ? x - (w - r - 1) : 0,
+                               y < r ? r - y : y >= h - r ? y - (h - r - 1) : 0);
+            // distance from corner circle center
+            int dx = x < r ? r - x : (x >= w - r ? x - (w - r - 1) : 0);
+            int dy = y < r ? r - y : (y >= h - r ? y - (h - r - 1) : 0);
+            bool inside = (dx * dx + dy * dy) <= (r * r);
+            pixels[y * w + x] = (dx == 0 || dy == 0) ? new Color32(255,255,255,255)
+                : inside ? new Color32(255,255,255,255) : new Color32(0,0,0,0);
+        }
+        tex.SetPixels32(pixels);
+        tex.Apply();
+        _roundedSprite = Sprite.Create(tex, new Rect(0,0,w,h), new Vector2(0.5f,0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(r,r,r,r));
+        return _roundedSprite;
+    }
+
     private static Button CreateButton(Transform parent, string name, string label, Vector2 pos, Color col)
     {
         GameObject obj = CreateUiObject(name, parent);
         RectTransform r = obj.GetComponent<RectTransform>();
-        r.sizeDelta = new Vector2(420f, 58f); r.anchoredPosition = pos;
-        Image img = obj.AddComponent<Image>(); img.color = col;
-        Button b = obj.AddComponent<Button>(); b.targetGraphic = img;
-        CreateText(name + "L", obj.transform, label, 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(360, 36));
+        r.sizeDelta = new Vector2(420f, 58f);
+        r.anchoredPosition = pos;
+
+        Image img = obj.AddComponent<Image>();
+        img.sprite = GetRoundedSprite();
+        img.type   = Image.Type.Sliced;
+        img.color  = col;
+
+        Button b = obj.AddComponent<Button>();
+        b.targetGraphic = img;
+        var cb = b.colors;
+        cb.normalColor      = Color.white;
+        cb.highlightedColor = new Color(1.18f, 1.18f, 1.18f, 1f);
+        cb.pressedColor     = new Color(0.72f, 0.72f, 0.72f, 1f);
+        cb.selectedColor    = Color.white;
+        cb.fadeDuration     = 0.08f;
+        b.colors = cb;
+
+        // Subtle glow outline
+        var outline = obj.AddComponent<Outline>();
+        outline.effectColor    = new Color(col.r * 1.4f, col.g * 1.4f, col.b * 1.4f, 0.55f);
+        outline.effectDistance = new Vector2(0f, -2f);
+
+        // Label
+        var lbl = CreateText(name + "L", obj.transform, label, 20, FontStyle.Bold,
+                             TextAnchor.MiddleCenter, Color.white,
+                             Vector2.zero, new Vector2(380f, 44f));
+        lbl.horizontalOverflow = HorizontalWrapMode.Overflow;
         return b;
     }
 
