@@ -57,6 +57,7 @@ namespace Mentora.Network
                 54 => new QuizAnswerPacket(),
                 55 => new QuizResultPacket(),
                 56 => new MultiplayerVoicePacket(),
+                57 => new MultiplayerUdpHelloPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -765,8 +766,9 @@ namespace Mentora.Network
         public float PositionY;
         public float PositionZ;
         public float Yaw;
+        public int Sequence;
 
-        public MultiplayerPlayerStatePacket(string clientId, string playerName, UnityEngine.Vector3 position, float yaw) : base(51)
+        public MultiplayerPlayerStatePacket(string clientId, string playerName, UnityEngine.Vector3 position, float yaw, int sequence = 0) : base(51)
         {
             ClientId = clientId;
             PlayerName = playerName;
@@ -774,6 +776,7 @@ namespace Mentora.Network
             PositionY = position.y;
             PositionZ = position.z;
             Yaw = yaw;
+            Sequence = sequence;
         }
         public MultiplayerPlayerStatePacket() : base(51) { }
         protected override void Write(BinaryWriter writer)
@@ -784,6 +787,7 @@ namespace Mentora.Network
             writer.Write(PositionY);
             writer.Write(PositionZ);
             writer.Write(Yaw);
+            WriteInt32BigEndian(writer, Sequence);
         }
         protected override void Read(BinaryReader reader)
         {
@@ -793,6 +797,9 @@ namespace Mentora.Network
             PositionY = reader.ReadSingle();
             PositionZ = reader.ReadSingle();
             Yaw = reader.ReadSingle();
+            Sequence = reader.BaseStream.Position + 4 <= reader.BaseStream.Length
+                ? ReadInt32BigEndian(reader)
+                : 0;
         }
     }
 
@@ -845,6 +852,32 @@ namespace Mentora.Network
             }
 
             Pcm16 = reader.ReadBytes(length);
+        }
+    }
+
+    public class MultiplayerUdpHelloPacket : Packet
+    {
+        public string ClientId;
+        public string PlayerName;
+
+        public MultiplayerUdpHelloPacket(string clientId, string playerName) : base(57)
+        {
+            ClientId = clientId;
+            PlayerName = playerName;
+        }
+
+        public MultiplayerUdpHelloPacket() : base(57) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            PutString(writer, PlayerName ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            PlayerName = ReadString(reader);
         }
     }
 

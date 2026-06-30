@@ -46,6 +46,9 @@
 - Capped voice playback buffering to keep voice recent instead of playing old queued audio.
 - Added a bottom-right local microphone HUD meter.
 - Placed world name/mic labels from renderer bounds so they sit above the avatar head.
+- Moved realtime movement and voice from TCP to UDP on the same session port.
+- Kept TCP for reliable session join, quiz, and control packets.
+- Added UDP endpoint registration and movement sequence numbers to drop out-of-order snapshots.
 
 ## What Still Needs To Be Done
 

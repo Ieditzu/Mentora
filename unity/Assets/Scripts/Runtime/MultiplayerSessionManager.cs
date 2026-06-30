@@ -86,6 +86,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         public float Yaw;
         public TcpClient TcpClient;
         public NetworkStream Stream;
+        public IPEndPoint UdpEndPoint;
         public readonly SemaphoreSlim SendLock = new SemaphoreSlim(1, 1);
         public bool IsConnected => TcpClient != null && TcpClient.Connected;
     }
@@ -106,6 +107,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         public float LastReceiveTime;
         public float VoiceLevel;
         public float LastVoiceTime;
+        public int LastStateSequence = -1;
         public bool HasFirstPacket;
     }
 
@@ -211,11 +213,16 @@ public class MultiplayerSessionManager : MonoBehaviour
     private SessionMode mode = SessionMode.Idle;
     private TcpListener serverListener;
     private CancellationTokenSource serverCts;
+    private UdpClient serverUdp;
+    private Task serverUdpTask;
 
     private TcpClient clientSocket;
     private NetworkStream clientStream;
     private CancellationTokenSource clientCts;
     private Task clientReceiveTask;
+    private UdpClient clientUdp;
+    private IPEndPoint clientUdpRemoteEndPoint;
+    private Task clientUdpReceiveTask;
     private string localClientId = string.Empty;
     private string localPlayerName = "Player";
     private string hostAddress = "127.0.0.1";
@@ -235,6 +242,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     private readonly float[] microphoneFrame = new float[VoiceFrameSamples];
     private int voiceSequence;
     private int voiceSendInFlight;
+    private int stateSequence;
+    private float lastUdpHelloTime = -999f;
     private int clientConnectionVersion;
     private int sendFailureReported;
     private bool localLabelAttached;
@@ -313,7 +322,15 @@ public class MultiplayerSessionManager : MonoBehaviour
         if (IsClientConnected && Time.unscaledTime - lastSendTime >= SendIntervalSeconds)
         {
             lastSendTime = Time.unscaledTime;
-            _ = SendLocalStateAsync();
+            SendLocalState();
+        }
+
+        if (IsClientConnected &&
+            !string.IsNullOrEmpty(localClientId) &&
+            Time.unscaledTime - lastUdpHelloTime >= 1f)
+        {
+            lastUdpHelloTime = Time.unscaledTime;
+            SendUdpHello();
         }
 
         CaptureAndSendVoice();
@@ -505,6 +522,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             serverCts = new CancellationTokenSource();
             serverListener = new TcpListener(IPAddress.Any, hostPort);
             serverListener.Start();
+            StartServerUdpTransport(serverCts.Token);
             SetStatus("Hosting on port " + hostPort + "...");
             _ = RunServerLoopAsync(serverCts.Token);
             await JoinLocalHostAsync();
@@ -572,6 +590,8 @@ public class MultiplayerSessionManager : MonoBehaviour
         mode = SessionMode.Idle;
         localClientId = string.Empty;
         hasSentState = false;
+        stateSequence = 0;
+        lastUdpHelloTime = -999f;
         StopVoiceCapture();
 
         if (clientCts != null)
@@ -594,6 +614,19 @@ public class MultiplayerSessionManager : MonoBehaviour
             clientSocket = null;
         }
 
+        if (clientUdp != null)
+        {
+            try
+            {
+                clientUdp.Close();
+                clientUdp.Dispose();
+            }
+            catch { }
+            clientUdp = null;
+        }
+        clientUdpRemoteEndPoint = null;
+        clientUdpReceiveTask = null;
+
         if (serverCts != null)
         {
             serverCts.Cancel();
@@ -610,6 +643,18 @@ public class MultiplayerSessionManager : MonoBehaviour
             catch { }
             serverListener = null;
         }
+
+        if (serverUdp != null)
+        {
+            try
+            {
+                serverUdp.Close();
+                serverUdp.Dispose();
+            }
+            catch { }
+            serverUdp = null;
+        }
+        serverUdpTask = null;
 
         foreach (var peer in serverPeers.Values)
         {
@@ -663,6 +708,9 @@ public class MultiplayerSessionManager : MonoBehaviour
         clientSocket.NoDelay = true;
         clientCts = new CancellationTokenSource();
         clientReceiveTask = null;
+        stateSequence = 0;
+        lastUdpHelloTime = -999f;
+        StartClientUdpTransport(address, port);
         Interlocked.Exchange(ref sendFailureReported, 0);
         Interlocked.Increment(ref clientConnectionVersion);
 
@@ -703,6 +751,165 @@ public class MultiplayerSessionManager : MonoBehaviour
         catch (Exception ex)
         {
             EnqueueMainThread(() => SetStatus("Server stopped: " + ex.Message));
+        }
+    }
+
+    private void StartServerUdpTransport(CancellationToken token)
+    {
+        try
+        {
+            serverUdp = new UdpClient(hostPort);
+            serverUdp.Client.ReceiveBufferSize = 1024 * 256;
+            serverUdp.Client.SendBufferSize = 1024 * 256;
+            serverUdpTask = Task.Run(() => RunServerUdpLoopAsync(serverUdp, token));
+        }
+        catch (Exception ex)
+        {
+            SetStatus("UDP host failed: " + ex.Message);
+        }
+    }
+
+    private async Task RunServerUdpLoopAsync(UdpClient udp, CancellationToken token)
+    {
+        PacketManager udpPacketManager = new PacketManager();
+        while (!token.IsCancellationRequested && udp != null)
+        {
+            UdpReceiveResult result;
+            try
+            {
+                result = await udp.ReceiveAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (SocketException)
+            {
+                if (token.IsCancellationRequested) break;
+                continue;
+            }
+            catch
+            {
+                if (token.IsCancellationRequested) break;
+                continue;
+            }
+
+            try
+            {
+                Packet packet = Packet.DecodeRaw(result.Buffer, udpPacketManager);
+                HandleServerUdpPacket(packet, result.RemoteEndPoint);
+            }
+            catch
+            {
+                // Drop malformed UDP datagrams.
+            }
+        }
+    }
+
+    private void HandleServerUdpPacket(Packet packet, IPEndPoint remoteEndPoint)
+    {
+        if (packet == null || remoteEndPoint == null)
+        {
+            return;
+        }
+
+        switch (packet)
+        {
+            case MultiplayerUdpHelloPacket helloPacket:
+                if (serverPeers.TryGetValue(helloPacket.ClientId, out NetworkPeer helloPeer))
+                {
+                    helloPeer.UdpEndPoint = remoteEndPoint;
+                    helloPeer.PlayerName = NormalizePlayerName(helloPacket.PlayerName);
+                }
+                break;
+
+            case MultiplayerPlayerStatePacket statePacket:
+                if (TryResolveUdpPeer(statePacket.ClientId, remoteEndPoint, out NetworkPeer statePeer))
+                {
+                    statePeer.PlayerName = NormalizePlayerName(statePacket.PlayerName);
+                    statePeer.Position = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
+                    statePeer.Yaw = statePacket.Yaw;
+                    statePacket.ClientId = statePeer.ClientId;
+                    statePacket.PlayerName = statePeer.PlayerName;
+                    BroadcastServerUdpPacket(statePacket, statePeer.ClientId);
+                }
+                break;
+
+            case MultiplayerVoicePacket voicePacket:
+                if (TryResolveUdpPeer(voicePacket.ClientId, remoteEndPoint, out NetworkPeer voicePeer))
+                {
+                    voicePacket.ClientId = voicePeer.ClientId;
+                    BroadcastServerUdpPacket(voicePacket, voicePeer.ClientId);
+                }
+                break;
+        }
+    }
+
+    private bool TryResolveUdpPeer(string clientId, IPEndPoint remoteEndPoint, out NetworkPeer peer)
+    {
+        peer = null;
+        if (string.IsNullOrEmpty(clientId) || !serverPeers.TryGetValue(clientId, out peer))
+        {
+            return false;
+        }
+
+        if (peer.UdpEndPoint == null || !peer.UdpEndPoint.Equals(remoteEndPoint))
+        {
+            peer.UdpEndPoint = remoteEndPoint;
+        }
+
+        return true;
+    }
+
+    private void StartClientUdpTransport(string address, int port)
+    {
+        try
+        {
+            IPAddress hostIp = ResolveHostIPAddress(address);
+            clientUdpRemoteEndPoint = new IPEndPoint(hostIp, port);
+            clientUdp = new UdpClient(0);
+            clientUdp.Client.ReceiveBufferSize = 1024 * 256;
+            clientUdp.Client.SendBufferSize = 1024 * 256;
+            clientUdpReceiveTask = Task.Run(() => RunClientUdpLoopAsync(clientUdp));
+        }
+        catch (Exception ex)
+        {
+            SetStatus("UDP client failed: " + ex.Message);
+        }
+    }
+
+    private async Task RunClientUdpLoopAsync(UdpClient udp)
+    {
+        PacketManager udpPacketManager = new PacketManager();
+        while (udp != null)
+        {
+            UdpReceiveResult result;
+            try
+            {
+                result = await udp.ReceiveAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (SocketException)
+            {
+                break;
+            }
+            catch
+            {
+                continue;
+            }
+
+            try
+            {
+                Packet packet = Packet.DecodeRaw(result.Buffer, udpPacketManager);
+                HandleClientPacket(packet);
+            }
+            catch
+            {
+                // Drop malformed realtime datagrams.
+            }
         }
     }
 
@@ -840,6 +1047,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             case MultiplayerWelcomePacket welcomePacket:
                 localClientId = welcomePacket.ClientId;
                 localPlayerName = NormalizePlayerName(welcomePacket.PlayerName);
+                SendUdpHello();
                 EnqueueMainThread(() =>
                 {
                     RefreshLocalNameLabel();
@@ -898,6 +1106,12 @@ public class MultiplayerSessionManager : MonoBehaviour
         {
             return;
         }
+
+        if (statePacket.Sequence <= avatar.LastStateSequence)
+        {
+            return;
+        }
+        avatar.LastStateSequence = statePacket.Sequence;
 
         Vector3 newPos = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
         if (!avatar.HasFirstPacket)
@@ -1281,7 +1495,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
     }
 
-    private async Task SendLocalStateAsync()
+    private void SendLocalState()
     {
         if (!IsClientConnected)
         {
@@ -1323,7 +1537,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                 return;
             }
 
-            bool sent = await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
+            bool sent = SendClientRealtimePacket(new MultiplayerPlayerStatePacket(
+                localClientId,
+                localPlayerName,
+                position,
+                yaw,
+                stateSequence++));
             if (sent)
             {
                 lastSentPosition = position;
@@ -1528,20 +1747,14 @@ public class MultiplayerSessionManager : MonoBehaviour
     private void TrySendVoiceFrame(Packet packet)
     {
         if (packet == null ||
-            clientSendLock.CurrentCount == 0 ||
             Interlocked.Exchange(ref voiceSendInFlight, 1) == 1)
         {
             return;
         }
 
-        _ = SendVoiceFrameAsync(packet);
-    }
-
-    private async Task SendVoiceFrameAsync(Packet packet)
-    {
         try
         {
-            await SendClientPacketAsync(packet, false);
+            SendClientRealtimePacket(packet);
         }
         finally
         {
@@ -1654,6 +1867,88 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             _ = SendServerPacketAsync(peer, packet);
         }
+    }
+
+    private void BroadcastServerUdpPacket(Packet packet, string excludeClientId = null)
+    {
+        if (serverUdp == null || packet == null)
+        {
+            return;
+        }
+
+        byte[] payload = packet.EncodeRaw();
+        foreach (NetworkPeer peer in serverPeers.Values)
+        {
+            if (peer == null ||
+                string.IsNullOrEmpty(peer.ClientId) ||
+                peer.ClientId == excludeClientId ||
+                peer.UdpEndPoint == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                _ = serverUdp.SendAsync(payload, payload.Length, peer.UdpEndPoint);
+            }
+            catch { }
+        }
+    }
+
+    private bool SendClientRealtimePacket(Packet packet)
+    {
+        if (packet == null ||
+            clientUdp == null ||
+            clientUdpRemoteEndPoint == null ||
+            string.IsNullOrEmpty(localClientId))
+        {
+            return false;
+        }
+
+        try
+        {
+            byte[] payload = packet.EncodeRaw();
+            _ = clientUdp.SendAsync(payload, payload.Length, clientUdpRemoteEndPoint);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void SendUdpHello()
+    {
+        if (string.IsNullOrEmpty(localClientId))
+        {
+            return;
+        }
+
+        SendClientRealtimePacket(new MultiplayerUdpHelloPacket(localClientId, localPlayerName));
+    }
+
+    private static IPAddress ResolveHostIPAddress(string address)
+    {
+        if (IPAddress.TryParse(address, out IPAddress parsed))
+        {
+            return parsed;
+        }
+
+        IPAddress[] addresses = Dns.GetHostAddresses(address);
+        for (int i = 0; i < addresses.Length; i++)
+        {
+            if (addresses[i].AddressFamily == AddressFamily.InterNetwork)
+            {
+                return addresses[i];
+            }
+        }
+
+        if (addresses.Length > 0)
+        {
+            return addresses[0];
+        }
+
+        throw new InvalidOperationException("Could not resolve host address.");
     }
 
     private static async Task<byte[]> ReadFrameAsync(NetworkStream stream, CancellationToken token)
@@ -1782,6 +2077,14 @@ public class MultiplayerSessionManager : MonoBehaviour
 
         try
         {
+            clientCts?.Cancel();
+            clientCts?.Dispose();
+        }
+        catch { }
+        clientCts = null;
+
+        try
+        {
             clientStream?.Dispose();
         }
         catch { }
@@ -1794,6 +2097,16 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
         catch { }
         clientSocket = null;
+
+        try
+        {
+            clientUdp?.Close();
+            clientUdp?.Dispose();
+        }
+        catch { }
+        clientUdp = null;
+        clientUdpRemoteEndPoint = null;
+        clientUdpReceiveTask = null;
 
         SetStatus(message);
     }
