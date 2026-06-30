@@ -18,6 +18,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private const float EndSilenceSeconds = 0.72f;
     private const float MinUtteranceSeconds = 0.35f;
     private const float MaxUtteranceSeconds = 7f;
+    private const float PreRollSeconds = 0.35f;
 
     public event Action<string> FullTranscriptionReceived;
     public float MicLevel { get; private set; }
@@ -29,6 +30,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private TTSWit ttsService;
     private MultiplayerSessionManager microphoneManager;
     private string witClientAccessToken;
+    private string dictationEndpointUrl;
     private string speechEndpointUrl;
     private bool witConfigured;
     private bool warnedMissingConfig;
@@ -40,6 +42,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private float lastSpeechTime;
     private int utteranceSampleRate = 16000;
     private readonly List<byte> utterancePcm = new List<byte>(16000 * 2 * 8);
+    private readonly Queue<byte[]> preRollFrames = new Queue<byte[]>();
+    private int preRollByteCount;
 
     public void Initialize()
     {
@@ -57,7 +61,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        speechEndpointUrl = BuildSpeechEndpointUrl(config);
+        dictationEndpointUrl = BuildEndpointUrl(config, useDictation: true);
+        speechEndpointUrl = BuildEndpointUrl(config, useDictation: false);
 
         GameObject ttsObject = new GameObject("RudolfApiTTS");
         ttsObject.transform.SetParent(transform, false);
@@ -183,7 +188,13 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
 
         float now = Time.unscaledTime;
+        if (!utteranceActive)
+        {
+            AddPreRollFrame(pcm16, sampleRate);
+        }
+
         bool hasSpeech = level >= (utteranceActive ? SpeechContinueLevel : SpeechStartLevel);
+        bool startedThisFrame = false;
         if (hasSpeech)
         {
             if (!utteranceActive)
@@ -192,6 +203,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
                 utteranceStartTime = now;
                 utterancePcm.Clear();
                 utteranceSampleRate = sampleRate;
+                CopyPreRollToUtterance();
+                startedThisFrame = true;
             }
 
             lastSpeechTime = now;
@@ -202,7 +215,11 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        utterancePcm.AddRange(pcm16);
+        if (!startedThisFrame)
+        {
+            utterancePcm.AddRange(pcm16);
+        }
+
         if ((now - lastSpeechTime >= EndSilenceSeconds) || (now - utteranceStartTime >= MaxUtteranceSeconds))
         {
             SubmitUtterance();
@@ -218,7 +235,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        byte[] wavBytes = BuildWavBytes(utterancePcm, utteranceSampleRate);
+        byte[] pcm16 = utterancePcm.ToArray();
+        int sampleRate = utteranceSampleRate;
         ResetUtterance();
 
         if (!witConfigured || transcriptionRequestActive)
@@ -226,7 +244,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        StartCoroutine(TranscribeWav(wavBytes));
+        StartCoroutine(TranscribePcm16(pcm16, sampleRate));
     }
 
     private void ResetUtterance()
@@ -235,35 +253,92 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         utteranceStartTime = 0f;
         lastSpeechTime = 0f;
         utterancePcm.Clear();
+        preRollFrames.Clear();
+        preRollByteCount = 0;
     }
 
-    private IEnumerator TranscribeWav(byte[] wavBytes)
+    private void AddPreRollFrame(byte[] pcm16, int sampleRate)
+    {
+        byte[] copy = new byte[pcm16.Length];
+        Buffer.BlockCopy(pcm16, 0, copy, 0, pcm16.Length);
+        preRollFrames.Enqueue(copy);
+        preRollByteCount += copy.Length;
+
+        int maxBytes = Mathf.CeilToInt(sampleRate * 2f * PreRollSeconds);
+        while (preRollByteCount > maxBytes && preRollFrames.Count > 0)
+        {
+            preRollByteCount -= preRollFrames.Dequeue().Length;
+        }
+    }
+
+    private void CopyPreRollToUtterance()
+    {
+        foreach (byte[] frame in preRollFrames)
+        {
+            utterancePcm.AddRange(frame);
+        }
+    }
+
+    private IEnumerator TranscribePcm16(byte[] pcm16, int sampleRate)
     {
         transcriptionRequestActive = true;
 
-        using (UnityWebRequest request = new UnityWebRequest(speechEndpointUrl, UnityWebRequest.kHttpVerbPOST))
+        string dictationResponse = string.Empty;
+        string dictationError = string.Empty;
+        yield return SendWitAudioRequest(dictationEndpointUrl, pcm16, sampleRate, (response, error) =>
         {
-            request.uploadHandler = new UploadHandlerRaw(wavBytes);
+            dictationResponse = response;
+            dictationError = error;
+        });
+
+        string transcript = ExtractTranscript(dictationResponse);
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            string speechResponse = string.Empty;
+            string speechError = string.Empty;
+            yield return SendWitAudioRequest(speechEndpointUrl, pcm16, sampleRate, (response, error) =>
+            {
+                speechResponse = response;
+                speechError = error;
+            });
+
+            transcript = ExtractTranscript(speechResponse);
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                UnityEngine.Debug.LogWarning(
+                    "[RobotVoice] Wit had no transcript. bytes=" + pcm16.Length +
+                    " dictationError=" + dictationError +
+                    " dictationResponse=" + dictationResponse +
+                    " speechError=" + speechError +
+                    " speechResponse=" + speechResponse);
+                transcriptionRequestActive = false;
+                yield break;
+            }
+        }
+
+        transcriptionRequestActive = false;
+        RaiseFullTranscription(transcript);
+    }
+
+    private IEnumerator SendWitAudioRequest(string endpointUrl, byte[] pcm16, int sampleRate, Action<string, string> complete)
+    {
+        using (UnityWebRequest request = new UnityWebRequest(endpointUrl, UnityWebRequest.kHttpVerbPOST))
+        {
+            request.uploadHandler = new UploadHandlerRaw(pcm16);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", "Bearer " + witClientAccessToken);
-            request.SetRequestHeader("Content-Type", "audio/wav");
+            request.SetRequestHeader("Content-Type", "audio/raw;bits=16;rate=" + (sampleRate / 1000) + "k;encoding=signed-integer;endian=little");
             request.SetRequestHeader("Accept", "application/json");
 
             yield return request.SendWebRequest();
 
-            transcriptionRequestActive = false;
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                UnityEngine.Debug.LogWarning("[RobotVoice] Wit speech request failed: " + request.error + " " + request.downloadHandler.text);
-                yield break;
-            }
-
-            string transcript = ExtractTranscript(request.downloadHandler.text);
-            RaiseFullTranscription(transcript);
+            string response = request.downloadHandler == null ? string.Empty : request.downloadHandler.text;
+            string error = request.result == UnityWebRequest.Result.Success ? string.Empty : request.error;
+            complete?.Invoke(response, error);
         }
     }
 
-    private static string BuildSpeechEndpointUrl(WitConfiguration config)
+    private static string BuildEndpointUrl(WitConfiguration config, bool useDictation)
     {
         IWitRequestEndpointInfo endpoint = config.GetEndpointInfo();
         string url = endpoint.UriScheme + "://" + endpoint.Authority;
@@ -272,23 +347,140 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             url += ":" + endpoint.Port;
         }
 
-        return url + "/" + endpoint.Speech + "?v=" + UnityWebRequest.EscapeURL(endpoint.WitApiVersion);
+        string command = useDictation ? endpoint.Dictation : endpoint.Speech;
+        return url + "/" + command + "?v=" + UnityWebRequest.EscapeURL(endpoint.WitApiVersion);
     }
 
-    private static string ExtractTranscript(string json)
+    private static string ExtractTranscript(string responseText)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(responseText))
         {
             return string.Empty;
         }
 
-        WitSpeechResponse response = JsonUtility.FromJson<WitSpeechResponse>(json);
-        if (response == null)
+        string transcript = string.Empty;
+        string[] lines = responseText.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
         {
-            return string.Empty;
+            string line = lines[i].Trim();
+            if (line.Length == 0 || line[0] != '{')
+            {
+                continue;
+            }
+
+            try
+            {
+                WitSpeechResponse response = JsonUtility.FromJson<WitSpeechResponse>(line);
+                string lineTranscript = response == null
+                    ? string.Empty
+                    : (!string.IsNullOrWhiteSpace(response.text) ? response.text : response._text);
+                if (!string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    transcript = lineTranscript;
+                }
+            }
+            catch (ArgumentException)
+            {
+                string lineTranscript = ExtractJsonStringValue(line, "text");
+                if (string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    lineTranscript = ExtractJsonStringValue(line, "_text");
+                }
+                if (!string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    transcript = lineTranscript;
+                }
+            }
         }
 
-        return !string.IsNullOrWhiteSpace(response.text) ? response.text : response._text;
+        if (!string.IsNullOrWhiteSpace(transcript))
+        {
+            return transcript;
+        }
+
+        transcript = ExtractJsonStringValue(responseText, "text");
+        return !string.IsNullOrWhiteSpace(transcript)
+            ? transcript
+            : ExtractJsonStringValue(responseText, "_text");
+    }
+
+    private static string ExtractJsonStringValue(string json, string key)
+    {
+        string marker = "\"" + key + "\"";
+        int searchIndex = 0;
+        string value = string.Empty;
+        while (searchIndex < json.Length)
+        {
+            int keyIndex = json.IndexOf(marker, searchIndex, StringComparison.Ordinal);
+            if (keyIndex < 0)
+            {
+                break;
+            }
+
+            int colonIndex = json.IndexOf(':', keyIndex + marker.Length);
+            if (colonIndex < 0)
+            {
+                break;
+            }
+
+            int quoteStart = json.IndexOf('"', colonIndex + 1);
+            if (quoteStart < 0)
+            {
+                break;
+            }
+
+            string parsed = ReadJsonString(json, quoteStart);
+            if (!string.IsNullOrWhiteSpace(parsed))
+            {
+                value = parsed;
+            }
+
+            searchIndex = quoteStart + 1;
+        }
+
+        return value;
+    }
+
+    private static string ReadJsonString(string json, int quoteStart)
+    {
+        var builder = new System.Text.StringBuilder();
+        bool escape = false;
+        for (int i = quoteStart + 1; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (escape)
+            {
+                builder.Append(c switch
+                {
+                    '"' => '"',
+                    '\\' => '\\',
+                    '/' => '/',
+                    'b' => '\b',
+                    'f' => '\f',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    _ => c
+                });
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\')
+            {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                break;
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 
     private static byte[] BuildWavBytes(List<byte> pcm16, int sampleRate)
