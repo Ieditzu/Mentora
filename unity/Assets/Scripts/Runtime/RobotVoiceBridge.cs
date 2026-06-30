@@ -259,6 +259,12 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             }
 
             string transcript = ExtractTranscript(request.downloadHandler.text);
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                UnityEngine.Debug.LogWarning("[RobotVoice] Wit speech response had no transcript: " + request.downloadHandler.text);
+                yield break;
+            }
+
             RaiseFullTranscription(transcript);
         }
     }
@@ -275,20 +281,136 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         return url + "/" + endpoint.Speech + "?v=" + UnityWebRequest.EscapeURL(endpoint.WitApiVersion);
     }
 
-    private static string ExtractTranscript(string json)
+    private static string ExtractTranscript(string responseText)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(responseText))
         {
             return string.Empty;
         }
 
-        WitSpeechResponse response = JsonUtility.FromJson<WitSpeechResponse>(json);
-        if (response == null)
+        string transcript = string.Empty;
+        string[] lines = responseText.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
         {
-            return string.Empty;
+            string line = lines[i].Trim();
+            if (line.Length == 0 || line[0] != '{')
+            {
+                continue;
+            }
+
+            try
+            {
+                WitSpeechResponse response = JsonUtility.FromJson<WitSpeechResponse>(line);
+                string lineTranscript = response == null
+                    ? string.Empty
+                    : (!string.IsNullOrWhiteSpace(response.text) ? response.text : response._text);
+                if (!string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    transcript = lineTranscript;
+                }
+            }
+            catch (ArgumentException)
+            {
+                string lineTranscript = ExtractJsonStringValue(line, "text");
+                if (string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    lineTranscript = ExtractJsonStringValue(line, "_text");
+                }
+                if (!string.IsNullOrWhiteSpace(lineTranscript))
+                {
+                    transcript = lineTranscript;
+                }
+            }
         }
 
-        return !string.IsNullOrWhiteSpace(response.text) ? response.text : response._text;
+        if (!string.IsNullOrWhiteSpace(transcript))
+        {
+            return transcript;
+        }
+
+        transcript = ExtractJsonStringValue(responseText, "text");
+        return !string.IsNullOrWhiteSpace(transcript)
+            ? transcript
+            : ExtractJsonStringValue(responseText, "_text");
+    }
+
+    private static string ExtractJsonStringValue(string json, string key)
+    {
+        string marker = "\"" + key + "\"";
+        int searchIndex = 0;
+        string value = string.Empty;
+        while (searchIndex < json.Length)
+        {
+            int keyIndex = json.IndexOf(marker, searchIndex, StringComparison.Ordinal);
+            if (keyIndex < 0)
+            {
+                break;
+            }
+
+            int colonIndex = json.IndexOf(':', keyIndex + marker.Length);
+            if (colonIndex < 0)
+            {
+                break;
+            }
+
+            int quoteStart = json.IndexOf('"', colonIndex + 1);
+            if (quoteStart < 0)
+            {
+                break;
+            }
+
+            string parsed = ReadJsonString(json, quoteStart);
+            if (!string.IsNullOrWhiteSpace(parsed))
+            {
+                value = parsed;
+            }
+
+            searchIndex = quoteStart + 1;
+        }
+
+        return value;
+    }
+
+    private static string ReadJsonString(string json, int quoteStart)
+    {
+        var builder = new System.Text.StringBuilder();
+        bool escape = false;
+        for (int i = quoteStart + 1; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (escape)
+            {
+                builder.Append(c switch
+                {
+                    '"' => '"',
+                    '\\' => '\\',
+                    '/' => '/',
+                    'b' => '\b',
+                    'f' => '\f',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    _ => c
+                });
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\')
+            {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                break;
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 
     private static byte[] BuildWavBytes(List<byte> pcm16, int sampleRate)
