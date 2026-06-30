@@ -28,26 +28,22 @@ public class MultiplayerQuizManager : MonoBehaviour
         new Color(0.13f, 0.69f, 0.30f, 1f), // C — green
         new Color(0.95f, 0.61f, 0.07f, 1f), // D — orange
     };
-    private static readonly string[] AnswerLabels = { "A", "B", "C", "D" };
+    private static readonly string[] AnswerLabels = { "1", "2", "3", "4" };
 
     // ── State ────────────────────────────────────────────────────────────────
 
     private static MultiplayerQuizManager instance;
 
     // Theater screen
-    private Canvas theaterCanvas;
-    private Text   theaterQuestionText;
-    private Text   theaterSubText;
-    private Text[] theaterAnswerTexts = new Text[4];
-    private Image[] theaterAnswerBgs  = new Image[4];
-    private int    hoveredAnswerIndex = -1;
+    private Canvas  theaterCanvas;
+    private Text    theaterQuestionText;
+    private Text    theaterSubText;
+    private Text[]  theaterAnswerTexts = new Text[4];
+    private Image[] theaterAnswerBgs   = new Image[4];
 
-    // Crosshair dot (tiny always-on screen-space canvas, just a white dot at center)
-    private Canvas crosshairCanvas;
-    private Image  crosshairDot;
-    private bool   quizInteractionActive;
-    private bool   answerLocked;
-    private int    lockedAnswerIndex = -1;
+    private bool quizInteractionActive;
+    private bool answerLocked;
+    private int  lockedAnswerIndex = -1;
 
     // Host panel — UI references injected by PauseMenuManager
     private Text   hostStatusText;
@@ -115,7 +111,6 @@ public class MultiplayerQuizManager : MonoBehaviour
     private void Start()
     {
         BuildTheaterScreen();
-        BuildCrosshair();
         EnsureTrigger();
         SubscribeQuizPackets();
     }
@@ -128,119 +123,47 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     private void Update()
     {
-        if (timerActive)
+        if (!timerActive) return;
+        timerRemaining -= Time.deltaTime;
+
+        if (theaterSubText != null && quizInteractionActive)
         {
-            timerRemaining -= Time.deltaTime;
-
-            // Show countdown on theater screen
-            if (theaterSubText != null && quizInteractionActive)
-            {
-                int secs = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
-                // Rebuild sub-text with live timer
-                int qNum = isHost ? currentQuestionIndex + 1 : currentQuestionIndex + 1;
-                theaterSubText.text  = "Question " + qNum + " of " + totalQuestions + "  |  " + secs + "s";
-                theaterSubText.color = timerRemaining < 5f ? new Color(1f, 0.4f, 0.4f) : new Color(0.7f, 0.7f, 1f);
-            }
-
-            if (timerRemaining <= 0f && isHost)
-            {
-                timerActive = false;
-                BroadcastResults();
-            }
+            int secs = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
+            theaterSubText.text  = "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions + "  |  " + secs + "s  |  Press 1-4 to answer";
+            theaterSubText.color = timerRemaining < 5f ? new Color(1f, 0.4f, 0.4f) : new Color(0.7f, 0.7f, 1f);
         }
 
-        if (quizInteractionActive)
+        if (timerRemaining <= 0f && isHost)
         {
-            UpdateCrosshairRaycast();
+            timerActive = false;
+            BroadcastResults();
+        }
+
+        if (quizInteractionActive && !answerLocked)
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null)
+            {
+                if (kb.digit1Key.wasPressedThisFrame) OnAnswerChosen(0);
+                else if (kb.digit2Key.wasPressedThisFrame) OnAnswerChosen(1);
+                else if (kb.digit3Key.wasPressedThisFrame) OnAnswerChosen(2);
+                else if (kb.digit4Key.wasPressedThisFrame) OnAnswerChosen(3);
+            }
         }
     }
 
-    private void UpdateCrosshairRaycast()
-    {
-        Camera cam = Camera.main ?? FindObjectOfType<Camera>();
-        if (cam == null) return;
-
-        // Show crosshair dot at screen center
-        if (crosshairDot != null)
-            crosshairDot.gameObject.SetActive(true);
-
-        // Raycast from screen center into the world
-        Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-        int newHover = -1;
-
-        // Check each answer box collider on the theater screen
-        for (int i = 0; i < 4; i++)
-        {
-            if (theaterAnswerBgs[i] == null) continue;
-            RectTransform rt = theaterAnswerBgs[i].rectTransform;
-
-            // Get the 4 world-space corners of this answer box
-            Vector3[] corners = new Vector3[4];
-            rt.GetWorldCorners(corners);
-
-            // Build a plane from the first 3 corners
-            Vector3 normal = Vector3.Cross(corners[1] - corners[0], corners[3] - corners[0]).normalized;
-            Plane plane = new Plane(normal, corners[0]);
-
-            if (plane.Raycast(ray, out float dist))
-            {
-                Vector3 hit = ray.GetPoint(dist);
-                // Check if hit is inside the rect bounds
-                if (IsPointInRect(hit, corners))
-                {
-                    newHover = i;
-                    break;
-                }
-            }
-        }
-
-        // Update hover highlight
-        if (newHover != hoveredAnswerIndex)
-        {
-            // Restore old hover
-            if (hoveredAnswerIndex >= 0 && theaterAnswerBgs[hoveredAnswerIndex] != null)
-                theaterAnswerBgs[hoveredAnswerIndex].color = answerLocked
-                    ? (hoveredAnswerIndex == lockedAnswerIndex ? AnswerColors[hoveredAnswerIndex] : AnswerColors[hoveredAnswerIndex] * 0.35f)
-                    : AnswerColors[hoveredAnswerIndex] * 0.7f;
-
-            hoveredAnswerIndex = newHover;
-
-            // Brighten new hover
-            if (hoveredAnswerIndex >= 0 && theaterAnswerBgs[hoveredAnswerIndex] != null && !answerLocked)
-                theaterAnswerBgs[hoveredAnswerIndex].color = AnswerColors[hoveredAnswerIndex];
-        }
-
-        // Click to answer
-        if (!answerLocked && hoveredAnswerIndex >= 0 && UnityEngine.InputSystem.Mouse.current != null
-            && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame)
-        {
-            OnAnswerChosen(hoveredAnswerIndex);
-        }
-    }
-
-    private static bool IsPointInRect(Vector3 point, Vector3[] corners)
-    {
-        // corners: [0]=BL, [1]=TL, [2]=TR, [3]=BR
-        Vector3 bl = corners[0], tl = corners[1], tr = corners[2], br = corners[3];
-        // Project onto the rect's local axes
-        Vector3 right = (br - bl).normalized;
-        Vector3 up    = (tl - bl).normalized;
-        float w = Vector3.Dot(tr - bl, right);
-        float h = Vector3.Dot(tl - bl, up);
-        float px = Vector3.Dot(point - bl, right);
-        float py = Vector3.Dot(point - bl, up);
-        return px >= 0 && px <= w && py >= 0 && py <= h;
-    }
 
     // ── Trigger ──────────────────────────────────────────────────────────────
 
     private void EnsureTrigger()
     {
-        var rb = GetComponent<Rigidbody>() ?? gameObject.AddComponent<Rigidbody>();
+        var rb = GetComponent<Rigidbody>();
+        if (rb == null) rb = gameObject.AddComponent<Rigidbody>();
         rb.isKinematic = true;
         rb.useGravity  = false;
 
-        var col = GetComponent<BoxCollider>() ?? gameObject.AddComponent<BoxCollider>();
+        var col = GetComponent<BoxCollider>();
+        if (col == null) col = gameObject.AddComponent<BoxCollider>();
         col.isTrigger = true;
         col.center    = new Vector3(0f, 1f, 0f);
         col.size      = new Vector3(6f, 3f, 6f);
@@ -363,67 +286,24 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
     }
 
-    // ── Crosshair ─────────────────────────────────────────────────────────────
-
-    private void BuildCrosshair()
-    {
-        var go = new GameObject("QuizCrosshair");
-        DontDestroyOnLoad(go);
-        crosshairCanvas              = go.AddComponent<Canvas>();
-        crosshairCanvas.renderMode   = RenderMode.ScreenSpaceOverlay;
-        crosshairCanvas.sortingOrder = 60;
-
-        // Small white dot at exact screen center
-        crosshairDot = MakeImage(go.transform, "Dot", Color.white);
-        crosshairDot.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-        crosshairDot.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        crosshairDot.rectTransform.sizeDelta = new Vector2(10f, 10f);
-        crosshairDot.rectTransform.anchoredPosition = Vector2.zero;
-
-        // Thin horizontal line
-        var hLine = MakeImage(go.transform, "H", new Color(1f, 1f, 1f, 0.7f));
-        hLine.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-        hLine.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        hLine.rectTransform.sizeDelta = new Vector2(20f, 2f);
-        hLine.rectTransform.anchoredPosition = Vector2.zero;
-
-        // Thin vertical line
-        var vLine = MakeImage(go.transform, "V", new Color(1f, 1f, 1f, 0.7f));
-        vLine.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-        vLine.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        vLine.rectTransform.sizeDelta = new Vector2(2f, 20f);
-        vLine.rectTransform.anchoredPosition = Vector2.zero;
-
-        go.SetActive(false);
-    }
 
     private void ShowInteraction(string[] options)
     {
-        answerLocked      = false;
-        lockedAnswerIndex = -1;
-        hoveredAnswerIndex = -1;
+        answerLocked          = false;
+        lockedAnswerIndex     = -1;
         quizInteractionActive = true;
 
-        // Reset theater answer box colors
         for (int i = 0; i < 4; i++)
         {
             bool has = options != null && i < options.Length;
             if (theaterAnswerBgs[i] != null)
                 theaterAnswerBgs[i].color = has ? AnswerColors[i] * 0.7f : new Color(0.1f, 0.1f, 0.18f, 1f);
         }
-
-        if (crosshairCanvas != null) crosshairCanvas.gameObject.SetActive(true);
-
-        // Keep cursor locked so camera still moves freely
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible   = false;
     }
 
     private void HideInteraction()
     {
         quizInteractionActive = false;
-        hoveredAnswerIndex    = -1;
-        if (crosshairCanvas != null) crosshairCanvas.gameObject.SetActive(false);
     }
 
     private void OnAnswerChosen(int idx)
@@ -432,7 +312,6 @@ public class MultiplayerQuizManager : MonoBehaviour
         answerLocked      = true;
         lockedAnswerIndex = idx;
 
-        // Dim all except chosen
         for (int i = 0; i < 4; i++)
         {
             if (theaterAnswerBgs[i] != null)
