@@ -56,6 +56,7 @@ namespace Mentora.Network
                 53 => new QuizStartPacket(),
                 54 => new QuizAnswerPacket(),
                 55 => new QuizResultPacket(),
+                56 => new MultiplayerVoicePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -802,6 +803,49 @@ namespace Mentora.Network
         public MultiplayerPlayerLeftPacket() : base(52) { }
         protected override void Write(BinaryWriter writer) { PutString(writer, ClientId ?? string.Empty); }
         protected override void Read(BinaryReader reader) { ClientId = ReadString(reader); }
+    }
+
+    public class MultiplayerVoicePacket : Packet
+    {
+        public string ClientId;
+        public int Sequence;
+        public int SampleRate;
+        public byte[] Pcm16;
+
+        public MultiplayerVoicePacket(string clientId, int sequence, int sampleRate, byte[] pcm16) : base(56)
+        {
+            ClientId = clientId;
+            Sequence = sequence;
+            SampleRate = sampleRate;
+            Pcm16 = pcm16 ?? Array.Empty<byte>();
+        }
+
+        public MultiplayerVoicePacket() : base(56) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            WriteInt32BigEndian(writer, Sequence);
+            WriteInt32BigEndian(writer, SampleRate);
+            byte[] data = Pcm16 ?? Array.Empty<byte>();
+            WriteInt32BigEndian(writer, data.Length);
+            writer.Write(data);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            Sequence = ReadInt32BigEndian(reader);
+            SampleRate = ReadInt32BigEndian(reader);
+            int length = ReadInt32BigEndian(reader);
+            if (length < 0 || length > 32768)
+            {
+                Pcm16 = Array.Empty<byte>();
+                return;
+            }
+
+            Pcm16 = reader.ReadBytes(length);
+        }
     }
 
     // ── Quiz Packets (53 / 54 / 55) ──────────────────────────────────────────

@@ -16,17 +16,28 @@
 ### Networking Layer
 - Added a new runtime manager: `MultiplayerSessionManager`.
 - Implemented a basic host/join flow using TCP on a local port.
+- Added microphone voice frames to the same multiplayer session protocol.
+- Added persistent voice mode settings: Always On, Push To Talk, and Muted.
+- Added microphone input device selection from the multiplayer voice settings card.
 - Host flow:
   - starts a TCP listener on the chosen port
   - connects the host player locally
 - Join flow:
   - connects to an IP address and port
 - Added packet types for multiplayer session setup and player state sync.
+- Added packet type `56` for 16 kHz PCM voice frames.
 
 ### Player Representation
 - Used the bean character as the base player representation.
 - Added floating name labels above local and remote players.
 - Added simple remote avatar spawning for connected peers.
+- Added spatial `AudioSource` playback on remote avatars for voice chat.
+- Push-to-talk currently uses the `V` key.
+
+### Latency Improvements
+- Reduced transform traffic to latest-useful state instead of sending unchanged frames.
+- Added short remote extrapolation so visible avatars do not trail as far behind received packets.
+- Kept `TcpClient.NoDelay` enabled and serialized socket writes to avoid frame corruption.
 
 ## What Still Needs To Be Done
 
@@ -35,6 +46,7 @@
 - Add interpolation / smoothing for remote player movement.
 - Decide whether the host should also be the authoritative game state owner.
 - Add better disconnect handling and client cleanup.
+- Move voice chat to UDP/WebRTC or an Opus-based transport if this needs to work well outside LAN.
 
 ### Lobby / Session Flow
 - Add a proper lobby state before spawning into the world.
@@ -54,6 +66,8 @@
 - Validate IP and port input before attempting to connect.
 - Show clearer success/failure feedback for host and join actions.
 - Add a copyable host address or local IP helper for the host machine.
+- Surface microphone permission failures in the multiplayer panel.
+- Add key rebinding for push-to-talk instead of the current fixed `V` key.
 
 ### Visual Polish
 - Replace the placeholder multiplayer panel with proper layout and styling.

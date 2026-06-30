@@ -65,6 +65,9 @@ public class PauseMenuManager : MonoBehaviour
     private Text multiplayerStatusText;
     private InputField multiplayerNameInput;
     private InputField multiplayerAddressInput;
+    private Button voiceChatButton;
+    private Button microphoneDeviceButton;
+    private Text voiceHintText;
     private GameObject joinSubPanel;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
@@ -816,7 +819,7 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -104f), new Vector2(260f, 34f));
         multiplayerStatusText.resizeTextForBestFit = false;
 
-        // Right column: player name only
+        // Right column: player name and voice settings
         GameObject mpRight = CreateUiObject("MultiplayerRight", multiplayerPanel.transform);
         RectTransform mpRightRect = mpRight.GetComponent<RectTransform>();
         mpRightRect.sizeDelta = new Vector2(290f, 380f);
@@ -824,13 +827,27 @@ public class PauseMenuManager : MonoBehaviour
         mpRight.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
         mpRight.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
 
-        CreateText("NameLabel", mpRight.transform, "Your Name", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 20f), new Vector2(220f, 30f));
-        multiplayerNameInput = CreateInputField(mpRight.transform, "PlayerNameInput", "Enter your name", new Vector2(0f, -28f), new Vector2(240f, 40f), false);
+        CreateText("NameLabel", mpRight.transform, "Your Name", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 86f), new Vector2(220f, 30f));
+        multiplayerNameInput = CreateInputField(mpRight.transform, "PlayerNameInput", "Enter your name", new Vector2(0f, 38f), new Vector2(240f, 40f), false);
         multiplayerNameInput.contentType = InputField.ContentType.Standard;
         multiplayerNameInput.characterLimit = 18;
 
+        CreateText("VoiceSettingsLabel", mpRight.transform, "Voice Settings", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, -18f), new Vector2(220f, 28f));
+
+        voiceChatButton = CreateButton(mpRight.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, -58f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
+        voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
+        voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
+
+        microphoneDeviceButton = CreateButton(mpRight.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -106f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
+        microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
+        microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
+
+        voiceHintText = CreateText("VoiceHintText", mpRight.transform, "Push-to-talk key: V", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -148f), new Vector2(240f, 24f));
+
         // Quiz Options button — only visible to host when Quiz Island is selected
-        quizOptionsButton = CreateButton(mpRight.transform, "QuizOptionsBtn", "Quiz Options", new Vector2(0f, 100f), new Color(0.45f, 0.18f, 0.72f, 1f));
+        quizOptionsButton = CreateButton(mpRight.transform, "QuizOptionsBtn", "Quiz Options", new Vector2(0f, 140f), new Color(0.45f, 0.18f, 0.72f, 1f));
         quizOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
         quizOptionsButton.GetComponentInChildren<Text>().fontSize = 16;
         quizOptionsButton.onClick.AddListener(() => ShowPanel(quizOptionsPanel));
@@ -1046,6 +1063,77 @@ public class PauseMenuManager : MonoBehaviour
         {
             multiplayerSession.StatusChanged += OnMultiplayerStatusChanged;
             OnMultiplayerStatusChanged(multiplayerSession.CurrentStatus);
+            RefreshVoiceChatButton();
+        }
+    }
+
+    private void OnVoiceChatClicked()
+    {
+        EnsureMultiplayerSession();
+        if (multiplayerSession == null)
+        {
+            return;
+        }
+
+        multiplayerSession.CycleVoiceMode();
+        RefreshVoiceChatButton();
+    }
+
+    private void OnMicrophoneDeviceClicked()
+    {
+        EnsureMultiplayerSession();
+        if (multiplayerSession == null)
+        {
+            return;
+        }
+
+        multiplayerSession.CycleMicrophoneDevice();
+        RefreshVoiceChatButton();
+    }
+
+    private void RefreshVoiceChatButton()
+    {
+        if (voiceChatButton == null || multiplayerSession == null)
+        {
+            return;
+        }
+
+        bool enabled = multiplayerSession.IsVoiceChatEnabled;
+        Text label = voiceChatButton.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.text = "Mode: " + multiplayerSession.GetVoiceModeLabel();
+        }
+
+        Image image = voiceChatButton.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = enabled ? new Color(0.18f, 0.55f, 0.80f, 1f) : new Color(0.55f, 0.22f, 0.22f, 1f);
+        }
+
+        if (microphoneDeviceButton != null)
+        {
+            Text micLabel = microphoneDeviceButton.GetComponentInChildren<Text>();
+            if (micLabel != null)
+            {
+                micLabel.text = "Mic: " + TruncateUiLabel(multiplayerSession.CurrentMicrophoneDevice, 24);
+            }
+
+            microphoneDeviceButton.interactable = multiplayerSession.GetMicrophoneDevices().Length > 0;
+            Image micImage = microphoneDeviceButton.GetComponent<Image>();
+            if (micImage != null)
+            {
+                micImage.color = microphoneDeviceButton.interactable
+                    ? new Color(0.26f, 0.42f, 0.68f, 1f)
+                    : new Color(0.28f, 0.28f, 0.32f, 1f);
+            }
+        }
+
+        if (voiceHintText != null)
+        {
+            voiceHintText.text = multiplayerSession.CurrentVoiceMode == MultiplayerSessionManager.VoiceChatMode.PushToTalk
+                ? "Hold V to talk"
+                : "Click mode to use push-to-talk";
         }
     }
 
@@ -1084,6 +1172,8 @@ public class PauseMenuManager : MonoBehaviour
         {
             multiplayerAddressInput.SetTextWithoutNotify(PlayerPrefs.GetString("MultiplayerHostAddress", ""));
         }
+
+        RefreshVoiceChatButton();
     }
 
     private static string GetLocalLanIp()
@@ -1101,6 +1191,21 @@ public class PauseMenuManager : MonoBehaviour
         }
         catch { }
         return "127.0.0.1";
+    }
+
+    private static string TruncateUiLabel(string value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "Default";
+        }
+
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value.Substring(0, Mathf.Max(0, maxLength - 1)) + "…";
     }
 
     private void HostMultiplayerGame()

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Mentora.Network;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -17,8 +18,17 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const string PlayerNamePrefKey = "MultiplayerPlayerName";
     private const string HostAddressPrefKey = "MultiplayerHostAddress";
     private const string PortPrefKey = "MultiplayerPort";
+    private const string VoiceModePrefKey = "MultiplayerVoiceMode";
+    private const string MicrophoneDevicePrefKey = "MultiplayerMicrophoneDevice";
     private const int DefaultPort = 7777;
-    private const float SendIntervalSeconds = 0.015f;
+    private const float SendIntervalSeconds = 0.03f;
+    private const float ForcedStateIntervalSeconds = 0.5f;
+    private const float MovementSendEpsilonSqr = 0.0004f;
+    private const float YawSendEpsilon = 0.4f;
+    private const float RemoteExtrapolationLimitSeconds = 0.1f;
+    private const int VoiceSampleRate = 16000;
+    private const int VoiceFrameSamples = 320;
+    private const int MaxVoiceFramesPerUpdate = 3;
 
     private static MultiplayerSessionManager instance;
 
@@ -50,6 +60,13 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     public string LocalClientId => localClientId;
 
+    public enum VoiceChatMode
+    {
+        AlwaysOn,
+        PushToTalk,
+        Muted
+    }
+
     private enum SessionMode
     {
         Idle,
@@ -75,8 +92,11 @@ public class MultiplayerSessionManager : MonoBehaviour
         public Transform NameRoot;
         public TextMesh NameText;
         public TextMesh BadgeText;
+        public VoicePlaybackSource Voice;
         public Vector3 TargetPosition;
+        public Vector3 Velocity;
         public float TargetYaw;
+        public float LastReceiveTime;
         public bool HasFirstPacket;
     }
 
@@ -100,6 +120,76 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
     }
 
+    private sealed class VoicePlaybackSource : MonoBehaviour
+    {
+        private readonly Queue<float> queuedSamples = new Queue<float>();
+        private readonly object queueLock = new object();
+        private AudioSource audioSource;
+        private AudioClip streamClip;
+        private int sampleRate = VoiceSampleRate;
+
+        public void Initialize(int newSampleRate)
+        {
+            sampleRate = Mathf.Clamp(newSampleRate, 8000, 48000);
+            audioSource = gameObject.GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            audioSource.playOnAwake = false;
+            audioSource.loop = true;
+            audioSource.spatialBlend = 1f;
+            audioSource.minDistance = 1.5f;
+            audioSource.maxDistance = 20f;
+            audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+            audioSource.volume = 0.9f;
+
+            streamClip = AudioClip.Create("RemoteVoiceStream", sampleRate, 1, sampleRate, true, OnAudioRead);
+            audioSource.clip = streamClip;
+            audioSource.Play();
+        }
+
+        public void EnqueuePcm16(byte[] pcm16, int newSampleRate)
+        {
+            if (pcm16 == null || pcm16.Length < 2)
+            {
+                return;
+            }
+
+            if (audioSource == null || newSampleRate != sampleRate)
+            {
+                Initialize(newSampleRate);
+            }
+
+            lock (queueLock)
+            {
+                int maxQueued = sampleRate * 2;
+                while (queuedSamples.Count > maxQueued)
+                {
+                    queuedSamples.Dequeue();
+                }
+
+                for (int i = 0; i + 1 < pcm16.Length; i += 2)
+                {
+                    short sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+                    queuedSamples.Enqueue(Mathf.Clamp(sample / 32768f, -1f, 1f));
+                }
+            }
+        }
+
+        private void OnAudioRead(float[] data)
+        {
+            lock (queueLock)
+            {
+                for (int i = 0; i < data.Length; i++)
+                {
+                    data[i] = queuedSamples.Count > 0 ? queuedSamples.Dequeue() : 0f;
+                }
+            }
+        }
+    }
+
     private readonly ConcurrentQueue<Action> mainThreadQueue = new ConcurrentQueue<Action>();
     private readonly ConcurrentDictionary<string, RemoteAvatar> remoteAvatars = new ConcurrentDictionary<string, RemoteAvatar>();
     private readonly ConcurrentDictionary<string, NetworkPeer> serverPeers = new ConcurrentDictionary<string, NetworkPeer>();
@@ -117,14 +207,41 @@ public class MultiplayerSessionManager : MonoBehaviour
     private string hostAddress = "127.0.0.1";
     private int hostPort = DefaultPort;
     private float lastSendTime = -999f;
+    private float lastForcedStateTime = -999f;
+    private Vector3 lastSentPosition;
+    private float lastSentYaw;
+    private bool hasSentState;
     private readonly SemaphoreSlim clientSendLock = new SemaphoreSlim(1, 1);
     private int stateSendInFlight;
+    private VoiceChatMode voiceMode = VoiceChatMode.AlwaysOn;
+    private string preferredMicrophoneDevice = string.Empty;
+    private AudioClip microphoneClip;
+    private string microphoneDevice;
+    private int microphoneReadPosition;
+    private readonly float[] microphoneFrame = new float[VoiceFrameSamples];
+    private int voiceSequence;
     private bool localLabelAttached;
     private Transform localNameLabelRoot;
     private TextMesh localNameLabelText;
     private string currentStatus = "Offline";
 
     public string CurrentStatus => currentStatus;
+    public bool IsVoiceChatEnabled => voiceMode != VoiceChatMode.Muted;
+    public VoiceChatMode CurrentVoiceMode => voiceMode;
+    public string CurrentMicrophoneDevice
+    {
+        get
+        {
+            string resolvedDevice = ResolveMicrophoneDevice();
+            if (!string.IsNullOrWhiteSpace(resolvedDevice))
+            {
+                return resolvedDevice;
+            }
+
+            string[] devices = GetMicrophoneDevices();
+            return devices.Length > 0 ? "Default (" + devices[0] + ")" : "No microphone";
+        }
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -147,6 +264,8 @@ public class MultiplayerSessionManager : MonoBehaviour
         hostAddress = PlayerPrefs.GetString(HostAddressPrefKey, hostAddress);
         hostPort = PlayerPrefs.GetInt(PortPrefKey, DefaultPort);
         localPlayerName = GetSavedName();
+        voiceMode = (VoiceChatMode)Mathf.Clamp(PlayerPrefs.GetInt(VoiceModePrefKey, (int)VoiceChatMode.AlwaysOn), 0, 2);
+        preferredMicrophoneDevice = PlayerPrefs.GetString(MicrophoneDevicePrefKey, string.Empty);
         SetStatus(currentStatus);
     }
 
@@ -173,6 +292,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             _ = SendLocalStateAsync();
         }
 
+        CaptureAndSendVoice();
         InterpolateRemoteAvatars();
         RefreshLocalNameLabel();
     }
@@ -190,20 +310,24 @@ public class MultiplayerSessionManager : MonoBehaviour
                 continue;
             }
 
-            float dist = Vector3.Distance(avatar.Root.transform.position, avatar.TargetPosition);
+            Vector3 displayTarget = avatar.TargetPosition;
+            float extrapolateSeconds = Mathf.Clamp(Time.unscaledTime - avatar.LastReceiveTime, 0f, RemoteExtrapolationLimitSeconds);
+            displayTarget += avatar.Velocity * extrapolateSeconds;
+
+            float dist = Vector3.Distance(avatar.Root.transform.position, displayTarget);
 
             // If we're more than 2 units behind just snap — avoids visible lag spikes
             // after a packet loss or stall.
             if (dist > 2f)
             {
-                avatar.Root.transform.position = avatar.TargetPosition;
+                avatar.Root.transform.position = displayTarget;
                 avatar.Root.transform.rotation = Quaternion.Euler(0f, avatar.TargetYaw, 0f);
                 continue;
             }
 
             avatar.Root.transform.position = Vector3.Lerp(
                 avatar.Root.transform.position,
-                avatar.TargetPosition,
+                displayTarget,
                 1f - Mathf.Exp(-posSpeed * dt));
 
             avatar.Root.transform.rotation = Quaternion.Slerp(
@@ -219,6 +343,94 @@ public class MultiplayerSessionManager : MonoBehaviour
         PlayerPrefs.SetString(PlayerNamePrefKey, localPlayerName);
         PlayerPrefs.Save();
         RefreshLocalNameLabel();
+    }
+
+    public bool ToggleVoiceChat()
+    {
+        SetVoiceMode(voiceMode == VoiceChatMode.Muted ? VoiceChatMode.AlwaysOn : VoiceChatMode.Muted);
+        return IsVoiceChatEnabled;
+    }
+
+    public VoiceChatMode CycleVoiceMode()
+    {
+        VoiceChatMode next = voiceMode switch
+        {
+            VoiceChatMode.AlwaysOn => VoiceChatMode.PushToTalk,
+            VoiceChatMode.PushToTalk => VoiceChatMode.Muted,
+            _ => VoiceChatMode.AlwaysOn,
+        };
+        SetVoiceMode(next);
+        return voiceMode;
+    }
+
+    public void SetVoiceChatEnabled(bool enabled)
+    {
+        SetVoiceMode(enabled ? VoiceChatMode.AlwaysOn : VoiceChatMode.Muted);
+    }
+
+    public void SetVoiceMode(VoiceChatMode modeToSet)
+    {
+        voiceMode = modeToSet;
+        PlayerPrefs.SetInt(VoiceModePrefKey, (int)voiceMode);
+        PlayerPrefs.Save();
+
+        if (voiceMode == VoiceChatMode.Muted)
+        {
+            StopVoiceCapture();
+        }
+
+        SetStatus("Voice chat: " + GetVoiceModeLabel());
+    }
+
+    public string[] GetMicrophoneDevices()
+    {
+        return Microphone.devices ?? Array.Empty<string>();
+    }
+
+    public void CycleMicrophoneDevice()
+    {
+        string[] devices = GetMicrophoneDevices();
+        if (devices.Length == 0)
+        {
+            SetMicrophoneDevice(string.Empty);
+            return;
+        }
+
+        int currentIndex = Array.IndexOf(devices, preferredMicrophoneDevice);
+        int nextIndex = currentIndex + 1;
+        if (nextIndex >= devices.Length)
+        {
+            SetMicrophoneDevice(string.Empty);
+            return;
+        }
+
+        SetMicrophoneDevice(devices[nextIndex]);
+    }
+
+    public void SetMicrophoneDevice(string deviceName)
+    {
+        preferredMicrophoneDevice = string.IsNullOrWhiteSpace(deviceName) ? string.Empty : deviceName;
+        PlayerPrefs.SetString(MicrophoneDevicePrefKey, preferredMicrophoneDevice);
+        PlayerPrefs.Save();
+
+        bool restartCapture = microphoneClip != null;
+        StopVoiceCapture();
+        if (restartCapture && voiceMode != VoiceChatMode.Muted)
+        {
+            StartVoiceCapture();
+        }
+
+        SetStatus("Microphone: " + CurrentMicrophoneDevice);
+    }
+
+    public string GetVoiceModeLabel()
+    {
+        return voiceMode switch
+        {
+            VoiceChatMode.AlwaysOn => "Always On",
+            VoiceChatMode.PushToTalk => "Push To Talk",
+            _ => "Muted",
+        };
     }
 
     public void SetHostAddress(string address)
@@ -307,6 +519,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     public void StopAllNetworking()    {
         mode = SessionMode.Idle;
         localClientId = string.Empty;
+        hasSentState = false;
+        StopVoiceCapture();
 
         if (clientCts != null)
         {
@@ -474,6 +688,8 @@ public class MultiplayerSessionManager : MonoBehaviour
                         peer.PlayerName = NormalizePlayerName(statePacket.PlayerName);
                         peer.Position = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
                         peer.Yaw = statePacket.Yaw;
+                        statePacket.ClientId = peer.ClientId;
+                        statePacket.PlayerName = peer.PlayerName;
                         BroadcastServerPacket(statePacket, excludeClientId: peer.ClientId);
                         break;
 
@@ -481,6 +697,16 @@ public class MultiplayerSessionManager : MonoBehaviour
                         // Forward the client's answer to the host's local client connection
                         // by broadcasting to all — the host's own client loop receives it.
                         BroadcastServerPacket(quizAnswer);
+                        break;
+
+                    case MultiplayerVoicePacket voicePacket:
+                        if (string.IsNullOrEmpty(peer.ClientId))
+                        {
+                            break;
+                        }
+
+                        voicePacket.ClientId = peer.ClientId;
+                        BroadcastServerPacket(voicePacket, excludeClientId: peer.ClientId);
                         break;
                 }
             }
@@ -593,6 +819,13 @@ public class MultiplayerSessionManager : MonoBehaviour
                 // Route answer back to host's quiz manager (host receives its own broadcast echo)
                 EnqueueMainThread(() => OnQuizPacket?.Invoke(answerPacket));
                 break;
+
+            case MultiplayerVoicePacket voicePacket:
+                if (!string.IsNullOrEmpty(voicePacket.ClientId) && voicePacket.ClientId != localClientId)
+                {
+                    EnqueueMainThread(() => ApplyRemoteVoice(voicePacket));
+                }
+                break;
         }
     }
 
@@ -616,10 +849,37 @@ public class MultiplayerSessionManager : MonoBehaviour
             avatar.Root.transform.rotation = Quaternion.Euler(0f, statePacket.Yaw, 0f);
             avatar.HasFirstPacket = true;
         }
+        else
+        {
+            float dt = Mathf.Max(0.001f, Time.unscaledTime - avatar.LastReceiveTime);
+            avatar.Velocity = (newPos - avatar.TargetPosition) / dt;
+        }
 
         avatar.TargetPosition = newPos;
         avatar.TargetYaw = statePacket.Yaw;
+        avatar.LastReceiveTime = Time.unscaledTime;
         SetAvatarName(avatar, statePacket.PlayerName);
+    }
+
+    private void ApplyRemoteVoice(MultiplayerVoicePacket voicePacket)
+    {
+        if (voicePacket?.Pcm16 == null || voicePacket.Pcm16.Length == 0)
+        {
+            return;
+        }
+
+        if (!remoteAvatars.TryGetValue(voicePacket.ClientId, out RemoteAvatar avatar) || avatar?.Root == null)
+        {
+            return;
+        }
+
+        if (avatar.Voice == null)
+        {
+            avatar.Voice = avatar.Root.AddComponent<VoicePlaybackSource>();
+            avatar.Voice.Initialize(voicePacket.SampleRate > 0 ? voicePacket.SampleRate : VoiceSampleRate);
+        }
+
+        avatar.Voice.EnqueuePcm16(voicePacket.Pcm16, voicePacket.SampleRate > 0 ? voicePacket.SampleRate : VoiceSampleRate);
     }
 
     private RemoteAvatar CreateRemoteAvatar(string playerName)
@@ -786,12 +1046,167 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             Vector3 position = player.position;
             float yaw = player.eulerAngles.y;
+            bool forcedState = Time.unscaledTime - lastForcedStateTime >= ForcedStateIntervalSeconds;
+            if (hasSentState &&
+                !forcedState &&
+                (position - lastSentPosition).sqrMagnitude < MovementSendEpsilonSqr &&
+                Mathf.Abs(Mathf.DeltaAngle(yaw, lastSentYaw)) < YawSendEpsilon)
+            {
+                return;
+            }
+
             await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
+            lastSentPosition = position;
+            lastSentYaw = yaw;
+            hasSentState = true;
+            if (forcedState)
+            {
+                lastForcedStateTime = Time.unscaledTime;
+            }
         }
         finally
         {
             Interlocked.Exchange(ref stateSendInFlight, 0);
         }
+    }
+
+    private void CaptureAndSendVoice()
+    {
+        if (voiceMode == VoiceChatMode.Muted || !IsClientConnected || string.IsNullOrEmpty(localClientId))
+        {
+            StopVoiceCapture();
+            return;
+        }
+
+        if (microphoneClip == null)
+        {
+            StartVoiceCapture();
+            return;
+        }
+
+        bool shouldTransmit = voiceMode == VoiceChatMode.AlwaysOn || IsPushToTalkPressed();
+        int writePosition = Microphone.GetPosition(microphoneDevice);
+        if (writePosition < 0 || microphoneClip == null)
+        {
+            return;
+        }
+
+        int sampleCount = microphoneClip.samples;
+        int available = writePosition >= microphoneReadPosition
+            ? writePosition - microphoneReadPosition
+            : (sampleCount - microphoneReadPosition) + writePosition;
+
+        if (available > VoiceSampleRate / 2)
+        {
+            microphoneReadPosition = (writePosition - VoiceFrameSamples + sampleCount) % sampleCount;
+            available = VoiceFrameSamples;
+        }
+
+        if (!shouldTransmit)
+        {
+            microphoneReadPosition = writePosition;
+            return;
+        }
+
+        int framesSent = 0;
+        while (available >= VoiceFrameSamples && framesSent < MaxVoiceFramesPerUpdate)
+        {
+            ReadMicrophoneFrame(sampleCount);
+            byte[] pcm16 = EncodePcm16(microphoneFrame);
+            _ = SendClientPacketAsync(new MultiplayerVoicePacket(localClientId, voiceSequence++, VoiceSampleRate, pcm16));
+
+            available -= VoiceFrameSamples;
+            framesSent++;
+        }
+    }
+
+    private void StartVoiceCapture()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone))
+        {
+            UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Microphone);
+            return;
+        }
+#endif
+        if (Microphone.devices == null || Microphone.devices.Length == 0)
+        {
+            return;
+        }
+
+        microphoneDevice = ResolveMicrophoneDevice();
+        microphoneClip = Microphone.Start(microphoneDevice, true, 1, VoiceSampleRate);
+        microphoneReadPosition = 0;
+    }
+
+    private void StopVoiceCapture()
+    {
+        if (microphoneClip != null)
+        {
+            Microphone.End(microphoneDevice);
+        }
+
+        microphoneClip = null;
+        microphoneReadPosition = 0;
+    }
+
+    private static bool IsPushToTalkPressed()
+    {
+        Keyboard keyboard = Keyboard.current;
+        return keyboard != null && keyboard.vKey.isPressed;
+    }
+
+    private string ResolveMicrophoneDevice()
+    {
+        if (string.IsNullOrWhiteSpace(preferredMicrophoneDevice))
+        {
+            return null;
+        }
+
+        string[] devices = GetMicrophoneDevices();
+        for (int i = 0; i < devices.Length; i++)
+        {
+            if (devices[i] == preferredMicrophoneDevice)
+            {
+                return preferredMicrophoneDevice;
+            }
+        }
+
+        preferredMicrophoneDevice = string.Empty;
+        PlayerPrefs.SetString(MicrophoneDevicePrefKey, preferredMicrophoneDevice);
+        PlayerPrefs.Save();
+        return null;
+    }
+
+    private void ReadMicrophoneFrame(int sampleCount)
+    {
+        if (microphoneReadPosition + VoiceFrameSamples <= sampleCount)
+        {
+            microphoneClip.GetData(microphoneFrame, microphoneReadPosition);
+            microphoneReadPosition = (microphoneReadPosition + VoiceFrameSamples) % sampleCount;
+            return;
+        }
+
+        int firstCount = sampleCount - microphoneReadPosition;
+        float[] wrapBuffer = new float[VoiceFrameSamples];
+        microphoneClip.GetData(wrapBuffer, microphoneReadPosition);
+        Array.Copy(wrapBuffer, 0, microphoneFrame, 0, firstCount);
+        microphoneClip.GetData(wrapBuffer, 0);
+        Array.Copy(wrapBuffer, 0, microphoneFrame, firstCount, VoiceFrameSamples - firstCount);
+        microphoneReadPosition = VoiceFrameSamples - firstCount;
+    }
+
+    private static byte[] EncodePcm16(float[] samples)
+    {
+        byte[] pcm16 = new byte[samples.Length * 2];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            short value = (short)Mathf.Clamp(Mathf.RoundToInt(samples[i] * 32767f), short.MinValue, short.MaxValue);
+            pcm16[i * 2] = (byte)(value & 0xff);
+            pcm16[(i * 2) + 1] = (byte)((value >> 8) & 0xff);
+        }
+
+        return pcm16;
     }
 
     private async Task SendClientPacketAsync(Packet packet)
