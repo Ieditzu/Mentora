@@ -43,10 +43,10 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         {
             witConfiguration = config,
             maxRecordingTime = 6f,
-            minKeepAliveVolume = 0.0015f,
+            minKeepAliveVolume = 0.02f,
             minKeepAliveTimeInSeconds = 0.75f,
             minTranscriptionKeepAliveTimeInSeconds = 0.5f,
-            soundWakeThreshold = 0.0015f,
+            soundWakeThreshold = 0.02f,
             sampleLengthInMs = 20,
             micBufferLengthInSeconds = 1f,
             sendAudioToWit = true,
@@ -57,7 +57,11 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         dictation.DictationEvents.OnMicLevelChanged.AddListener(OnMicLevelChanged);
         dictation.DictationEvents.OnError.AddListener(OnDictationError);
 
-        ttsService = gameObject.AddComponent<TTSWit>();
+        GameObject ttsObject = new GameObject("RudolfApiTTS");
+        ttsObject.transform.SetParent(transform, false);
+        ttsObject.SetActive(false);
+
+        ttsService = ttsObject.AddComponent<TTSWit>();
         ttsService.RequestSettings = new TTSWitRequestSettings
         {
             configuration = config,
@@ -65,8 +69,14 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             audioStream = true
         };
 
-        speaker = gameObject.AddComponent<TTSSpeaker>();
-        speaker.presetVoiceID = "CHARLIE";
+        AudioSource speechSource = ttsObject.AddComponent<AudioSource>();
+        speechSource.playOnAwake = false;
+        speechSource.spatialBlend = 0.35f;
+
+        speaker = ttsObject.AddComponent<TTSSpeaker>();
+        speaker.presetVoiceID = string.Empty;
+        speaker.customWitVoiceSettings = new TTSWitVoiceSettings { voice = "Charlie", style = "default" };
+        ttsObject.SetActive(true);
     }
 
     public void SetListening(bool shouldListen)

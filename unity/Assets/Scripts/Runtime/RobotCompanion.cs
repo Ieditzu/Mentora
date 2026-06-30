@@ -93,6 +93,8 @@ public class RobotCompanion : MonoBehaviour
     private RobotVoiceBridge voiceBridge;
     private bool       waiting;
     private float      lastSpoke;
+    private bool       voiceConnectInFlight;
+    private float      lastVoiceConnectAttempt = -999f;
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
 
@@ -110,6 +112,7 @@ public class RobotCompanion : MonoBehaviour
         ResolvePlayer();
         SetupPhysics();
         SetupVoiceBridge();
+        EnsureGameClientExists();
 
         if (GameClient.Instance != null)
             GameClient.Instance.OnPacketReceived += OnPacket;
@@ -435,9 +438,14 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
+        if (!TryExtractWakeCommand(transcript, out string command))
+        {
+            return;
+        }
+
         waiting = true;
         lastSpoke = Time.time;
-        StartCoroutine(RequestVoiceReply(transcript));
+        StartCoroutine(RequestVoiceReply(command));
     }
 
     private IEnumerator RequestVoiceReply(string transcript)
@@ -523,14 +531,65 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
+        EnsureVoiceServerConnection();
+
         bool hasServer = GameClient.Instance != null && GameClient.Instance.IsConnected;
-        bool shouldListen = hasServer && !waiting && !voiceBridge.IsSpeaking;
+        bool shouldListen = hasServer && voiceBridge.HasSpeechRecognition && !waiting && !voiceBridge.IsSpeaking;
         if (shouldListen && IsInMultiplayerSession())
         {
             shouldListen = IsPlayerLookingAtRudolf(fpsCamera);
         }
 
         voiceBridge.SetListening(shouldListen);
+    }
+
+    private static void EnsureGameClientExists()
+    {
+        if (GameClient.Instance != null)
+        {
+            return;
+        }
+
+        var clientObject = new GameObject("GameClient");
+        clientObject.AddComponent<GameClient>();
+    }
+
+    private void EnsureVoiceServerConnection()
+    {
+        EnsureGameClientExists();
+
+        if (GameClient.Instance == null || GameClient.Instance.IsConnected || voiceConnectInFlight)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime - lastVoiceConnectAttempt < 5f)
+        {
+            return;
+        }
+
+        lastVoiceConnectAttempt = Time.unscaledTime;
+        _ = ConnectVoiceServerAsync();
+    }
+
+    private async System.Threading.Tasks.Task ConnectVoiceServerAsync()
+    {
+        voiceConnectInFlight = true;
+        try
+        {
+            if (GameClient.Instance != null && !GameClient.Instance.IsConnected)
+            {
+                await GameClient.Instance.Connect();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[RobotCompanion] Voice server connection failed: " + ex.Message);
+        }
+        finally
+        {
+            voiceConnectInFlight = false;
+        }
     }
 
     private bool IsPlayerLookingAtRudolf(Camera fpsCamera)
@@ -555,6 +614,37 @@ public class RobotCompanion : MonoBehaviour
     {
         return MultiplayerSessionManager.Instance != null &&
                !string.IsNullOrEmpty(MultiplayerSessionManager.Instance.LocalClientId);
+    }
+
+    private static bool TryExtractWakeCommand(string transcript, out string command)
+    {
+        command = string.Empty;
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return false;
+        }
+
+        string trimmed = transcript.Trim();
+        string normalized = trimmed.ToLowerInvariant().TrimStart(' ', '.', ',', '!', '?', ':', ';', '-', '—');
+        string[] wakePrefixes = { "hey rudolf", "hey rudolph", "hey rodolf", "hey rudolphs", "hey robot" };
+        for (int i = 0; i < wakePrefixes.Length; i++)
+        {
+            string prefix = wakePrefixes[i];
+            if (!normalized.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            command = trimmed.Substring(Mathf.Min(trimmed.Length, prefix.Length)).TrimStart(' ', '.', ',', '!', '?', ':', ';', '-', '—');
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                command = "hello";
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static string FallbackLine(string trigger, string context)
