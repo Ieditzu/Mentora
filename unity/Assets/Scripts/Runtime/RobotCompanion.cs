@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using Mentora.Network;
@@ -78,6 +79,7 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float bubbleTime      = 5f;
     [SerializeField] private float fadeDuration    = 0.5f;
     [SerializeField] private float minCooldown     = 8f;
+    [SerializeField] private float conversationTimeout = 18f;
 
     // ── Internal ─────────────────────────────────────────────────────────────
 
@@ -87,7 +89,9 @@ public class RobotCompanion : MonoBehaviour
     private Rigidbody  rb;
     private Vector3    bounceVelocity;   // extra velocity from collision impacts
     private GameObject bubble;
+    private RectTransform bubbleRect;
     private Text       bubbleText;
+    private Text       codeBadgeText;
     private CanvasGroup bubbleCg;
     private Coroutine  hideCoroutine;
     private RobotVoiceBridge voiceBridge;
@@ -95,6 +99,10 @@ public class RobotCompanion : MonoBehaviour
     private float      lastSpoke;
     private bool       voiceConnectInFlight;
     private float      lastVoiceConnectAttempt = -999f;
+    private float      nextVoiceConnectAttempt = 1.5f;
+    private int        voiceConnectFailureCount;
+    private bool       conversationActive;
+    private float      lastConversationHeard = -999f;
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
 
@@ -146,18 +154,31 @@ public class RobotCompanion : MonoBehaviour
             transform.position = player.position + Vector3.up * hoverHeight + snapDir * followDistance;
         }
 
+        var fpsCam = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
+        bool inConversation = IsConversationActive();
+
         // ── Orbit slowly — smooth world-space angle, no snapping ─────────────
-        orbitAngle = (orbitAngle + 12f * Time.deltaTime) % 360f;
+        if (!inConversation)
+            orbitAngle = (orbitAngle + 12f * Time.deltaTime) % 360f;
 
         float bob        = Mathf.Sin(Time.time * bobSpeed) * bobAmplitude;
         Vector3 orbitDir  = Quaternion.Euler(0f, orbitAngle, 0f) * Vector3.forward;
         Vector3 targetPos = player.position
             + Vector3.up * (hoverHeight + bob)
             + orbitDir * followDistance;
+        if (inConversation && fpsCam != null)
+        {
+            targetPos = fpsCam.transform.position
+                + fpsCam.transform.forward * 2.35f
+                + Vector3.down * 0.35f
+                + Vector3.right * 0.15f;
+        }
 
         // ── Move toward orbit target — exponential smoothing, no snapping ───────
         float t = 1f - Mathf.Exp(-followSpeed * Time.deltaTime);
-        Vector3 steer = SteerAround(transform.position, (targetPos - transform.position).normalized);
+        Vector3 steer = inConversation
+            ? (targetPos - transform.position).normalized
+            : SteerAround(transform.position, (targetPos - transform.position).normalized);
         Vector3 next = Vector3.Lerp(transform.position, transform.position + steer * Vector3.Distance(transform.position, targetPos), t);
         if (rb != null && rb.isKinematic)
             rb.MovePosition(next);
@@ -168,7 +189,6 @@ public class RobotCompanion : MonoBehaviour
         // Camera.main in this project is an overview cam far from the player.
         // The real player camera is a child of the FPS controller.
         Vector3 headPos = player.position + Vector3.up * 4f; // FPS eyeHeight default
-        var fpsCam = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
         if (fpsCam != null)
             headPos = fpsCam.transform.position;
 
@@ -176,8 +196,11 @@ public class RobotCompanion : MonoBehaviour
         if (lookDir.sqrMagnitude > 0.001f)
         {
             Quaternion desiredRot = Quaternion.LookRotation(lookDir.normalized);
-            desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(
-                Vector3.Distance(transform.position, targetPos) - followDistance));
+            if (!inConversation)
+            {
+                desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(
+                    Vector3.Distance(transform.position, targetPos) - followDistance));
+            }
             Quaternion smoothRot = Quaternion.Slerp(transform.rotation, desiredRot, rotSpeed * Time.deltaTime);
             if (rb != null && rb.isKinematic)
                 rb.MoveRotation(smoothRot);
@@ -349,9 +372,9 @@ public class RobotCompanion : MonoBehaviour
 
         var canvas = bubble.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
-        var rt = bubble.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(280f, 70f);
-        rt.localScale = Vector3.one * 0.007f;
+        bubbleRect = bubble.GetComponent<RectTransform>();
+        bubbleRect.sizeDelta = new Vector2(300f, 82f);
+        bubbleRect.localScale = Vector3.one * 0.0058f;
 
         bubbleCg = bubble.AddComponent<CanvasGroup>();
 
@@ -374,8 +397,28 @@ public class RobotCompanion : MonoBehaviour
         nameTxt.fontStyle = FontStyle.Bold;
         nameTxt.color = new Color(0.85f, 0.65f, 1f);
         var nameRt = nameGo.GetComponent<RectTransform>();
-        nameRt.anchorMin = new Vector2(0, 0.65f); nameRt.anchorMax = Vector2.one;
-        nameRt.offsetMin = new Vector2(10, 0); nameRt.offsetMax = new Vector2(-10, -4);
+        nameRt.anchorMin = new Vector2(0, 1f); nameRt.anchorMax = new Vector2(1f, 1f);
+        nameRt.pivot = new Vector2(0.5f, 1f);
+        nameRt.sizeDelta = new Vector2(0f, 22f);
+        nameRt.anchoredPosition = new Vector2(0f, -5f);
+        nameRt.offsetMin = new Vector2(10, nameRt.offsetMin.y);
+        nameRt.offsetMax = new Vector2(-10, nameRt.offsetMax.y);
+
+        var badgeGo = new GameObject("CodeBadge");
+        badgeGo.transform.SetParent(bubble.transform, false);
+        codeBadgeText = badgeGo.AddComponent<Text>();
+        codeBadgeText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        codeBadgeText.text = "CODE";
+        codeBadgeText.fontSize = 10;
+        codeBadgeText.fontStyle = FontStyle.Bold;
+        codeBadgeText.color = new Color(0.08f, 0.95f, 1f);
+        codeBadgeText.alignment = TextAnchor.MiddleRight;
+        var badgeRt = badgeGo.GetComponent<RectTransform>();
+        badgeRt.anchorMin = new Vector2(1f, 1f); badgeRt.anchorMax = new Vector2(1f, 1f);
+        badgeRt.pivot = new Vector2(1f, 1f);
+        badgeRt.sizeDelta = new Vector2(70f, 22f);
+        badgeRt.anchoredPosition = new Vector2(-10f, -5f);
+        codeBadgeText.gameObject.SetActive(false);
 
         // Speech text
         var textGo = new GameObject("Text");
@@ -385,11 +428,12 @@ public class RobotCompanion : MonoBehaviour
         bubbleText.fontSize = 14;
         bubbleText.color = Color.white;
         bubbleText.alignment = TextAnchor.UpperLeft;
+        bubbleText.supportRichText = true;
         bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
         bubbleText.verticalOverflow = VerticalWrapMode.Overflow;
         var textRt = textGo.GetComponent<RectTransform>();
-        textRt.anchorMin = Vector2.zero; textRt.anchorMax = new Vector2(1, 0.65f);
-        textRt.offsetMin = new Vector2(10, 6); textRt.offsetMax = new Vector2(-10, 0);
+        textRt.anchorMin = Vector2.zero; textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = new Vector2(12, 10); textRt.offsetMax = new Vector2(-12, -30);
 
         bubble.SetActive(false);
     }
@@ -438,13 +482,28 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
-        if (!TryExtractWakeCommand(transcript, out string command))
+        bool wasConversationActive = IsConversationActive();
+        string command;
+        if (wasConversationActive)
+        {
+            command = StripWakePhraseIfPresent(transcript).Trim();
+        }
+        else if (!TryExtractWakeCommand(transcript, out command))
         {
             return;
         }
 
-        waiting = true;
         lastSpoke = Time.time;
+        conversationActive = true;
+        lastConversationHeard = Time.time;
+
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            ShowLine("Listening…", 2.8f);
+            return;
+        }
+
+        waiting = true;
         StartCoroutine(RequestVoiceReply(command));
     }
 
@@ -479,6 +538,8 @@ public class RobotCompanion : MonoBehaviour
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 waiting = false;
+                conversationActive = true;
+                lastConversationHeard = Time.time;
                 ShowLine(r.Line);
                 if (voiceBridge != null)
                     voiceBridge.Speak(r.Line);
@@ -489,8 +550,16 @@ public class RobotCompanion : MonoBehaviour
 
     private void ShowLine(string line)
     {
+        ShowLine(line, -1f);
+    }
+
+    private void ShowLine(string line, float overrideDuration)
+    {
         if (string.IsNullOrWhiteSpace(line)) return;
-        if (bubbleText != null) bubbleText.text = line;
+        string formattedLine = FormatBubbleText(line, out bool hasCode);
+        if (bubbleText != null) bubbleText.text = formattedLine;
+        if (codeBadgeText != null) codeBadgeText.gameObject.SetActive(hasCode);
+        ApplyBubbleSize(line, hasCode);
         if (bubble != null)
         {
             bubble.SetActive(true);
@@ -498,12 +567,13 @@ public class RobotCompanion : MonoBehaviour
         }
 
         if (hideCoroutine != null) StopCoroutine(hideCoroutine);
-        hideCoroutine = StartCoroutine(HideBubble());
+        float displaySeconds = overrideDuration > 0f ? overrideDuration : CalculateDisplayTime(line, hasCode);
+        hideCoroutine = StartCoroutine(HideBubble(displaySeconds));
     }
 
-    private IEnumerator HideBubble()
+    private IEnumerator HideBubble(float displaySeconds)
     {
-        yield return new WaitForSeconds(bubbleTime);
+        yield return new WaitForSeconds(displaySeconds);
         if (bubbleCg != null)
         {
             float t = 0f;
@@ -515,6 +585,119 @@ public class RobotCompanion : MonoBehaviour
             }
         }
         if (bubble != null) bubble.SetActive(false);
+    }
+
+    private void ApplyBubbleSize(string rawLine, bool hasCode)
+    {
+        if (bubbleRect == null)
+        {
+            return;
+        }
+
+        int lineBreaks = 1;
+        int longestLine = 0;
+        int currentLine = 0;
+        for (int i = 0; i < rawLine.Length; i++)
+        {
+            if (rawLine[i] == '\n')
+            {
+                lineBreaks++;
+                longestLine = Mathf.Max(longestLine, currentLine);
+                currentLine = 0;
+            }
+            else
+            {
+                currentLine++;
+            }
+        }
+        longestLine = Mathf.Max(longestLine, currentLine);
+
+        float width = Mathf.Clamp(260f + longestLine * (hasCode ? 5.8f : 4.4f), 300f, hasCode ? 620f : 460f);
+        int wrappedLines = Mathf.CeilToInt(Mathf.Max(1f, rawLine.Length) / Mathf.Max(28f, width / 12f));
+        int estimatedLines = Mathf.Max(lineBreaks, wrappedLines);
+        float height = Mathf.Clamp(58f + estimatedLines * (hasCode ? 20f : 18f), 82f, hasCode ? 430f : 260f);
+
+        bubbleRect.sizeDelta = new Vector2(width, height);
+    }
+
+    private float CalculateDisplayTime(string rawLine, bool hasCode)
+    {
+        float lengthTime = rawLine.Length * 0.055f;
+        float lineTime = CountLines(rawLine) * 0.35f;
+        float codeBonus = hasCode ? 5f : 0f;
+        return Mathf.Clamp(bubbleTime + lengthTime + lineTime + codeBonus, bubbleTime, hasCode ? 28f : 18f);
+    }
+
+    private static int CountLines(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 1;
+        }
+
+        int lines = 1;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                lines++;
+            }
+        }
+
+        return lines;
+    }
+
+    private static string FormatBubbleText(string rawLine, out bool hasCode)
+    {
+        hasCode = false;
+        if (string.IsNullOrEmpty(rawLine))
+        {
+            return string.Empty;
+        }
+
+        string[] lines = rawLine.Replace("\r\n", "\n").Split('\n');
+        var builder = new StringBuilder();
+        bool inFence = false;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            string trimmed = line.Trim();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            {
+                hasCode = true;
+                inFence = !inFence;
+                if (inFence)
+                {
+                    if (builder.Length > 0) builder.Append('\n');
+                    builder.Append("<color=#48F1FF><b>▣ CODE</b></color>");
+                }
+                continue;
+            }
+
+            bool codeLine = inFence || line.StartsWith("    ", StringComparison.Ordinal) || line.StartsWith("\t", StringComparison.Ordinal);
+            if (codeLine)
+            {
+                hasCode = true;
+                if (builder.Length > 0) builder.Append('\n');
+                builder.Append("<color=#A6F7FF>│ ");
+                builder.Append(EscapeRichText(line.TrimEnd()));
+                builder.Append("</color>");
+            }
+            else
+            {
+                if (builder.Length > 0) builder.Append('\n');
+                builder.Append(EscapeRichText(line));
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string EscapeRichText(string value)
+    {
+        return string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("<", "‹").Replace(">", "›");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -533,9 +716,9 @@ public class RobotCompanion : MonoBehaviour
 
         EnsureVoiceServerConnection();
 
-        bool hasServer = GameClient.Instance != null && GameClient.Instance.IsConnected;
-        bool shouldListen = hasServer && voiceBridge.HasSpeechRecognition && !waiting && !voiceBridge.IsSpeaking;
-        if (shouldListen && IsInMultiplayerSession())
+        bool inConversation = IsConversationActive();
+        bool shouldListen = voiceBridge.HasSpeechRecognition && !waiting && !voiceBridge.IsSpeaking;
+        if (shouldListen && IsInMultiplayerSession() && !inConversation)
         {
             shouldListen = IsPlayerLookingAtRudolf(fpsCamera);
         }
@@ -558,12 +741,20 @@ public class RobotCompanion : MonoBehaviour
     {
         EnsureGameClientExists();
 
-        if (GameClient.Instance == null || GameClient.Instance.IsConnected || voiceConnectInFlight)
+        if (voiceBridge == null || !voiceBridge.HasSpeechRecognition)
         {
             return;
         }
 
-        if (Time.unscaledTime - lastVoiceConnectAttempt < 5f)
+        if (GameClient.Instance == null ||
+            GameClient.Instance.IsConnected ||
+            GameClient.Instance.IsConnecting ||
+            voiceConnectInFlight)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime < nextVoiceConnectAttempt)
         {
             return;
         }
@@ -581,15 +772,33 @@ public class RobotCompanion : MonoBehaviour
             {
                 await GameClient.Instance.Connect();
             }
+
+            if (GameClient.Instance != null && GameClient.Instance.IsConnected)
+            {
+                voiceConnectFailureCount = 0;
+                nextVoiceConnectAttempt = Time.unscaledTime + 5f;
+            }
+            else
+            {
+                RegisterVoiceConnectFailure();
+            }
         }
         catch (Exception ex)
         {
             Debug.LogWarning("[RobotCompanion] Voice server connection failed: " + ex.Message);
+            RegisterVoiceConnectFailure();
         }
         finally
         {
             voiceConnectInFlight = false;
         }
+    }
+
+    private void RegisterVoiceConnectFailure()
+    {
+        voiceConnectFailureCount++;
+        float delay = Mathf.Clamp(10f * voiceConnectFailureCount, 15f, 90f);
+        nextVoiceConnectAttempt = Time.unscaledTime + delay;
     }
 
     private bool IsPlayerLookingAtRudolf(Camera fpsCamera)
@@ -616,6 +825,22 @@ public class RobotCompanion : MonoBehaviour
                !string.IsNullOrEmpty(MultiplayerSessionManager.Instance.LocalClientId);
     }
 
+    private bool IsConversationActive()
+    {
+        if (!conversationActive)
+        {
+            return false;
+        }
+
+        if (Time.time - lastConversationHeard <= conversationTimeout || waiting || (voiceBridge != null && voiceBridge.IsSpeaking))
+        {
+            return true;
+        }
+
+        conversationActive = false;
+        return false;
+    }
+
     private static bool TryExtractWakeCommand(string transcript, out string command)
     {
         command = string.Empty;
@@ -625,26 +850,105 @@ public class RobotCompanion : MonoBehaviour
         }
 
         string trimmed = transcript.Trim();
-        string normalized = trimmed.ToLowerInvariant().TrimStart(' ', '.', ',', '!', '?', ':', ';', '-', '—');
-        string[] wakePrefixes = { "hey rudolf", "hey rudolph", "hey rodolf", "hey rudolphs", "hey robot" };
-        for (int i = 0; i < wakePrefixes.Length; i++)
+        string normalized = NormalizeWakeText(trimmed);
+        string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        int wakeIndex = FindWakeNameIndex(words);
+        if (wakeIndex < 0)
         {
-            string prefix = wakePrefixes[i];
-            if (!normalized.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            command = trimmed.Substring(Mathf.Min(trimmed.Length, prefix.Length)).TrimStart(' ', '.', ',', '!', '?', ':', ';', '-', '—');
-            if (string.IsNullOrWhiteSpace(command))
-            {
-                command = "hello";
-            }
-
-            return true;
+            return false;
         }
 
-        return false;
+        bool hasWakeLead = wakeIndex == 0 ||
+            (wakeIndex <= 4 && IsWakeLead(words[Mathf.Max(0, wakeIndex - 1)])) ||
+            (wakeIndex <= 5 && normalized.Contains("hey " + words[wakeIndex]));
+        if (!hasWakeLead)
+        {
+            return false;
+        }
+
+        command = BuildCommandAfterWake(words, wakeIndex);
+        return true;
+    }
+
+    private static string StripWakePhraseIfPresent(string transcript)
+    {
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return string.Empty;
+        }
+
+        string normalized = NormalizeWakeText(transcript);
+        string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        int wakeIndex = FindWakeNameIndex(words);
+        if (wakeIndex < 0)
+        {
+            return transcript;
+        }
+
+        string command = BuildCommandAfterWake(words, wakeIndex);
+        return string.IsNullOrWhiteSpace(command) ? transcript : command;
+    }
+
+    private static string NormalizeWakeText(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = char.ToLowerInvariant(text[i]);
+            builder.Append(char.IsLetterOrDigit(c) ? c : ' ');
+        }
+        return builder.ToString();
+    }
+
+    private static int FindWakeNameIndex(string[] words)
+    {
+        int limit = Mathf.Min(words.Length, 8);
+        for (int i = 0; i < limit; i++)
+        {
+            if (IsWakeName(words[i]))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static bool IsWakeLead(string word)
+    {
+        return word == "hey" || word == "hi" || word == "hello" || word == "yo" || word == "ok" || word == "okay";
+    }
+
+    private static bool IsWakeName(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word))
+        {
+            return false;
+        }
+
+        return word == "rudolf" ||
+               word == "rudolph" ||
+               word == "rodolf" ||
+               word == "rudolfs" ||
+               word == "rudolphs" ||
+               word == "robot" ||
+               word.StartsWith("rudol", StringComparison.Ordinal) ||
+               word.StartsWith("rudop", StringComparison.Ordinal);
+    }
+
+    private static string BuildCommandAfterWake(string[] words, int wakeIndex)
+    {
+        int start = wakeIndex + 1;
+        while (start < words.Length && (words[start] == "please" || words[start] == "can" || words[start] == "you"))
+        {
+            break;
+        }
+
+        if (start >= words.Length)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(" ", words, start, words.Length - start).Trim();
     }
 
     private static string FallbackLine(string trigger, string context)

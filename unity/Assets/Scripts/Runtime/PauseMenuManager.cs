@@ -36,6 +36,7 @@ public class PauseMenuManager : MonoBehaviour
     private GameObject tasksPanel;
     private GameObject goalsPanel;
     private GameObject serverPanel;
+    private GameObject settingsPanel;
     private GameObject multiplayerPanel;
     private GameObject hostGamePanel;
     private GameObject quizOptionsPanel;
@@ -614,11 +615,11 @@ public class PauseMenuManager : MonoBehaviour
         CreateText("ActionsTitle", actions.transform, "Quick Actions", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 115f), new Vector2(200f, 30f));
 
         Button resumeButton = CreateButton(actions.transform, "ResumeButton", "Resume", new Vector2(0f, 78f), new Color(0.18f, 0.63f, 0.43f, 1f));
-        resumeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        resumeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         resumeButton.onClick.AddListener(ResumeGame);
 
-        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, 26f), new Color(0.6f, 0.4f, 0.8f, 1f));
-        goalsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        Button goalsBtn = CreateButton(actions.transform, "GoalsBtn", "View Goals", new Vector2(0f, 34f), new Color(0.6f, 0.4f, 0.8f, 1f));
+        goalsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         goalsBtn.onClick.AddListener(() => {
             if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
             if (loggedInChildId != -1)
@@ -626,24 +627,53 @@ public class PauseMenuManager : MonoBehaviour
             ShowPanel(goalsPanel);
         });
 
-        Button multiplayerButton = CreateButton(actions.transform, "MultiplayerBtn", "Multiplayer", new Vector2(0f, -26f), new Color(0.18f, 0.55f, 0.80f, 1f));
-        multiplayerButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        Button settingsButton = CreateButton(actions.transform, "SettingsBtn", "Settings", new Vector2(0f, -10f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        settingsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
+        settingsButton.GetComponentInChildren<Text>().fontSize = 14;
+        settingsButton.onClick.AddListener(() => ShowPanel(settingsPanel));
+
+        Button multiplayerButton = CreateButton(actions.transform, "MultiplayerBtn", "Multiplayer", new Vector2(0f, -54f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        multiplayerButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         multiplayerButton.GetComponentInChildren<Text>().color = Color.white;
         multiplayerButton.GetComponentInChildren<Text>().fontSize = 14;
         multiplayerButton.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0.15f, 0.25f, 0.7f);
         multiplayerButton.onClick.AddListener(() => ShowPanel(multiplayerPanel));
 
-        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -78f), new Color(0.72f, 0.24f, 0.26f, 1f));
-        quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -98f), new Color(0.72f, 0.24f, 0.26f, 1f));
+        quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         quitButton.onClick.AddListener(QuitGame);
 
-        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -130f), new Color(0.45f, 0.45f, 0.5f, 1f));
-        devOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 44f);
+        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -142f), new Color(0.45f, 0.45f, 0.5f, 1f));
+        devOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         devOptionsButton.onClick.AddListener(() => {
             if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
             ShowPanel(tasksPanel);
         });
         RefreshDevOptionsVisibility();
+
+        settingsPanel = CreateUiObject("SettingsPanel", canvas.transform);
+        RectTransform settingsRect = settingsPanel.GetComponent<RectTransform>();
+        settingsRect.sizeDelta = new Vector2(720f, 560f);
+        settingsRect.anchoredPosition = Vector2.zero;
+        settingsPanel.AddComponent<Image>().color = new Color(0.09f, 0.12f, 0.18f, 0.96f);
+        settingsPanel.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.4f);
+
+        GameObject settingsTopBar = CreateUiObject("TopBar", settingsPanel.transform);
+        RectTransform settingsTopRect = settingsTopBar.GetComponent<RectTransform>();
+        settingsTopRect.sizeDelta = new Vector2(720f, 88f);
+        settingsTopRect.anchoredPosition = new Vector2(0f, 216f);
+        settingsTopBar.AddComponent<Image>().color = new Color(0.12f, 0.20f, 0.32f, 0.96f);
+        settingsTopBar.AddComponent<Outline>().effectColor = new Color(0f, 0.9f, 1f, 0.35f);
+        CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 34, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.93f, 0.97f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+
+        CreateSensitivitySection(settingsPanel.transform);
+        CreateGlobalVoiceSettingsSection(settingsPanel.transform);
+
+        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -240f), new Color(0.4f, 0.4f, 0.4f));
+        settingsBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
+        settingsBackBtn.GetComponentInChildren<Text>().fontSize = 15;
+        settingsBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
+        settingsPanel.SetActive(false);
 
         // TASKS PANEL
         tasksPanel = CreateUiObject("TasksPanel", canvas.transform);
@@ -820,7 +850,7 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -104f), new Vector2(260f, 34f));
         multiplayerStatusText.resizeTextForBestFit = false;
 
-        // Right column: player name and voice settings
+        // Right column: player name and multiplayer-only options
         GameObject mpRight = CreateUiObject("MultiplayerRight", multiplayerPanel.transform);
         RectTransform mpRightRect = mpRight.GetComponent<RectTransform>();
         mpRightRect.sizeDelta = new Vector2(290f, 380f);
@@ -833,24 +863,12 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerNameInput.contentType = InputField.ContentType.Standard;
         multiplayerNameInput.characterLimit = 18;
 
-        playerModelButton = CreateButton(mpRight.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, -14f), new Color(0.26f, 0.50f, 0.58f, 1f));
-        playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 36f);
-        playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
-        playerModelButton.onClick.AddListener(OnPlayerModelClicked);
+        CreateText("MovedSettingsHint", mpRight.transform, "Model, microphone, and voice mode are in Settings.", 13, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -32f), new Vector2(240f, 58f));
 
-        CreateText("VoiceSettingsLabel", mpRight.transform, "Voice Settings", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, -58f), new Vector2(220f, 28f));
-
-        voiceChatButton = CreateButton(mpRight.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, -96f), new Color(0.18f, 0.55f, 0.80f, 1f));
-        voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
-        voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
-        voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
-
-        microphoneDeviceButton = CreateButton(mpRight.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -142f), new Color(0.26f, 0.42f, 0.68f, 1f));
-        microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
-        microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
-        microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
-
-        voiceHintText = CreateText("VoiceHintText", mpRight.transform, "Push-to-talk key: V", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -180f), new Vector2(240f, 24f));
+        Button openSettingsFromMultiplayerBtn = CreateButton(mpRight.transform, "OpenSettingsBtn", "Open Settings", new Vector2(0f, -86f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        openSettingsFromMultiplayerBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
+        openSettingsFromMultiplayerBtn.GetComponentInChildren<Text>().fontSize = 15;
+        openSettingsFromMultiplayerBtn.onClick.AddListener(() => ShowPanel(settingsPanel));
 
         // Quiz Options button — only visible to host when Quiz Island is selected
         quizOptionsButton = CreateButton(mpRight.transform, "QuizOptionsBtn", "Quiz Options", new Vector2(0f, 140f), new Color(0.45f, 0.18f, 0.72f, 1f));
@@ -1033,6 +1051,7 @@ public class PauseMenuManager : MonoBehaviour
         if (tasksPanel != null) tasksPanel.SetActive(false);
         if (goalsPanel != null) goalsPanel.SetActive(false);
         if (serverPanel != null) serverPanel.SetActive(false);
+        if (settingsPanel != null) settingsPanel.SetActive(false);
         if (multiplayerPanel != null) multiplayerPanel.SetActive(false);
         if (hostGamePanel != null) hostGamePanel.SetActive(false);
         if (quizOptionsPanel != null) quizOptionsPanel.SetActive(false);
@@ -1054,6 +1073,11 @@ public class PauseMenuManager : MonoBehaviour
         {
             // Placeholder screen for the future multiplayer flow.
             RefreshMultiplayerDefaults();
+        }
+        else if (panel == settingsPanel)
+        {
+            RefreshVoiceChatButton();
+            RefreshPlayerModelButton();
         }
     }
 
@@ -1459,6 +1483,35 @@ public class PauseMenuManager : MonoBehaviour
         ((Text)sensitivityInput.placeholder).rectTransform.offsetMin = new Vector2(8f, 6f); ((Text)sensitivityInput.placeholder).rectTransform.offsetMax = new Vector2(-8f, -6f);
 
         sensitivityInput.onEndEdit.AddListener(OnSensitivityInputChanged);
+    }
+
+    private void CreateGlobalVoiceSettingsSection(Transform parent)
+    {
+        GameObject card = CreateUiObject("VoiceSettingsCard", parent);
+        RectTransform cardRect = card.GetComponent<RectTransform>();
+        cardRect.sizeDelta = new Vector2(420f, 230f);
+        cardRect.anchoredPosition = new Vector2(0f, 10f);
+        card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
+        card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
+
+        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 84f), new Vector2(240f, 30f));
+
+        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 42f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
+        playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
+        playerModelButton.onClick.AddListener(OnPlayerModelClicked);
+
+        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, -4f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
+        voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
+        voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
+
+        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -50f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
+        microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
+        microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
+
+        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -92f), new Vector2(300f, 24f));
     }
 
     private void GenerateQrLogin()

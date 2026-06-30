@@ -35,7 +35,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const float VoiceLevelDecayPerSecond = 3f;
     private const int VoiceSampleRate = 16000;
     private const int VoiceFrameSamples = 320;
-    private const int MaxVoiceFramesPerUpdate = 1;
+    private const int MaxVoiceFramesPerUpdate = 3;
     private const int VoiceMeterBars = 5;
     private const int HudVoiceMeterBars = 12;
     private const float MaxVoiceQueuedSeconds = 0.18f;
@@ -67,6 +67,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     public event Action<string> StatusChanged;
 
     public event Action<Packet> OnQuizPacket;
+
+    public event Action<byte[], int, float> LocalVoiceFrameCaptured;
 
     public string LocalClientId => localClientId;
 
@@ -270,12 +272,15 @@ public class MultiplayerSessionManager : MonoBehaviour
     private Image[] localVoiceHudBars;
     private Text localVoiceHudLabel;
     private float localVoiceLevel;
+    private int externalVoiceCaptureRequests;
     private string currentStatus = "Offline";
 
     public string CurrentStatus => currentStatus;
     public bool IsVoiceChatEnabled => voiceMode != VoiceChatMode.Muted;
     public VoiceChatMode CurrentVoiceMode => voiceMode;
     public string CurrentPlayerModelLabel => GetModelLabel(localModelId);
+    public float CurrentLocalVoiceLevel => localVoiceLevel;
+    public bool IsMicrophoneCapturing => microphoneClip != null;
     public string CurrentMicrophoneDevice
     {
         get
@@ -473,6 +478,16 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
 
         SetStatus("Voice chat: " + GetVoiceModeLabel());
+    }
+
+    public void AcquireExternalVoiceCapture()
+    {
+        externalVoiceCaptureRequests++;
+    }
+
+    public void ReleaseExternalVoiceCapture()
+    {
+        externalVoiceCaptureRequests = Mathf.Max(0, externalVoiceCaptureRequests - 1);
     }
 
     public string[] GetMicrophoneDevices()
@@ -1521,7 +1536,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private void EnsureLocalVoiceHud()
     {
-        if (mode == SessionMode.Idle || voiceMode == VoiceChatMode.Muted)
+        if ((mode == SessionMode.Idle && externalVoiceCaptureRequests <= 0) || voiceMode == VoiceChatMode.Muted)
         {
             DestroyLocalVoiceHud();
             return;
@@ -1722,7 +1737,9 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private void CaptureAndSendVoice()
     {
-        if (voiceMode == VoiceChatMode.Muted || !IsClientConnected || string.IsNullOrEmpty(localClientId))
+        bool canTransmit = IsClientConnected && !string.IsNullOrEmpty(localClientId);
+        bool shouldCapture = voiceMode != VoiceChatMode.Muted && (canTransmit || externalVoiceCaptureRequests > 0);
+        if (!shouldCapture)
         {
             StopVoiceCapture();
             return;
@@ -1734,7 +1751,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             return;
         }
 
-        bool shouldTransmit = voiceMode == VoiceChatMode.AlwaysOn || IsPushToTalkPressed();
+        bool shouldTransmit = canTransmit && (voiceMode == VoiceChatMode.AlwaysOn || IsPushToTalkPressed());
         int writePosition = Microphone.GetPosition(microphoneDevice);
         if (writePosition < 0 || microphoneClip == null)
         {
@@ -1752,26 +1769,22 @@ public class MultiplayerSessionManager : MonoBehaviour
             available = VoiceFrameSamples;
         }
 
-        if (!shouldTransmit)
-        {
-            microphoneReadPosition = writePosition;
-            return;
-        }
-
         int framesSent = 0;
         while (available >= VoiceFrameSamples && framesSent < MaxVoiceFramesPerUpdate)
         {
             ReadMicrophoneFrame(sampleCount);
             float frameLevel = CalculatePcmLevel(microphoneFrame);
             localVoiceLevel = Mathf.Max(localVoiceLevel, frameLevel);
-            if (frameLevel < VoiceSilenceThreshold)
+            byte[] pcm16 = EncodePcm16(microphoneFrame);
+            LocalVoiceFrameCaptured?.Invoke(pcm16, VoiceSampleRate, frameLevel);
+
+            if (!shouldTransmit || frameLevel < VoiceSilenceThreshold)
             {
                 available -= VoiceFrameSamples;
                 framesSent++;
                 continue;
             }
 
-            byte[] pcm16 = EncodePcm16(microphoneFrame);
             TrySendVoiceFrame(new MultiplayerVoicePacket(localClientId, voiceSequence++, VoiceSampleRate, pcm16));
             if (Time.unscaledTime - lastVoiceSendLogTime > 2f)
             {

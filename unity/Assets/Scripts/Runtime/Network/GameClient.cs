@@ -17,6 +17,7 @@ namespace Mentora.Network
 
         public event Action<Packet> OnPacketReceived;
         public bool IsConnected => socket != null && socket.State == WebSocketState.Open;
+        public bool IsConnecting { get; private set; }
 
         [SerializeField] private string serverUrl = "wss://neuro.serenityutils.club";
         [SerializeField] private float connectTimeoutSeconds = 8f;
@@ -36,53 +37,62 @@ namespace Mentora.Network
 
         public async Task Connect()
         {
-            if (IsConnected) return;
+            if (IsConnected || IsConnecting) return;
 
-            CleanupSocket();
-
-            if (!TryCreateServerUri(out Uri serverUri))
-            {
-                Debug.LogError("Connection failed: invalid server URL `" + serverUrl + "`");
-                return;
-            }
-
-            socket = new ClientWebSocket();
-            cts = new CancellationTokenSource();
-            CancellationTokenSource timeoutCts = null;
-            CancellationTokenSource linkedCts = null;
+            IsConnecting = true;
 
             try
             {
-                timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Mathf.Max(1f, connectTimeoutSeconds)));
-                linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
-
-                await socket.ConnectAsync(serverUri, linkedCts.Token);
-                Debug.Log("Connected to server");
-                _ = ReceiveLoop();
-
-                await SendPacket(new HandShakePacket("unity_game"));
-            }
-            catch (OperationCanceledException) when (timeoutCts != null && timeoutCts.IsCancellationRequested)
-            {
-                Debug.LogError("Connection failed: timeout after " + connectTimeoutSeconds + "s to " + serverUri);
                 CleanupSocket();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("Connection failed to " + serverUri + ": " + e.Message);
-                CleanupSocket();
+
+                if (!TryCreateServerUri(out Uri serverUri))
+                {
+                    Debug.LogError("Connection failed: invalid server URL `" + serverUrl + "`");
+                    return;
+                }
+
+                socket = new ClientWebSocket();
+                cts = new CancellationTokenSource();
+                CancellationTokenSource timeoutCts = null;
+                CancellationTokenSource linkedCts = null;
+
+                try
+                {
+                    timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Mathf.Max(1f, connectTimeoutSeconds)));
+                    linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
+
+                    await socket.ConnectAsync(serverUri, linkedCts.Token);
+                    Debug.Log("Connected to server");
+                    _ = ReceiveLoop();
+
+                    await SendPacket(new HandShakePacket("unity_game"));
+                }
+                catch (OperationCanceledException) when (timeoutCts != null && timeoutCts.IsCancellationRequested)
+                {
+                    Debug.LogError("Connection failed: timeout after " + connectTimeoutSeconds + "s to " + serverUri);
+                    CleanupSocket();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("Connection failed to " + serverUri + ": " + e.Message);
+                    CleanupSocket();
+                }
+                finally
+                {
+                    if (linkedCts != null)
+                    {
+                        linkedCts.Dispose();
+                    }
+
+                    if (timeoutCts != null)
+                    {
+                        timeoutCts.Dispose();
+                    }
+                }
             }
             finally
             {
-                if (linkedCts != null)
-                {
-                    linkedCts.Dispose();
-                }
-
-                if (timeoutCts != null)
-                {
-                    timeoutCts.Dispose();
-                }
+                IsConnecting = false;
             }
         }
 
