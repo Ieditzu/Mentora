@@ -71,6 +71,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     public event Action<byte[], int, float> LocalVoiceFrameCaptured;
 
     public string LocalClientId => localClientId;
+    public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
 
     public enum VoiceChatMode
     {
