@@ -121,7 +121,7 @@ public class MultiplayerSessionManager : MonoBehaviour
                 return;
             }
 
-            Vector3 toCamera = transform.position - cam.transform.position;
+            Vector3 toCamera = cam.transform.position - transform.position;
             if (toCamera.sqrMagnitude < 0.0001f)
             {
                 return;
@@ -138,6 +138,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         private AudioSource audioSource;
         private AudioClip streamClip;
         private int sampleRate = VoiceSampleRate;
+        private bool playbackStarted;
 
         public void Initialize(int newSampleRate)
         {
@@ -150,15 +151,15 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             audioSource.playOnAwake = false;
             audioSource.loop = true;
-            audioSource.spatialBlend = 1f;
+            audioSource.spatialBlend = 0f;
             audioSource.minDistance = 1.5f;
             audioSource.maxDistance = 20f;
             audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
-            audioSource.volume = 0.9f;
+            audioSource.volume = 1f;
 
             streamClip = AudioClip.Create("RemoteVoiceStream", sampleRate, 1, sampleRate, true, OnAudioRead);
             audioSource.clip = streamClip;
-            audioSource.Play();
+            playbackStarted = false;
         }
 
         public void EnqueuePcm16(byte[] pcm16, int newSampleRate)
@@ -191,6 +192,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                 {
                     queuedSamples.Dequeue();
                 }
+            }
+
+            if (!playbackStarted && queuedSamples.Count >= sampleRate * 0.04f)
+            {
+                audioSource.Play();
+                playbackStarted = true;
             }
         }
 
@@ -244,6 +251,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     private int voiceSendInFlight;
     private int stateSequence;
     private float lastUdpHelloTime = -999f;
+    private float lastVoiceSendLogTime = -999f;
+    private float lastVoiceReceiveLogTime = -999f;
     private int clientConnectionVersion;
     private int sendFailureReported;
     private bool localLabelAttached;
@@ -1153,6 +1162,11 @@ public class MultiplayerSessionManager : MonoBehaviour
         avatar.Voice.EnqueuePcm16(voicePacket.Pcm16, voicePacket.SampleRate > 0 ? voicePacket.SampleRate : VoiceSampleRate);
         avatar.VoiceLevel = Mathf.Max(avatar.VoiceLevel, CalculatePcm16Level(voicePacket.Pcm16));
         avatar.LastVoiceTime = Time.unscaledTime;
+        if (Time.unscaledTime - lastVoiceReceiveLogTime > 2f)
+        {
+            lastVoiceReceiveLogTime = Time.unscaledTime;
+            Debug.Log("[Multiplayer] Received voice from " + voicePacket.ClientId + " bytes=" + voicePacket.Pcm16.Length);
+        }
     }
 
     private RemoteAvatar CreateRemoteAvatar(string playerName)
@@ -1613,6 +1627,11 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             byte[] pcm16 = EncodePcm16(microphoneFrame);
             TrySendVoiceFrame(new MultiplayerVoicePacket(localClientId, voiceSequence++, VoiceSampleRate, pcm16));
+            if (Time.unscaledTime - lastVoiceSendLogTime > 2f)
+            {
+                lastVoiceSendLogTime = Time.unscaledTime;
+                Debug.Log("[Multiplayer] Sent voice bytes=" + pcm16.Length + " level=" + frameLevel.ToString("0.00"));
+            }
 
             available -= VoiceFrameSamples;
             framesSent++;
@@ -1994,65 +2013,20 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private void RefreshLocalNameLabel()
     {
-        // Only show the name label when actually in a session.
-        if (mode == SessionMode.Idle)
+        // Do not render the local player's world-space name/mic label. In first person
+        // it sits in front of the camera; the local voice HUD covers self feedback.
+        if (localNameLabelRoot != null)
         {
-            if (localNameLabelRoot != null)
-            {
-                Destroy(localNameLabelRoot.gameObject);
-                localNameLabelRoot = null;
-                localNameLabelText = null;
-                localVoiceMeterRoot = null;
-                localVoiceMeterBars = null;
-                localVoiceIconText = null;
-                localLabelAttached = false;
-            }
-            return;
+            Destroy(localNameLabelRoot.gameObject);
+            localNameLabelRoot = null;
+            localNameLabelText = null;
+            localVoiceMeterRoot = null;
+            localVoiceMeterBars = null;
+            localVoiceIconText = null;
+            localLabelAttached = false;
         }
 
-        Transform player = PlayerCache.ResolvePlayerTransform();
-        if (player == null)
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(localPlayerName))
-        {
-            localPlayerName = "Player";
-        }
-
-        if (localNameLabelRoot == null || localNameLabelRoot.parent != player)
-        {
-            if (localNameLabelRoot != null)
-            {
-                Destroy(localNameLabelRoot.gameObject);
-                localVoiceMeterRoot = null;
-                localVoiceMeterBars = null;
-                localVoiceIconText = null;
-            }
-
-            GameObject labelRoot = new GameObject("LocalPlayerNameLabel");
-            labelRoot.transform.SetParent(player, false);
-            labelRoot.transform.localPosition = CalculateLabelLocalPosition(player, 2.55f);
-            labelRoot.AddComponent<BillboardToCamera>();
-
-            localNameLabelText = labelRoot.AddComponent<TextMesh>();
-            localNameLabelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            localNameLabelText.fontSize = 48;
-            localNameLabelText.characterSize = 0.02f;
-            localNameLabelText.anchor = TextAnchor.MiddleCenter;
-            localNameLabelText.alignment = TextAlignment.Center;
-            localNameLabelText.color = Color.black;
-
-            localNameLabelRoot = labelRoot.transform;
-            localVoiceMeterRoot = CreateVoiceMeter(labelRoot.transform, out localVoiceMeterBars, out localVoiceIconText);
-            localLabelAttached = true;
-        }
-
-        if (localNameLabelText != null)
-        {
-            localNameLabelText.text = localPlayerName;
-        }
+        localVoiceLevel = Mathf.Max(0f, localVoiceLevel);
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
