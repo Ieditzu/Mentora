@@ -42,6 +42,10 @@
 - Reset transform sync after scene load/spawn changes so teleports and respawns replicate immediately.
 - Added connection-version checks so stale/disposed streams do not keep spamming send failures.
 - Added local and remote voice activity meters next to player name labels.
+- Removed remote movement extrapolation after it caused overshoot/snap-back artifacts on LAN.
+- Capped voice playback buffering to keep voice recent instead of playing old queued audio.
+- Added a bottom-right local microphone HUD meter.
+- Placed world name/mic labels from renderer bounds so they sit above the avatar head.
 
 ## What Still Needs To Be Done
 

@@ -25,13 +25,14 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const float ForcedStateIntervalSeconds = 0.1f;
     private const float MovementSendEpsilonSqr = 0.000025f;
     private const float YawSendEpsilon = 0.15f;
-    private const float RemoteExtrapolationLimitSeconds = 0.16f;
+    private const float RemoteSnapDistance = 4f;
     private const float VoiceSilenceThreshold = 0.012f;
     private const float VoiceLevelDecayPerSecond = 3f;
     private const int VoiceSampleRate = 16000;
     private const int VoiceFrameSamples = 320;
     private const int MaxVoiceFramesPerUpdate = 1;
     private const int VoiceMeterBars = 5;
+    private const float MaxVoiceQueuedSeconds = 0.18f;
 
     private static MultiplayerSessionManager instance;
 
@@ -172,7 +173,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             lock (queueLock)
             {
-                int maxQueued = sampleRate * 2;
+                int maxQueued = Mathf.RoundToInt(sampleRate * MaxVoiceQueuedSeconds);
                 while (queuedSamples.Count > maxQueued)
                 {
                     queuedSamples.Dequeue();
@@ -182,6 +183,11 @@ public class MultiplayerSessionManager : MonoBehaviour
                 {
                     short sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
                     queuedSamples.Enqueue(Mathf.Clamp(sample / 32768f, -1f, 1f));
+                }
+
+                while (queuedSamples.Count > maxQueued)
+                {
+                    queuedSamples.Dequeue();
                 }
             }
         }
@@ -237,6 +243,9 @@ public class MultiplayerSessionManager : MonoBehaviour
     private Transform localVoiceMeterRoot;
     private Renderer[] localVoiceMeterBars;
     private TextMesh localVoiceIconText;
+    private Canvas localVoiceHudCanvas;
+    private Image[] localVoiceHudBars;
+    private Text localVoiceHudLabel;
     private float localVoiceLevel;
     private string currentStatus = "Offline";
 
@@ -327,14 +336,9 @@ public class MultiplayerSessionManager : MonoBehaviour
             }
 
             Vector3 displayTarget = avatar.TargetPosition;
-            float extrapolateSeconds = Mathf.Clamp(Time.unscaledTime - avatar.LastReceiveTime, 0f, RemoteExtrapolationLimitSeconds);
-            displayTarget += avatar.Velocity * extrapolateSeconds;
-
             float dist = Vector3.Distance(avatar.Root.transform.position, displayTarget);
 
-            // If we're more than 2 units behind just snap — avoids visible lag spikes
-            // after a packet loss or stall.
-            if (dist > 2f)
+            if (dist > RemoteSnapDistance)
             {
                 avatar.Root.transform.position = displayTarget;
                 avatar.Root.transform.rotation = Quaternion.Euler(0f, avatar.TargetYaw, 0f);
@@ -358,6 +362,8 @@ public class MultiplayerSessionManager : MonoBehaviour
         float decay = VoiceLevelDecayPerSecond * Time.unscaledDeltaTime;
         localVoiceLevel = Mathf.Max(0f, localVoiceLevel - decay);
         SetVoiceMeterLevel(localVoiceMeterBars, localVoiceIconText, localVoiceLevel);
+        EnsureLocalVoiceHud();
+        SetVoiceHudLevel(localVoiceLevel);
 
         foreach (RemoteAvatar avatar in remoteAvatars.Values)
         {
@@ -635,6 +641,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
 
         localLabelAttached = false;
+        DestroyLocalVoiceHud();
         SetStatus("Offline");
     }
 
@@ -973,7 +980,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
         GameObject labelRoot = new GameObject("NameLabel");
         labelRoot.transform.SetParent(root.transform, false);
-        labelRoot.transform.localPosition = new Vector3(0f, 2.4f, 0f);
+        labelRoot.transform.localPosition = CalculateLabelLocalPosition(root.transform, 2.4f);
         labelRoot.AddComponent<BillboardToCamera>();
 
         TextMesh textMesh = labelRoot.AddComponent<TextMesh>();
@@ -1138,6 +1145,121 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
     }
 
+    private void EnsureLocalVoiceHud()
+    {
+        if (mode == SessionMode.Idle || voiceMode == VoiceChatMode.Muted)
+        {
+            DestroyLocalVoiceHud();
+            return;
+        }
+
+        if (localVoiceHudCanvas != null)
+        {
+            return;
+        }
+
+        GameObject canvasObject = new GameObject("LocalVoiceHud");
+        DontDestroyOnLoad(canvasObject);
+
+        localVoiceHudCanvas = canvasObject.AddComponent<Canvas>();
+        localVoiceHudCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        localVoiceHudCanvas.sortingOrder = 5000;
+        canvasObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasObject.AddComponent<GraphicRaycaster>();
+
+        GameObject panel = new GameObject("Panel");
+        panel.transform.SetParent(canvasObject.transform, false);
+        RectTransform panelRect = panel.AddComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(1f, 0f);
+        panelRect.anchorMax = new Vector2(1f, 0f);
+        panelRect.pivot = new Vector2(1f, 0f);
+        panelRect.anchoredPosition = new Vector2(-24f, 24f);
+        panelRect.sizeDelta = new Vector2(210f, 54f);
+
+        Image panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0.05f, 0.07f, 0.10f, 0.72f);
+
+        localVoiceHudLabel = CreateHudText(panel.transform, "MIC", new Vector2(-72f, 0f), new Vector2(54f, 32f), 18, FontStyle.Bold);
+
+        localVoiceHudBars = new Image[VoiceMeterBars];
+        for (int i = 0; i < VoiceMeterBars; i++)
+        {
+            GameObject bar = new GameObject("VoiceHudBar" + i);
+            bar.transform.SetParent(panel.transform, false);
+            RectTransform barRect = bar.AddComponent<RectTransform>();
+            float height = 12f + (i * 5f);
+            barRect.sizeDelta = new Vector2(18f, height);
+            barRect.anchorMin = new Vector2(0.5f, 0.5f);
+            barRect.anchorMax = new Vector2(0.5f, 0.5f);
+            barRect.pivot = new Vector2(0.5f, 0f);
+            barRect.anchoredPosition = new Vector2(-18f + (i * 24f), -18f);
+
+            Image image = bar.AddComponent<Image>();
+            image.color = new Color(0.18f, 0.24f, 0.30f, 0.9f);
+            localVoiceHudBars[i] = image;
+        }
+    }
+
+    private static Text CreateHudText(Transform parent, string text, Vector2 position, Vector2 size, int fontSize, FontStyle style)
+    {
+        GameObject textObject = new GameObject(text + "Text");
+        textObject.transform.SetParent(parent, false);
+        RectTransform rect = textObject.AddComponent<RectTransform>();
+        rect.sizeDelta = size;
+        rect.anchoredPosition = position;
+
+        Text label = textObject.AddComponent<Text>();
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        label.text = text;
+        label.fontSize = fontSize;
+        label.fontStyle = style;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color = new Color(0.75f, 0.85f, 0.95f, 1f);
+        return label;
+    }
+
+    private void SetVoiceHudLevel(float level)
+    {
+        if (localVoiceHudBars == null)
+        {
+            return;
+        }
+
+        float clampedLevel = Mathf.Clamp01(level);
+        int activeBars = Mathf.CeilToInt(clampedLevel * localVoiceHudBars.Length);
+        if (localVoiceHudLabel != null)
+        {
+            localVoiceHudLabel.color = Color.Lerp(
+                new Color(0.75f, 0.85f, 0.95f, 1f),
+                new Color(0.25f, 0.95f, 0.55f, 1f),
+                clampedLevel);
+        }
+
+        for (int i = 0; i < localVoiceHudBars.Length; i++)
+        {
+            if (localVoiceHudBars[i] == null)
+            {
+                continue;
+            }
+
+            localVoiceHudBars[i].color = i < activeBars
+                ? Color.Lerp(new Color(0.25f, 0.85f, 0.45f, 1f), new Color(1f, 0.86f, 0.25f, 1f), clampedLevel)
+                : new Color(0.18f, 0.24f, 0.30f, 0.9f);
+        }
+    }
+
+    private void DestroyLocalVoiceHud()
+    {
+        if (localVoiceHudCanvas != null)
+        {
+            Destroy(localVoiceHudCanvas.gameObject);
+        }
+
+        localVoiceHudCanvas = null;
+        localVoiceHudBars = null;
+        localVoiceHudLabel = null;
+    }
+
     private void SetAvatarName(RemoteAvatar avatar, string playerName)
     {
         if (avatar == null) return;
@@ -1261,8 +1383,9 @@ public class MultiplayerSessionManager : MonoBehaviour
         while (available >= VoiceFrameSamples && framesSent < MaxVoiceFramesPerUpdate)
         {
             ReadMicrophoneFrame(sampleCount);
-            localVoiceLevel = Mathf.Max(localVoiceLevel, CalculatePcmLevel(microphoneFrame));
-            if (localVoiceLevel < VoiceSilenceThreshold)
+            float frameLevel = CalculatePcmLevel(microphoneFrame);
+            localVoiceLevel = Mathf.Max(localVoiceLevel, frameLevel);
+            if (frameLevel < VoiceSilenceThreshold)
             {
                 available -= VoiceFrameSamples;
                 framesSent++;
@@ -1615,7 +1738,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             GameObject labelRoot = new GameObject("LocalPlayerNameLabel");
             labelRoot.transform.SetParent(player, false);
-            labelRoot.transform.localPosition = new Vector3(0f, 2.55f, 0f);
+            labelRoot.transform.localPosition = CalculateLabelLocalPosition(player, 2.55f);
             labelRoot.AddComponent<BillboardToCamera>();
 
             localNameLabelText = labelRoot.AddComponent<TextMesh>();
@@ -1687,6 +1810,74 @@ public class MultiplayerSessionManager : MonoBehaviour
     {
         string trimmed = string.IsNullOrWhiteSpace(playerName) ? "Player" : playerName.Trim();
         return trimmed.Length > 18 ? trimmed.Substring(0, 18) : trimmed;
+    }
+
+    private static Vector3 CalculateLabelLocalPosition(Transform owner, float fallbackY)
+    {
+        if (owner == null)
+        {
+            return new Vector3(0f, fallbackY, 0f);
+        }
+
+        Bounds? bounds = CalculateWorldBounds(owner);
+        if (!bounds.HasValue)
+        {
+            CharacterController controller = owner.GetComponentInChildren<CharacterController>();
+            if (controller != null)
+            {
+                return new Vector3(0f, controller.center.y + controller.height + 0.35f, 0f);
+            }
+
+            Collider collider = owner.GetComponentInChildren<Collider>();
+            if (collider != null)
+            {
+                Vector3 colliderTop = owner.InverseTransformPoint(new Vector3(collider.bounds.center.x, collider.bounds.max.y, collider.bounds.center.z));
+                return new Vector3(0f, colliderTop.y + 0.35f, 0f);
+            }
+
+            return new Vector3(0f, fallbackY, 0f);
+        }
+
+        Bounds worldBounds = bounds.Value;
+        Vector3 top = owner.InverseTransformPoint(new Vector3(worldBounds.center.x, worldBounds.max.y, worldBounds.center.z));
+        return new Vector3(0f, Mathf.Max(fallbackY, top.y + 0.35f), 0f);
+    }
+
+    private static Bounds? CalculateWorldBounds(Transform root)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>();
+        Bounds? bounds = null;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null || renderer.GetComponent<TextMesh>() != null)
+            {
+                continue;
+            }
+
+            if (renderer.gameObject.name.Contains("Voice") ||
+                renderer.gameObject.name.Contains("NameLabel") ||
+                renderer.gameObject.name.Contains("Badge"))
+            {
+                continue;
+            }
+
+            bounds = bounds.HasValue ? Encapsulate(bounds.Value, renderer.bounds) : renderer.bounds;
+        }
+
+        return bounds;
+    }
+
+    private static Bounds Encapsulate(Bounds current, Bounds additional)
+    {
+        current.Encapsulate(additional.min);
+        current.Encapsulate(additional.max);
+        return current;
     }
 
     private string GetSavedName()
