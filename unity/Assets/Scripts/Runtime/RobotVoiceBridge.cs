@@ -19,6 +19,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private const float MinUtteranceSeconds = 0.35f;
     private const float MaxUtteranceSeconds = 7f;
     private const float PreRollSeconds = 0.35f;
+    private const int MinVoicedFrames = 6;
+    private const float MinPeakLevel = 0.028f;
 
     public event Action<string> FullTranscriptionReceived;
     public float MicLevel { get; private set; }
@@ -40,6 +42,9 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private bool transcriptionRequestActive;
     private float utteranceStartTime;
     private float lastSpeechTime;
+    private float noTranscriptCooldownUntil;
+    private float utterancePeakLevel;
+    private int voicedFrameCount;
     private int utteranceSampleRate = 16000;
     private readonly List<byte> utterancePcm = new List<byte>(16000 * 2 * 8);
     private readonly Queue<byte[]> preRollFrames = new Queue<byte[]>();
@@ -182,7 +187,12 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private void OnLocalVoiceFrameCaptured(byte[] pcm16, int sampleRate, float level)
     {
         MicLevel = Mathf.Clamp01(level);
-        if (!listeningRequested || pcm16 == null || pcm16.Length == 0 || IsSpeaking || transcriptionRequestActive)
+        if (!listeningRequested ||
+            pcm16 == null ||
+            pcm16.Length == 0 ||
+            IsSpeaking ||
+            transcriptionRequestActive ||
+            Time.unscaledTime < noTranscriptCooldownUntil)
         {
             return;
         }
@@ -203,10 +213,14 @@ public sealed class RobotVoiceBridge : MonoBehaviour
                 utteranceStartTime = now;
                 utterancePcm.Clear();
                 utteranceSampleRate = sampleRate;
+                utterancePeakLevel = 0f;
+                voicedFrameCount = 0;
                 CopyPreRollToUtterance();
                 startedThisFrame = true;
             }
 
+            voicedFrameCount++;
+            utterancePeakLevel = Mathf.Max(utterancePeakLevel, level);
             lastSpeechTime = now;
         }
 
@@ -229,7 +243,10 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private void SubmitUtterance()
     {
         float utteranceSeconds = Time.unscaledTime - utteranceStartTime;
-        if (utteranceSeconds < MinUtteranceSeconds || utterancePcm.Count < utteranceSampleRate)
+        if (utteranceSeconds < MinUtteranceSeconds ||
+            utterancePcm.Count < utteranceSampleRate ||
+            voicedFrameCount < MinVoicedFrames ||
+            utterancePeakLevel < MinPeakLevel)
         {
             ResetUtterance();
             return;
@@ -237,6 +254,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
         byte[] pcm16 = utterancePcm.ToArray();
         int sampleRate = utteranceSampleRate;
+        float peakLevel = utterancePeakLevel;
         ResetUtterance();
 
         if (!witConfigured || transcriptionRequestActive)
@@ -244,7 +262,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        StartCoroutine(TranscribePcm16(pcm16, sampleRate));
+        StartCoroutine(TranscribePcm16(pcm16, sampleRate, peakLevel));
     }
 
     private void ResetUtterance()
@@ -252,6 +270,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         utteranceActive = false;
         utteranceStartTime = 0f;
         lastSpeechTime = 0f;
+        utterancePeakLevel = 0f;
+        voicedFrameCount = 0;
         utterancePcm.Clear();
         preRollFrames.Clear();
         preRollByteCount = 0;
@@ -279,7 +299,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
     }
 
-    private IEnumerator TranscribePcm16(byte[] pcm16, int sampleRate)
+    private IEnumerator TranscribePcm16(byte[] pcm16, int sampleRate, float peakLevel)
     {
         transcriptionRequestActive = true;
 
@@ -307,10 +327,12 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             {
                 UnityEngine.Debug.LogWarning(
                     "[RobotVoice] Wit had no transcript. bytes=" + pcm16.Length +
+                    " peak=" + peakLevel.ToString("0.000") +
                     " dictationError=" + dictationError +
                     " dictationResponse=" + dictationResponse +
                     " speechError=" + speechError +
                     " speechResponse=" + speechResponse);
+                noTranscriptCooldownUntil = Time.unscaledTime + 0.6f;
                 transcriptionRequestActive = false;
                 yield break;
             }

@@ -103,6 +103,8 @@ public class RobotCompanion : MonoBehaviour
     private int        voiceConnectFailureCount;
     private bool       conversationActive;
     private float      lastConversationHeard = -999f;
+    private bool       voiceWasSpeaking;
+    private float      resumeVoiceListeningAt;
     private readonly System.Collections.Generic.List<string> conversationHistory = new System.Collections.Generic.List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
@@ -730,7 +732,22 @@ public class RobotCompanion : MonoBehaviour
         EnsureVoiceServerConnection();
 
         bool inConversation = IsConversationActive();
-        bool shouldListen = voiceBridge.HasSpeechRecognition && !waiting && !voiceBridge.IsSpeaking;
+        bool speaking = voiceBridge.IsSpeaking;
+        if (speaking)
+        {
+            voiceWasSpeaking = true;
+            resumeVoiceListeningAt = Time.unscaledTime + 0.75f;
+            voiceBridge.SetListening(false);
+            return;
+        }
+
+        if (voiceWasSpeaking)
+        {
+            voiceWasSpeaking = false;
+            resumeVoiceListeningAt = Time.unscaledTime + 0.75f;
+        }
+
+        bool shouldListen = voiceBridge.HasSpeechRecognition && !waiting && Time.unscaledTime >= resumeVoiceListeningAt;
         if (shouldListen && IsInMultiplayerSession() && !inConversation)
         {
             shouldListen = IsPlayerLookingAtRudolf(fpsCamera);
