@@ -21,14 +21,17 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const string VoiceModePrefKey = "MultiplayerVoiceMode";
     private const string MicrophoneDevicePrefKey = "MultiplayerMicrophoneDevice";
     private const int DefaultPort = 7777;
-    private const float SendIntervalSeconds = 0.03f;
-    private const float ForcedStateIntervalSeconds = 0.5f;
-    private const float MovementSendEpsilonSqr = 0.0004f;
-    private const float YawSendEpsilon = 0.4f;
-    private const float RemoteExtrapolationLimitSeconds = 0.1f;
+    private const float SendIntervalSeconds = 0.015f;
+    private const float ForcedStateIntervalSeconds = 0.1f;
+    private const float MovementSendEpsilonSqr = 0.000025f;
+    private const float YawSendEpsilon = 0.15f;
+    private const float RemoteExtrapolationLimitSeconds = 0.16f;
+    private const float VoiceSilenceThreshold = 0.012f;
+    private const float VoiceLevelDecayPerSecond = 3f;
     private const int VoiceSampleRate = 16000;
     private const int VoiceFrameSamples = 320;
-    private const int MaxVoiceFramesPerUpdate = 3;
+    private const int MaxVoiceFramesPerUpdate = 1;
+    private const int VoiceMeterBars = 5;
 
     private static MultiplayerSessionManager instance;
 
@@ -93,10 +96,15 @@ public class MultiplayerSessionManager : MonoBehaviour
         public TextMesh NameText;
         public TextMesh BadgeText;
         public VoicePlaybackSource Voice;
+        public Transform VoiceMeterRoot;
+        public Renderer[] VoiceMeterBars;
+        public TextMesh VoiceIconText;
         public Vector3 TargetPosition;
         public Vector3 Velocity;
         public float TargetYaw;
         public float LastReceiveTime;
+        public float VoiceLevel;
+        public float LastVoiceTime;
         public bool HasFirstPacket;
     }
 
@@ -220,9 +228,16 @@ public class MultiplayerSessionManager : MonoBehaviour
     private int microphoneReadPosition;
     private readonly float[] microphoneFrame = new float[VoiceFrameSamples];
     private int voiceSequence;
+    private int voiceSendInFlight;
+    private int clientConnectionVersion;
+    private int sendFailureReported;
     private bool localLabelAttached;
     private Transform localNameLabelRoot;
     private TextMesh localNameLabelText;
+    private Transform localVoiceMeterRoot;
+    private Renderer[] localVoiceMeterBars;
+    private TextMesh localVoiceIconText;
+    private float localVoiceLevel;
     private string currentStatus = "Offline";
 
     public string CurrentStatus => currentStatus;
@@ -294,6 +309,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
         CaptureAndSendVoice();
         InterpolateRemoteAvatars();
+        UpdateVoiceMeters();
         RefreshLocalNameLabel();
     }
 
@@ -334,6 +350,29 @@ public class MultiplayerSessionManager : MonoBehaviour
                 avatar.Root.transform.rotation,
                 Quaternion.Euler(0f, avatar.TargetYaw, 0f),
                 1f - Mathf.Exp(-rotSpeed * dt));
+        }
+    }
+
+    private void UpdateVoiceMeters()
+    {
+        float decay = VoiceLevelDecayPerSecond * Time.unscaledDeltaTime;
+        localVoiceLevel = Mathf.Max(0f, localVoiceLevel - decay);
+        SetVoiceMeterLevel(localVoiceMeterBars, localVoiceIconText, localVoiceLevel);
+
+        foreach (RemoteAvatar avatar in remoteAvatars.Values)
+        {
+            if (avatar == null)
+            {
+                continue;
+            }
+
+            avatar.VoiceLevel = Mathf.Max(0f, avatar.VoiceLevel - decay);
+            if (Time.unscaledTime - avatar.LastVoiceTime > 0.35f)
+            {
+                avatar.VoiceLevel = Mathf.MoveTowards(avatar.VoiceLevel, 0f, decay * 2f);
+            }
+
+            SetVoiceMeterLevel(avatar.VoiceMeterBars, avatar.VoiceIconText, avatar.VoiceLevel);
         }
     }
 
@@ -500,7 +539,12 @@ public class MultiplayerSessionManager : MonoBehaviour
         float y = PlayerPrefs.GetFloat("MP_SpawnY", 0f);
         float z = PlayerPrefs.GetFloat("MP_SpawnZ", 0f);
         Transform player = PlayerCache.ResolvePlayerTransform();
-        if (player != null) player.position = new Vector3(x, y, z);
+        if (player != null)
+        {
+            player.position = new Vector3(x, y, z);
+            Instance.hasSentState = false;
+            Instance.lastForcedStateTime = -999f;
+        }
     }
 
     public void BroadcastQuizPacket(Packet packet)
@@ -517,6 +561,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     }
 
     public void StopAllNetworking()    {
+        Interlocked.Increment(ref clientConnectionVersion);
+        Interlocked.Exchange(ref sendFailureReported, 0);
         mode = SessionMode.Idle;
         localClientId = string.Empty;
         hasSentState = false;
@@ -584,13 +630,15 @@ public class MultiplayerSessionManager : MonoBehaviour
             Destroy(localNameLabelRoot.gameObject);
             localNameLabelRoot = null;
             localNameLabelText = null;
+            localVoiceMeterRoot = null;
+            localVoiceMeterBars = null;
         }
 
         localLabelAttached = false;
         SetStatus("Offline");
     }
 
-    private bool IsClientConnected => clientSocket != null && clientSocket.Connected && clientStream != null;
+    private bool IsClientConnected => IsTcpClientUsable(clientSocket) && clientStream != null;
 
     private async Task JoinLocalHostAsync()
     {
@@ -608,6 +656,8 @@ public class MultiplayerSessionManager : MonoBehaviour
         clientSocket.NoDelay = true;
         clientCts = new CancellationTokenSource();
         clientReceiveTask = null;
+        Interlocked.Exchange(ref sendFailureReported, 0);
+        Interlocked.Increment(ref clientConnectionVersion);
 
         await clientSocket.ConnectAsync(address, port);
         clientStream = clientSocket.GetStream();
@@ -755,7 +805,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     {
         try
         {
-            while (!token.IsCancellationRequested && clientSocket != null && clientSocket.Connected)
+            while (!token.IsCancellationRequested && IsTcpClientUsable(clientSocket))
             {
                 byte[] frame = await ReadFrameAsync(clientStream, token);
                 if (frame == null)
@@ -772,7 +822,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            EnqueueMainThread(() => SetStatus("Connection lost: " + ex.Message));
+            EnqueueMainThread(() => MarkClientConnectionLost("Connection lost: " + ex.Message));
         }
     }
 
@@ -880,6 +930,8 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
 
         avatar.Voice.EnqueuePcm16(voicePacket.Pcm16, voicePacket.SampleRate > 0 ? voicePacket.SampleRate : VoiceSampleRate);
+        avatar.VoiceLevel = Mathf.Max(avatar.VoiceLevel, CalculatePcm16Level(voicePacket.Pcm16));
+        avatar.LastVoiceTime = Time.unscaledTime;
     }
 
     private RemoteAvatar CreateRemoteAvatar(string playerName)
@@ -937,13 +989,19 @@ public class MultiplayerSessionManager : MonoBehaviour
         // bean body at chest height, facing forward (no billboard, rotates with body).
         // At scale 2.2 the bean's chest sits at roughly local y=1.1, z=0.28 forward.
         TextMesh badgeText = CreateChestBadge(root.transform, playerName);
+        TextMesh voiceIconText;
+        Renderer[] voiceBars;
+        Transform voiceMeterRoot = CreateVoiceMeter(labelRoot.transform, out voiceBars, out voiceIconText);
 
         return new RemoteAvatar
         {
             Root = root,
             NameRoot = labelRoot.transform,
             NameText = textMesh,
-            BadgeText = badgeText
+            BadgeText = badgeText,
+            VoiceMeterRoot = voiceMeterRoot,
+            VoiceMeterBars = voiceBars,
+            VoiceIconText = voiceIconText
         };
     }
 
@@ -990,6 +1048,94 @@ public class MultiplayerSessionManager : MonoBehaviour
         tm.text = NormalizePlayerName(playerName);
 
         return tm;
+    }
+
+    private static Transform CreateVoiceMeter(Transform parent, out Renderer[] bars, out TextMesh iconText)
+    {
+        GameObject root = new GameObject("VoiceMeter");
+        root.transform.SetParent(parent, false);
+        root.transform.localPosition = new Vector3(0.72f, -0.02f, 0f);
+        root.transform.localRotation = Quaternion.identity;
+        root.transform.localScale = Vector3.one;
+
+        GameObject iconObject = new GameObject("VoiceIcon");
+        iconObject.transform.SetParent(root.transform, false);
+        iconObject.transform.localPosition = new Vector3(-0.09f, 0f, 0f);
+        iconObject.transform.localRotation = Quaternion.identity;
+
+        iconText = iconObject.AddComponent<TextMesh>();
+        iconText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        iconText.fontSize = 30;
+        iconText.characterSize = 0.012f;
+        iconText.anchor = TextAnchor.MiddleCenter;
+        iconText.alignment = TextAlignment.Center;
+        iconText.color = new Color(0.45f, 0.55f, 0.65f, 1f);
+        iconText.text = "MIC";
+
+        bars = new Renderer[VoiceMeterBars];
+        for (int i = 0; i < VoiceMeterBars; i++)
+        {
+            GameObject bar = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            bar.name = "VoiceBar" + i;
+            bar.transform.SetParent(root.transform, false);
+            float height = 0.035f + (i * 0.012f);
+            bar.transform.localPosition = new Vector3(0.02f + (i * 0.028f), -0.04f + (height * 0.5f), 0f);
+            bar.transform.localRotation = Quaternion.identity;
+            bar.transform.localScale = new Vector3(0.018f, height, 1f);
+
+            Collider collider = bar.GetComponent<Collider>();
+            if (collider != null)
+            {
+                Destroy(collider);
+            }
+
+            Renderer renderer = bar.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                             ?? Shader.Find("Unlit/Color")
+                             ?? Shader.Find("Standard");
+                Material material = new Material(shader);
+                material.color = new Color(0.18f, 0.24f, 0.30f, 0.65f);
+                renderer.material = material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                bars[i] = renderer;
+            }
+        }
+
+        SetVoiceMeterLevel(bars, iconText, 0f);
+        return root.transform;
+    }
+
+    private static void SetVoiceMeterLevel(Renderer[] bars, TextMesh iconText, float level)
+    {
+        float clampedLevel = Mathf.Clamp01(level);
+        if (iconText != null)
+        {
+            iconText.color = Color.Lerp(
+                new Color(0.45f, 0.55f, 0.65f, 1f),
+                new Color(0.25f, 0.95f, 0.55f, 1f),
+                clampedLevel);
+        }
+
+        if (bars == null)
+        {
+            return;
+        }
+
+        int activeBars = Mathf.CeilToInt(clampedLevel * bars.Length);
+        for (int i = 0; i < bars.Length; i++)
+        {
+            if (bars[i] == null || bars[i].material == null)
+            {
+                continue;
+            }
+
+            bars[i].material.color = i < activeBars
+                ? Color.Lerp(new Color(0.25f, 0.85f, 0.45f, 1f), new Color(1f, 0.86f, 0.25f, 1f), clampedLevel)
+                : new Color(0.18f, 0.24f, 0.30f, 0.65f);
+        }
     }
 
     private void SetAvatarName(RemoteAvatar avatar, string playerName)
@@ -1055,13 +1201,16 @@ public class MultiplayerSessionManager : MonoBehaviour
                 return;
             }
 
-            await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
-            lastSentPosition = position;
-            lastSentYaw = yaw;
-            hasSentState = true;
-            if (forcedState)
+            bool sent = await SendClientPacketAsync(new MultiplayerPlayerStatePacket(localClientId, localPlayerName, position, yaw));
+            if (sent)
             {
-                lastForcedStateTime = Time.unscaledTime;
+                lastSentPosition = position;
+                lastSentYaw = yaw;
+                hasSentState = true;
+                if (forcedState)
+                {
+                    lastForcedStateTime = Time.unscaledTime;
+                }
             }
         }
         finally
@@ -1112,8 +1261,16 @@ public class MultiplayerSessionManager : MonoBehaviour
         while (available >= VoiceFrameSamples && framesSent < MaxVoiceFramesPerUpdate)
         {
             ReadMicrophoneFrame(sampleCount);
+            localVoiceLevel = Mathf.Max(localVoiceLevel, CalculatePcmLevel(microphoneFrame));
+            if (localVoiceLevel < VoiceSilenceThreshold)
+            {
+                available -= VoiceFrameSamples;
+                framesSent++;
+                continue;
+            }
+
             byte[] pcm16 = EncodePcm16(microphoneFrame);
-            _ = SendClientPacketAsync(new MultiplayerVoicePacket(localClientId, voiceSequence++, VoiceSampleRate, pcm16));
+            TrySendVoiceFrame(new MultiplayerVoicePacket(localClientId, voiceSequence++, VoiceSampleRate, pcm16));
 
             available -= VoiceFrameSamples;
             framesSent++;
@@ -1209,11 +1366,71 @@ public class MultiplayerSessionManager : MonoBehaviour
         return pcm16;
     }
 
-    private async Task SendClientPacketAsync(Packet packet)
+    private static float CalculatePcmLevel(float[] samples)
+    {
+        if (samples == null || samples.Length == 0)
+        {
+            return 0f;
+        }
+
+        float sum = 0f;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            sum += samples[i] * samples[i];
+        }
+
+        return Mathf.Clamp01(Mathf.Sqrt(sum / samples.Length) * 5f);
+    }
+
+    private static float CalculatePcm16Level(byte[] pcm16)
+    {
+        if (pcm16 == null || pcm16.Length < 2)
+        {
+            return 0f;
+        }
+
+        float sum = 0f;
+        int sampleCount = 0;
+        for (int i = 0; i + 1 < pcm16.Length; i += 2)
+        {
+            short sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+            float normalized = sample / 32768f;
+            sum += normalized * normalized;
+            sampleCount++;
+        }
+
+        return sampleCount > 0 ? Mathf.Clamp01(Mathf.Sqrt(sum / sampleCount) * 5f) : 0f;
+    }
+
+    private void TrySendVoiceFrame(Packet packet)
+    {
+        if (packet == null ||
+            clientSendLock.CurrentCount == 0 ||
+            Interlocked.Exchange(ref voiceSendInFlight, 1) == 1)
+        {
+            return;
+        }
+
+        _ = SendVoiceFrameAsync(packet);
+    }
+
+    private async Task SendVoiceFrameAsync(Packet packet)
+    {
+        try
+        {
+            await SendClientPacketAsync(packet, false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref voiceSendInFlight, 0);
+        }
+    }
+
+    private async Task<bool> SendClientPacketAsync(Packet packet, bool reportFailure = true)
     {
         if (!IsClientConnected || packet == null)
         {
-            return;
+            return false;
         }
 
         byte[] payload = packet.EncodeRaw();
@@ -1223,23 +1440,43 @@ public class MultiplayerSessionManager : MonoBehaviour
         Buffer.BlockCopy(payload, 0, frame, 4, payload.Length);
 
         NetworkStream stream = clientStream;
-        if (stream == null)
+        CancellationTokenSource tokenSource = clientCts;
+        int connectionVersion = clientConnectionVersion;
+        if (stream == null || tokenSource == null || tokenSource.IsCancellationRequested)
         {
-            return;
+            return false;
         }
 
-        // Serialize every write to the client socket. Without this, the periodic
-        // state send and the join handshake can issue overlapping WriteAsync
-        // calls on the same NetworkStream, interleaving the length-prefixed
-        // frames and permanently desyncing the receiver's frame parser.
-        await clientSendLock.WaitAsync();
         try
         {
-            await stream.WriteAsync(frame, 0, frame.Length, CancellationToken.None);
+            await clientSendLock.WaitAsync(tokenSource.Token);
+        }
+        catch
+        {
+            return false;
+        }
+
+        try
+        {
+            if (connectionVersion != clientConnectionVersion ||
+                stream != clientStream ||
+                !IsClientConnected ||
+                tokenSource.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            await stream.WriteAsync(frame, 0, frame.Length, tokenSource.Token);
+            return true;
         }
         catch (Exception ex)
         {
-            EnqueueMainThread(() => SetStatus("Send failed: " + ex.Message));
+            if (reportFailure && Interlocked.Exchange(ref sendFailureReported, 1) == 0)
+            {
+                EnqueueMainThread(() => MarkClientConnectionLost("Connection lost while sending: " + ex.Message));
+            }
+
+            return false;
         }
         finally
         {
@@ -1260,7 +1497,15 @@ public class MultiplayerSessionManager : MonoBehaviour
         Buffer.BlockCopy(lengthBytes, 0, frame, 0, 4);
         Buffer.BlockCopy(payload, 0, frame, 4, payload.Length);
 
-        await peer.SendLock.WaitAsync();
+        try
+        {
+            await peer.SendLock.WaitAsync();
+        }
+        catch
+        {
+            return;
+        }
+
         try
         {
             await peer.Stream.WriteAsync(frame, 0, frame.Length, CancellationToken.None);
@@ -1339,6 +1584,9 @@ public class MultiplayerSessionManager : MonoBehaviour
                 Destroy(localNameLabelRoot.gameObject);
                 localNameLabelRoot = null;
                 localNameLabelText = null;
+                localVoiceMeterRoot = null;
+                localVoiceMeterBars = null;
+                localVoiceIconText = null;
                 localLabelAttached = false;
             }
             return;
@@ -1360,6 +1608,9 @@ public class MultiplayerSessionManager : MonoBehaviour
             if (localNameLabelRoot != null)
             {
                 Destroy(localNameLabelRoot.gameObject);
+                localVoiceMeterRoot = null;
+                localVoiceMeterBars = null;
+                localVoiceIconText = null;
             }
 
             GameObject labelRoot = new GameObject("LocalPlayerNameLabel");
@@ -1376,6 +1627,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             localNameLabelText.color = Color.black;
 
             localNameLabelRoot = labelRoot.transform;
+            localVoiceMeterRoot = CreateVoiceMeter(labelRoot.transform, out localVoiceMeterBars, out localVoiceIconText);
             localLabelAttached = true;
         }
 
@@ -1390,7 +1642,37 @@ public class MultiplayerSessionManager : MonoBehaviour
         localLabelAttached = false;
         localNameLabelRoot = null;
         localNameLabelText = null;
+        localVoiceMeterRoot = null;
+        localVoiceMeterBars = null;
+        localVoiceIconText = null;
+        hasSentState = false;
+        lastForcedStateTime = -999f;
         RefreshLocalNameLabel();
+    }
+
+    private void MarkClientConnectionLost(string message)
+    {
+        Interlocked.Increment(ref clientConnectionVersion);
+        localClientId = string.Empty;
+        hasSentState = false;
+        StopVoiceCapture();
+
+        try
+        {
+            clientStream?.Dispose();
+        }
+        catch { }
+        clientStream = null;
+
+        try
+        {
+            clientSocket?.Close();
+            clientSocket?.Dispose();
+        }
+        catch { }
+        clientSocket = null;
+
+        SetStatus(message);
     }
 
     private void EnqueueMainThread(Action action)
@@ -1421,5 +1703,23 @@ public class MultiplayerSessionManager : MonoBehaviour
         currentStatus = string.IsNullOrWhiteSpace(message) ? "Offline" : message;
         EnqueueMainThread(() => StatusChanged?.Invoke(currentStatus));
         Debug.Log("[Multiplayer] " + currentStatus);
+    }
+
+    private static bool IsTcpClientUsable(TcpClient tcpClient)
+    {
+        if (tcpClient == null || !tcpClient.Connected)
+        {
+            return false;
+        }
+
+        try
+        {
+            Socket socket = tcpClient.Client;
+            return socket != null && !(socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

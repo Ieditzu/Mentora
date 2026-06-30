@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Minimal bottom-right overlay that appears after a coin is collected.
@@ -139,15 +140,21 @@ public class PickupUIController : MonoBehaviour
             RespawnTargetBox();
         }
 
-        if (visible && Input.GetKeyDown(KeyCode.L))
+        if (visible && WasKeyPressedThisFrame(Key.L))
         {
             ExitMode();
         }
 
-        if (visible && Input.GetKeyDown(KeyCode.H))
+        if (visible && WasKeyPressedThisFrame(Key.H))
         {
             showHint = !showHint;
         }
+    }
+
+    private static bool WasKeyPressedThisFrame(Key key)
+    {
+        Keyboard keyboard = Keyboard.current;
+        return keyboard != null && keyboard[key].wasPressedThisFrame;
     }
 
     private void CacheTargetBoxState()

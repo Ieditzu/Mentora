@@ -38,6 +38,10 @@
 - Reduced transform traffic to latest-useful state instead of sending unchanged frames.
 - Added short remote extrapolation so visible avatars do not trail as far behind received packets.
 - Kept `TcpClient.NoDelay` enabled and serialized socket writes to avoid frame corruption.
+- Prioritized transform packets over voice packets so voice cannot stall LAN movement updates.
+- Reset transform sync after scene load/spawn changes so teleports and respawns replicate immediately.
+- Added connection-version checks so stale/disposed streams do not keep spamming send failures.
+- Added local and remote voice activity meters next to player name labels.
 
 ## What Still Needs To Be Done
 
