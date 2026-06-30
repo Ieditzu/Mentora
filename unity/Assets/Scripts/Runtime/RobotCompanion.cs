@@ -103,6 +103,7 @@ public class RobotCompanion : MonoBehaviour
     private int        voiceConnectFailureCount;
     private bool       conversationActive;
     private float      lastConversationHeard = -999f;
+    private readonly System.Collections.Generic.List<string> conversationHistory = new System.Collections.Generic.List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
 
@@ -492,6 +493,10 @@ public class RobotCompanion : MonoBehaviour
         {
             return;
         }
+        else
+        {
+            conversationHistory.Clear();
+        }
 
         lastSpoke = Time.time;
         conversationActive = true;
@@ -521,7 +526,14 @@ public class RobotCompanion : MonoBehaviour
         string context = IsInMultiplayerSession()
             ? "multiplayer_player_looked_at_robot"
             : "singleplayer_robot_always_listening";
+        string history = BuildConversationHistoryContext();
+        if (!string.IsNullOrWhiteSpace(history))
+        {
+            context += "\nRecent conversation:\n" + history;
+        }
+
         yield return GameClient.Instance.SendPacket(new CompanionVoiceTextPacket(transcript, context));
+        AddConversationTurn("Student", transcript);
     }
 
     private IEnumerator GreetAfterDelay(float delay)
@@ -540,6 +552,7 @@ public class RobotCompanion : MonoBehaviour
                 waiting = false;
                 conversationActive = true;
                 lastConversationHeard = Time.time;
+                AddConversationTurn("Rudolf", r.Line);
                 ShowLine(r.Line);
                 if (voiceBridge != null)
                     voiceBridge.Speak(r.Line);
@@ -832,13 +845,66 @@ public class RobotCompanion : MonoBehaviour
             return false;
         }
 
-        if (Time.time - lastConversationHeard <= conversationTimeout || waiting || (voiceBridge != null && voiceBridge.IsSpeaking))
+        if (waiting)
+        {
+            return true;
+        }
+
+        if (voiceBridge != null && voiceBridge.IsSpeaking)
+        {
+            lastConversationHeard = Time.time;
+            return true;
+        }
+
+        if (Time.time - lastConversationHeard <= conversationTimeout)
         {
             return true;
         }
 
         conversationActive = false;
+        conversationHistory.Clear();
         return false;
+    }
+
+    private void AddConversationTurn(string speaker, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        string cleanText = text.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+        if (cleanText.Length > 360)
+        {
+            cleanText = cleanText.Substring(0, 360) + "…";
+        }
+
+        conversationHistory.Add(speaker + ": " + cleanText);
+        while (conversationHistory.Count > 8)
+        {
+            conversationHistory.RemoveAt(0);
+        }
+    }
+
+    private string BuildConversationHistoryContext()
+    {
+        if (conversationHistory.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        for (int i = 0; i < conversationHistory.Count; i++)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append('\n');
+            }
+
+            builder.Append(conversationHistory[i]);
+        }
+
+        return builder.ToString();
     }
 
     private static bool TryExtractWakeCommand(string transcript, out string command)

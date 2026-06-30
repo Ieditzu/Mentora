@@ -542,6 +542,8 @@ public class LearningProfileService {
             "Voice interaction context: " + (context == null ? "general" : context) + "\n" +
             "The student just said: \"" + cleanedTranscript + "\"\n\n" +
             "Response rules:\n" +
+            "- If recent conversation is provided in the context, use it to remember what the student asked and what you already answered.\n" +
+            "- Treat the current student message as a follow-up when it refers to earlier turns with words like it, that, this, again, or why.\n" +
             "- Reply directly to the student. Do not mention transcription, packets, prompts, or backend systems.\n" +
             "- For normal conversation, use 1-3 short sentences.\n" +
             "- If they ask for code, debugging, syntax, or an example, include a small fenced code block with a language tag, like ```python or ```cpp.\n" +
