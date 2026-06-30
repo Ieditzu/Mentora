@@ -20,6 +20,11 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const string PortPrefKey = "MultiplayerPort";
     private const string VoiceModePrefKey = "MultiplayerVoiceMode";
     private const string MicrophoneDevicePrefKey = "MultiplayerMicrophoneDevice";
+    private const string PlayerModelPrefKey = "MultiplayerPlayerModel";
+    private const string FemaleModelId = "female";
+    private const string MaleModelId = "male";
+    private const string FemaleModelResourcePath = "Characters/SM_Bean_Female_01";
+    private const string MaleModelResourcePath = "Characters/SM_Bean_Cowboy_01";
     private const int DefaultPort = 7777;
     private const float SendIntervalSeconds = 0.015f;
     private const float ForcedStateIntervalSeconds = 0.1f;
@@ -32,6 +37,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const int VoiceFrameSamples = 320;
     private const int MaxVoiceFramesPerUpdate = 1;
     private const int VoiceMeterBars = 5;
+    private const int HudVoiceMeterBars = 12;
     private const float MaxVoiceQueuedSeconds = 0.18f;
 
     private static MultiplayerSessionManager instance;
@@ -84,6 +90,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         public string PlayerName;
         public Vector3 Position;
         public float Yaw;
+        public string ModelId = FemaleModelId;
         public TcpClient TcpClient;
         public NetworkStream Stream;
         public IPEndPoint UdpEndPoint;
@@ -96,11 +103,13 @@ public class MultiplayerSessionManager : MonoBehaviour
         public GameObject Root;
         public Transform NameRoot;
         public TextMesh NameText;
-        public TextMesh BadgeText;
         public VoicePlaybackSource Voice;
         public Transform VoiceMeterRoot;
         public Renderer[] VoiceMeterBars;
         public TextMesh VoiceIconText;
+        public GameObject Body;
+        public CapsuleCollider Collision;
+        public string ModelId;
         public Vector3 TargetPosition;
         public Vector3 Velocity;
         public float TargetYaw;
@@ -121,13 +130,7 @@ public class MultiplayerSessionManager : MonoBehaviour
                 return;
             }
 
-            Vector3 toCamera = cam.transform.position - transform.position;
-            if (toCamera.sqrMagnitude < 0.0001f)
-            {
-                return;
-            }
-
-            transform.rotation = Quaternion.LookRotation(toCamera.normalized, Vector3.up);
+            transform.rotation = cam.transform.rotation;
         }
     }
 
@@ -232,6 +235,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private Task clientUdpReceiveTask;
     private string localClientId = string.Empty;
     private string localPlayerName = "Player";
+    private string localModelId = FemaleModelId;
     private string hostAddress = "127.0.0.1";
     private int hostPort = DefaultPort;
     private float lastSendTime = -999f;
@@ -256,6 +260,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private int clientConnectionVersion;
     private int sendFailureReported;
     private bool localLabelAttached;
+    private string appliedLocalModelId = string.Empty;
     private Transform localNameLabelRoot;
     private TextMesh localNameLabelText;
     private Transform localVoiceMeterRoot;
@@ -270,6 +275,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     public string CurrentStatus => currentStatus;
     public bool IsVoiceChatEnabled => voiceMode != VoiceChatMode.Muted;
     public VoiceChatMode CurrentVoiceMode => voiceMode;
+    public string CurrentPlayerModelLabel => GetModelLabel(localModelId);
     public string CurrentMicrophoneDevice
     {
         get
@@ -306,9 +312,11 @@ public class MultiplayerSessionManager : MonoBehaviour
         hostAddress = PlayerPrefs.GetString(HostAddressPrefKey, hostAddress);
         hostPort = PlayerPrefs.GetInt(PortPrefKey, DefaultPort);
         localPlayerName = GetSavedName();
+        localModelId = NormalizeModelId(PlayerPrefs.GetString(PlayerModelPrefKey, FemaleModelId));
         voiceMode = (VoiceChatMode)Mathf.Clamp(PlayerPrefs.GetInt(VoiceModePrefKey, (int)VoiceChatMode.AlwaysOn), 0, 2);
         preferredMicrophoneDevice = PlayerPrefs.GetString(MicrophoneDevicePrefKey, string.Empty);
         SetStatus(currentStatus);
+        ApplyLocalPlayerModel();
     }
 
     private void OnDestroy()
@@ -346,6 +354,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         InterpolateRemoteAvatars();
         UpdateVoiceMeters();
         RefreshLocalNameLabel();
+        ApplyLocalPlayerModelIfNeeded();
     }
 
     private void InterpolateRemoteAvatars()
@@ -414,6 +423,19 @@ public class MultiplayerSessionManager : MonoBehaviour
         PlayerPrefs.SetString(PlayerNamePrefKey, localPlayerName);
         PlayerPrefs.Save();
         RefreshLocalNameLabel();
+    }
+
+    public string CyclePlayerModel()
+    {
+        localModelId = localModelId == MaleModelId ? FemaleModelId : MaleModelId;
+        PlayerPrefs.SetString(PlayerModelPrefKey, localModelId);
+        PlayerPrefs.Save();
+        appliedLocalModelId = string.Empty;
+        ApplyLocalPlayerModel();
+        hasSentState = false;
+        lastForcedStateTime = -999f;
+        SetStatus("Player model: " + GetModelLabel(localModelId));
+        return CurrentPlayerModelLabel;
     }
 
     public bool ToggleVoiceChat()
@@ -577,6 +599,82 @@ public class MultiplayerSessionManager : MonoBehaviour
             player.position = new Vector3(x, y, z);
             Instance.hasSentState = false;
             Instance.lastForcedStateTime = -999f;
+        }
+    }
+
+    private void ApplyLocalPlayerModelIfNeeded()
+    {
+        if (appliedLocalModelId != localModelId)
+        {
+            ApplyLocalPlayerModel();
+        }
+    }
+
+    private void ApplyLocalPlayerModel()
+    {
+        Transform player = PlayerCache.ResolvePlayerTransform();
+        if (player == null)
+        {
+            return;
+        }
+
+        localModelId = NormalizeModelId(localModelId);
+        DestroyExistingLocalBodies(player);
+
+        GameObject prefab = LoadModelPrefab(localModelId);
+        if (prefab == null)
+        {
+            appliedLocalModelId = localModelId;
+            return;
+        }
+
+        GameObject body = UnityEngine.Object.Instantiate(prefab, player);
+        body.name = "MultiplayerLocalBody";
+        body.transform.localPosition = Vector3.zero;
+        body.transform.localRotation = Quaternion.identity;
+        body.transform.localScale = Vector3.one * GetModelVisualScale(localModelId);
+        RemoveVisualColliders(body);
+        SetLayerRecursively(body, 3);
+
+        Camera fpCamera = player.GetComponentInChildren<Camera>();
+        if (fpCamera != null)
+        {
+            fpCamera.cullingMask &= ~(1 << 3);
+        }
+
+        FirstPersonHeadBinder binder = player.GetComponent<FirstPersonHeadBinder>();
+        if (binder != null)
+        {
+            binder.characterRoot = body.transform;
+            binder.TryBind();
+        }
+
+        FirstPersonAnimatorDriver animatorDriver = player.GetComponent<FirstPersonAnimatorDriver>();
+        if (animatorDriver != null)
+        {
+            animatorDriver.characterAnimator = body.GetComponentInChildren<Animator>();
+        }
+
+        appliedLocalModelId = localModelId;
+    }
+
+    private static void DestroyExistingLocalBodies(Transform player)
+    {
+        string[] bodyNames =
+        {
+            "BeanBody",
+            "FPS_Character",
+            "FPS_ProxyBody",
+            "MultiplayerLocalBody"
+        };
+
+        for (int i = 0; i < bodyNames.Length; i++)
+        {
+            Transform body = player.Find(bodyNames[i]);
+            if (body != null)
+            {
+                Destroy(body.gameObject);
+            }
         }
     }
 
@@ -836,10 +934,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                 if (TryResolveUdpPeer(statePacket.ClientId, remoteEndPoint, out NetworkPeer statePeer))
                 {
                     statePeer.PlayerName = NormalizePlayerName(statePacket.PlayerName);
+                    statePeer.ModelId = NormalizeModelId(statePacket.ModelId);
                     statePeer.Position = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
                     statePeer.Yaw = statePacket.Yaw;
                     statePacket.ClientId = statePeer.ClientId;
                     statePacket.PlayerName = statePeer.PlayerName;
+                    statePacket.ModelId = statePeer.ModelId;
                     BroadcastServerUdpPacket(statePacket, statePeer.ClientId);
                 }
                 break;
@@ -946,6 +1046,7 @@ public class MultiplayerSessionManager : MonoBehaviour
                     case MultiplayerJoinPacket joinPacket:
                         peer.ClientId = Guid.NewGuid().ToString("N");
                         peer.PlayerName = NormalizePlayerName(joinPacket.PlayerName);
+                        peer.ModelId = FemaleModelId;
                         serverPeers[peer.ClientId] = peer;
                         await SendServerPacketAsync(peer, new MultiplayerWelcomePacket(peer.ClientId, peer.PlayerName));
                         await SendExistingPlayersToClientAsync(peer);
@@ -959,10 +1060,12 @@ public class MultiplayerSessionManager : MonoBehaviour
                         }
 
                         peer.PlayerName = NormalizePlayerName(statePacket.PlayerName);
+                        peer.ModelId = NormalizeModelId(statePacket.ModelId);
                         peer.Position = new Vector3(statePacket.PositionX, statePacket.PositionY, statePacket.PositionZ);
                         peer.Yaw = statePacket.Yaw;
                         statePacket.ClientId = peer.ClientId;
                         statePacket.PlayerName = peer.PlayerName;
+                        statePacket.ModelId = peer.ModelId;
                         BroadcastServerPacket(statePacket, excludeClientId: peer.ClientId);
                         break;
 
@@ -1020,7 +1123,9 @@ public class MultiplayerSessionManager : MonoBehaviour
                 existing.ClientId,
                 existing.PlayerName,
                 existing.Position,
-                existing.Yaw));
+                existing.Yaw,
+                0,
+                existing.ModelId));
         }
     }
 
@@ -1060,6 +1165,7 @@ public class MultiplayerSessionManager : MonoBehaviour
                 EnqueueMainThread(() =>
                 {
                     RefreshLocalNameLabel();
+                    ApplyLocalPlayerModel();
                     SetStatus("Connected as " + localPlayerName);
                     ApplyCustomSpawnIfSet();
                 });
@@ -1110,10 +1216,16 @@ public class MultiplayerSessionManager : MonoBehaviour
             return;
         }
 
-        RemoteAvatar avatar = remoteAvatars.GetOrAdd(statePacket.ClientId, _ => CreateRemoteAvatar(statePacket.PlayerName));
+        string modelId = NormalizeModelId(statePacket.ModelId);
+        RemoteAvatar avatar = remoteAvatars.GetOrAdd(statePacket.ClientId, _ => CreateRemoteAvatar(statePacket.PlayerName, modelId));
         if (avatar == null || avatar.Root == null)
         {
             return;
+        }
+
+        if (avatar.ModelId != modelId || avatar.Body == null)
+        {
+            ApplyRemoteAvatarModel(avatar, modelId);
         }
 
         if (statePacket.Sequence <= avatar.LastStateSequence)
@@ -1169,46 +1281,12 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
     }
 
-    private RemoteAvatar CreateRemoteAvatar(string playerName)
+    private RemoteAvatar CreateRemoteAvatar(string playerName, string modelId)
     {
         GameObject root = new GameObject("RemoteBean_" + playerName);
 
-        GameObject beanPrefab = Resources.Load<GameObject>("Characters/SM_Bean_Female_01");
-        if (beanPrefab != null)
-        {
-            GameObject body = UnityEngine.Object.Instantiate(beanPrefab, root.transform);
-            body.name = "BeanBody";
-            body.transform.localPosition = Vector3.zero;
-            body.transform.localRotation = Quaternion.identity;
-            body.transform.localScale = Vector3.one * 2.2f;
-
-            foreach (Collider col in body.GetComponentsInChildren<Collider>())
-            {
-                Destroy(col);
-            }
-        }
-        else
-        {
-            // Fallback: tinted capsule if prefab is missing
-            GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            capsule.transform.SetParent(root.transform, false);
-            capsule.transform.localScale = new Vector3(1.3f, 1.7f, 1.3f);
-            Collider col = capsule.GetComponent<Collider>();
-            if (col != null) Destroy(col);
-            Renderer rend = capsule.GetComponent<Renderer>();
-            if (rend != null)
-            {
-                int hash = Mathf.Abs((playerName ?? "Player").GetHashCode());
-                float hue = (hash % 360) / 360f;
-                Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                mat.color = Color.HSVToRGB(hue, 0.45f, 0.95f);
-                rend.material = mat;
-            }
-        }
-
         GameObject labelRoot = new GameObject("NameLabel");
         labelRoot.transform.SetParent(root.transform, false);
-        labelRoot.transform.localPosition = CalculateLabelLocalPosition(root.transform, 2.4f);
         labelRoot.AddComponent<BillboardToCamera>();
 
         TextMesh textMesh = labelRoot.AddComponent<TextMesh>();
@@ -1220,69 +1298,137 @@ public class MultiplayerSessionManager : MonoBehaviour
         textMesh.color = Color.black;
         textMesh.text = NormalizePlayerName(playerName);
 
-        // Chest badge — a small quad with a dark backing + name text, parented to the
-        // bean body at chest height, facing forward (no billboard, rotates with body).
-        // At scale 2.2 the bean's chest sits at roughly local y=1.1, z=0.28 forward.
-        TextMesh badgeText = CreateChestBadge(root.transform, playerName);
         TextMesh voiceIconText;
         Renderer[] voiceBars;
         Transform voiceMeterRoot = CreateVoiceMeter(labelRoot.transform, out voiceBars, out voiceIconText);
 
-        return new RemoteAvatar
+        RemoteAvatar avatar = new RemoteAvatar
         {
             Root = root,
             NameRoot = labelRoot.transform,
             NameText = textMesh,
-            BadgeText = badgeText,
             VoiceMeterRoot = voiceMeterRoot,
             VoiceMeterBars = voiceBars,
             VoiceIconText = voiceIconText
         };
+
+        ApplyRemoteAvatarModel(avatar, modelId);
+        return avatar;
     }
 
-    private TextMesh CreateChestBadge(Transform parent, string playerName)
+    private void ApplyRemoteAvatarModel(RemoteAvatar avatar, string modelId)
     {
-        // Badge backing quad
-        GameObject badge = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        badge.name = "ChestBadge";
-        badge.transform.SetParent(parent, false);
-        // chest height ~1.1, slightly in front of the body surface
-        badge.transform.localPosition = new Vector3(0f, 1.1f, 0.32f);
-        badge.transform.localRotation = Quaternion.identity;
-        badge.transform.localScale = new Vector3(0.55f, 0.22f, 1f);
-
-        Collider badgeCol = badge.GetComponent<Collider>();
-        if (badgeCol != null) Destroy(badgeCol);
-
-        Renderer badgeRend = badge.GetComponent<Renderer>();
-        if (badgeRend != null)
+        if (avatar == null || avatar.Root == null)
         {
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
-                         ?? Shader.Find("Unlit/Color")
-                         ?? Shader.Find("Standard");
-            Material mat = new Material(shader);
-            mat.color = new Color(0.08f, 0.10f, 0.14f, 1f);
-            badgeRend.material = mat;
-            badgeRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            badgeRend.receiveShadows = false;
+            return;
         }
 
-        // Badge text sits just in front of the quad
-        GameObject textObj = new GameObject("BadgeText");
-        textObj.transform.SetParent(parent, false);
-        textObj.transform.localPosition = new Vector3(0f, 1.1f, 0.33f);
-        textObj.transform.localRotation = Quaternion.identity;
+        modelId = NormalizeModelId(modelId);
+        if (avatar.ModelId == modelId && avatar.Body != null)
+        {
+            return;
+        }
 
-        TextMesh tm = textObj.AddComponent<TextMesh>();
-        tm.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        tm.fontSize = 28;
-        tm.characterSize = 0.028f;
-        tm.anchor = TextAnchor.MiddleCenter;
-        tm.alignment = TextAlignment.Center;
-        tm.color = Color.white;
-        tm.text = NormalizePlayerName(playerName);
+        if (avatar.Body != null)
+        {
+            Destroy(avatar.Body);
+            avatar.Body = null;
+        }
 
-        return tm;
+        GameObject prefab = LoadModelPrefab(modelId);
+        if (prefab != null)
+        {
+            GameObject body = UnityEngine.Object.Instantiate(prefab, avatar.Root.transform);
+            body.name = "RemoteBody_" + GetModelLabel(modelId);
+            body.transform.localPosition = Vector3.zero;
+            body.transform.localRotation = Quaternion.identity;
+            body.transform.localScale = Vector3.one * GetModelVisualScale(modelId);
+            RemoveVisualColliders(body);
+            avatar.Body = body;
+        }
+        else
+        {
+            avatar.Body = CreateFallbackBody(avatar.Root.transform, avatar.NameText != null ? avatar.NameText.text : "Player");
+        }
+
+        avatar.ModelId = modelId;
+        if (avatar.NameRoot != null)
+        {
+            avatar.NameRoot.localPosition = CalculateLabelLocalPosition(avatar.Root.transform, 2.4f);
+        }
+
+        ConfigureRemoteAvatarCollision(avatar);
+    }
+
+    private static GameObject CreateFallbackBody(Transform parent, string playerName)
+    {
+        GameObject capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        capsule.name = "RemoteBody_Fallback";
+        capsule.transform.SetParent(parent, false);
+        capsule.transform.localScale = new Vector3(1.3f, 1.7f, 1.3f);
+        Collider collider = capsule.GetComponent<Collider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        Renderer renderer = capsule.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            int hash = Mathf.Abs((playerName ?? "Player").GetHashCode());
+            float hue = (hash % 360) / 360f;
+            Material material = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            material.color = Color.HSVToRGB(hue, 0.45f, 0.95f);
+            renderer.material = material;
+        }
+
+        return capsule;
+    }
+
+    private static void ConfigureRemoteAvatarCollision(RemoteAvatar avatar)
+    {
+        if (avatar == null || avatar.Root == null)
+        {
+            return;
+        }
+
+        CapsuleCollider collider = avatar.Collision != null
+            ? avatar.Collision
+            : avatar.Root.GetComponent<CapsuleCollider>();
+        if (collider == null)
+        {
+            collider = avatar.Root.AddComponent<CapsuleCollider>();
+        }
+
+        float height = 2f;
+        float radius = 0.35f;
+        float centerY = 1f;
+        Bounds? bounds = CalculateWorldBounds(avatar.Root.transform);
+        if (bounds.HasValue)
+        {
+            Bounds worldBounds = bounds.Value;
+            height = Mathf.Max(1.2f, worldBounds.size.y);
+            radius = Mathf.Clamp(Mathf.Max(worldBounds.extents.x, worldBounds.extents.z) * 0.75f, 0.25f, 0.65f);
+            centerY = avatar.Root.transform.InverseTransformPoint(worldBounds.center).y;
+        }
+
+        collider.isTrigger = false;
+        collider.direction = 1;
+        collider.height = height;
+        collider.radius = radius;
+        collider.center = new Vector3(0f, Mathf.Max(height * 0.5f, centerY), 0f);
+        avatar.Collision = collider;
+
+        Rigidbody rigidbody = avatar.Root.GetComponent<Rigidbody>();
+        if (rigidbody == null)
+        {
+            rigidbody = avatar.Root.AddComponent<Rigidbody>();
+        }
+
+        rigidbody.isKinematic = true;
+        rigidbody.useGravity = false;
+        rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+        rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
     }
 
     private static Transform CreateVoiceMeter(Transform parent, out Renderer[] bars, out TextMesh iconText)
@@ -1401,26 +1547,26 @@ public class MultiplayerSessionManager : MonoBehaviour
         panelRect.anchorMin = new Vector2(1f, 0f);
         panelRect.anchorMax = new Vector2(1f, 0f);
         panelRect.pivot = new Vector2(1f, 0f);
-        panelRect.anchoredPosition = new Vector2(-24f, 24f);
-        panelRect.sizeDelta = new Vector2(210f, 54f);
+        panelRect.anchoredPosition = new Vector2(-18f, 18f);
+        panelRect.sizeDelta = new Vector2(150f, 38f);
 
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.05f, 0.07f, 0.10f, 0.72f);
 
-        localVoiceHudLabel = CreateHudText(panel.transform, "MIC", new Vector2(-72f, 0f), new Vector2(54f, 32f), 18, FontStyle.Bold);
+        localVoiceHudLabel = CreateHudText(panel.transform, "MIC", new Vector2(-54f, 0f), new Vector2(38f, 24f), 13, FontStyle.Bold);
 
-        localVoiceHudBars = new Image[VoiceMeterBars];
-        for (int i = 0; i < VoiceMeterBars; i++)
+        localVoiceHudBars = new Image[HudVoiceMeterBars];
+        for (int i = 0; i < HudVoiceMeterBars; i++)
         {
             GameObject bar = new GameObject("VoiceHudBar" + i);
             bar.transform.SetParent(panel.transform, false);
             RectTransform barRect = bar.AddComponent<RectTransform>();
-            float height = 12f + (i * 5f);
-            barRect.sizeDelta = new Vector2(18f, height);
+            float height = 7f + (i * 1.8f);
+            barRect.sizeDelta = new Vector2(6f, height);
             barRect.anchorMin = new Vector2(0.5f, 0.5f);
             barRect.anchorMax = new Vector2(0.5f, 0.5f);
             barRect.pivot = new Vector2(0.5f, 0f);
-            barRect.anchoredPosition = new Vector2(-18f + (i * 24f), -18f);
+            barRect.anchoredPosition = new Vector2(-24f + (i * 8f), -13f);
 
             Image image = bar.AddComponent<Image>();
             image.color = new Color(0.18f, 0.24f, 0.30f, 0.9f);
@@ -1493,7 +1639,6 @@ public class MultiplayerSessionManager : MonoBehaviour
         if (avatar == null) return;
         string name = NormalizePlayerName(playerName);
         if (avatar.NameText != null) avatar.NameText.text = name;
-        if (avatar.BadgeText != null) avatar.BadgeText.text = name;
     }
 
     private void RemoveRemoteAvatar(string clientId)
@@ -1556,7 +1701,8 @@ public class MultiplayerSessionManager : MonoBehaviour
                 localPlayerName,
                 position,
                 yaw,
-                stateSequence++));
+                stateSequence++,
+                localModelId));
             if (sent)
             {
                 lastSentPosition = position;
@@ -2037,9 +2183,11 @@ public class MultiplayerSessionManager : MonoBehaviour
         localVoiceMeterRoot = null;
         localVoiceMeterBars = null;
         localVoiceIconText = null;
+        appliedLocalModelId = string.Empty;
         hasSentState = false;
         lastForcedStateTime = -999f;
         RefreshLocalNameLabel();
+        ApplyLocalPlayerModel();
     }
 
     private void MarkClientConnectionLost(string message)
@@ -2090,6 +2238,66 @@ public class MultiplayerSessionManager : MonoBehaviour
         if (action != null)
         {
             mainThreadQueue.Enqueue(action);
+        }
+    }
+
+    private static string NormalizeModelId(string modelId)
+    {
+        return string.Equals(modelId, MaleModelId, StringComparison.OrdinalIgnoreCase)
+            ? MaleModelId
+            : FemaleModelId;
+    }
+
+    private static string GetModelLabel(string modelId)
+    {
+        return NormalizeModelId(modelId) == MaleModelId ? "Boy" : "Girl";
+    }
+
+    private static string GetModelResourcePath(string modelId)
+    {
+        return NormalizeModelId(modelId) == MaleModelId
+            ? MaleModelResourcePath
+            : FemaleModelResourcePath;
+    }
+
+    private static float GetModelVisualScale(string modelId)
+    {
+        return 2.2f;
+    }
+
+    private static GameObject LoadModelPrefab(string modelId)
+    {
+        return Resources.Load<GameObject>(GetModelResourcePath(modelId));
+    }
+
+    private static void RemoveVisualColliders(GameObject root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        Collider[] colliders = root.GetComponentsInChildren<Collider>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            if (colliders[i] != null)
+            {
+                Destroy(colliders[i]);
+            }
+        }
+    }
+
+    private static void SetLayerRecursively(GameObject root, int layer)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        root.layer = layer;
+        foreach (Transform child in root.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
         }
     }
 

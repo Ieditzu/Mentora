@@ -90,6 +90,7 @@ public class RobotCompanion : MonoBehaviour
     private Text       bubbleText;
     private CanvasGroup bubbleCg;
     private Coroutine  hideCoroutine;
+    private RobotVoiceBridge voiceBridge;
     private bool       waiting;
     private float      lastSpoke;
 
@@ -108,6 +109,7 @@ public class RobotCompanion : MonoBehaviour
         BuildBubble();
         ResolvePlayer();
         SetupPhysics();
+        SetupVoiceBridge();
 
         if (GameClient.Instance != null)
             GameClient.Instance.OnPacketReceived += OnPacket;
@@ -123,6 +125,8 @@ public class RobotCompanion : MonoBehaviour
         if (GameClient.Instance != null)
             GameClient.Instance.OnPacketReceived -= OnPacket;
         OnTrigger -= HandleTrigger;
+        if (voiceBridge != null)
+            voiceBridge.FullTranscriptionReceived -= OnVoiceTranscription;
         if (_instance == this) _instance = null;
     }
 
@@ -199,6 +203,8 @@ public class RobotCompanion : MonoBehaviour
             bubble.transform.rotation = Quaternion.LookRotation(
                 bubble.transform.position - fpsCamForBubble.transform.position);
         }
+
+        UpdateVoiceListening(fpsCamForBubble);
     }
 
     // ── Obstacle avoidance ───────────────────────────────────────────────────
@@ -387,6 +393,13 @@ public class RobotCompanion : MonoBehaviour
 
     // ── Trigger handling ─────────────────────────────────────────────────────
 
+    private void SetupVoiceBridge()
+    {
+        voiceBridge = gameObject.AddComponent<RobotVoiceBridge>();
+        voiceBridge.Initialize();
+        voiceBridge.FullTranscriptionReceived += OnVoiceTranscription;
+    }
+
     private void HandleTrigger(string trigger, string context)
     {
         if (Time.time - lastSpoke < minCooldown) return;
@@ -415,6 +428,35 @@ public class RobotCompanion : MonoBehaviour
         // Response handled in OnPacket
     }
 
+    private void OnVoiceTranscription(string transcript)
+    {
+        if (waiting || Time.time - lastSpoke < 1.5f)
+        {
+            return;
+        }
+
+        waiting = true;
+        lastSpoke = Time.time;
+        StartCoroutine(RequestVoiceReply(transcript));
+    }
+
+    private IEnumerator RequestVoiceReply(string transcript)
+    {
+        yield return null;
+
+        if (GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            waiting = false;
+            ShowLine("I heard you, but I'm not connected to the mentor server.");
+            yield break;
+        }
+
+        string context = IsInMultiplayerSession()
+            ? "multiplayer_player_looked_at_robot"
+            : "singleplayer_robot_always_listening";
+        yield return GameClient.Instance.SendPacket(new CompanionVoiceTextPacket(transcript, context));
+    }
+
     private IEnumerator GreetAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
@@ -430,6 +472,8 @@ public class RobotCompanion : MonoBehaviour
             {
                 waiting = false;
                 ShowLine(r.Line);
+                if (voiceBridge != null)
+                    voiceBridge.Speak(r.Line);
             });
     }
 
@@ -470,6 +514,47 @@ public class RobotCompanion : MonoBehaviour
     private void ResolvePlayer()
     {
         player = PlayerCache.ResolvePlayerTransform();
+    }
+
+    private void UpdateVoiceListening(Camera fpsCamera)
+    {
+        if (voiceBridge == null)
+        {
+            return;
+        }
+
+        bool hasServer = GameClient.Instance != null && GameClient.Instance.IsConnected;
+        bool shouldListen = hasServer && !waiting && !voiceBridge.IsSpeaking;
+        if (shouldListen && IsInMultiplayerSession())
+        {
+            shouldListen = IsPlayerLookingAtRudolf(fpsCamera);
+        }
+
+        voiceBridge.SetListening(shouldListen);
+    }
+
+    private bool IsPlayerLookingAtRudolf(Camera fpsCamera)
+    {
+        if (fpsCamera == null)
+        {
+            return false;
+        }
+
+        Vector3 toRudolf = transform.position - fpsCamera.transform.position;
+        float distance = toRudolf.magnitude;
+        if (distance > 8f || distance < 0.05f)
+        {
+            return false;
+        }
+
+        float dot = Vector3.Dot(fpsCamera.transform.forward, toRudolf.normalized);
+        return dot >= 0.86f;
+    }
+
+    private static bool IsInMultiplayerSession()
+    {
+        return MultiplayerSessionManager.Instance != null &&
+               !string.IsNullOrEmpty(MultiplayerSessionManager.Instance.LocalClientId);
     }
 
     private static string FallbackLine(string trigger, string context)

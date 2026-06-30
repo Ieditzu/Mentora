@@ -525,6 +525,35 @@ public class LearningProfileService {
         return new String[]{line, emotion};
     }
 
+    @Transactional(readOnly = true)
+    public String[] generateCompanionVoiceReply(final Long childId, final String transcript, final String context) {
+        String cleanedTranscript = transcript == null ? "" : transcript.trim();
+        if (cleanedTranscript.isBlank()) {
+            return new String[]{"I couldn't hear that clearly. Try saying it again?", "concerned"};
+        }
+
+        String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
+        String prompt =
+            "You are Rudolf, a friendly robot companion inside a 3D educational game called Mentora.\n" +
+            "You are talking out loud to a child aged 9-13 who is learning to code.\n" +
+            "Your personality: warm, concise, a little witty, and useful.\n\n" +
+            "Student profile:\n" + profileContext + "\n\n" +
+            "Voice interaction context: " + (context == null ? "general" : context) + "\n" +
+            "The student just said: \"" + cleanedTranscript + "\"\n\n" +
+            "Reply directly to the student in ONE short spoken line, max 24 words.\n" +
+            "If they ask for help, guide them without dumping a full solution.\n" +
+            "Do NOT use quotes. Do NOT mention transcription or packets.";
+
+        io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
+        String line = ai.generate(prompt);
+        if (line == null || line.isBlank() || line.startsWith("AI Error")) {
+            line = "I heard you. Let's break it down one step at a time.";
+        }
+
+        line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        return new String[]{line, "encouraging"};
+    }
+
     private String emotionForTrigger(final String trigger) {
         if (trigger == null) return "encouraging";
         return switch (trigger) {

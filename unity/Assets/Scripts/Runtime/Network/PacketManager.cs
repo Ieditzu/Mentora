@@ -58,6 +58,7 @@ namespace Mentora.Network
                 55 => new QuizResultPacket(),
                 56 => new MultiplayerVoicePacket(),
                 57 => new MultiplayerUdpHelloPacket(),
+                58 => new CompanionVoiceTextPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -731,6 +732,32 @@ namespace Mentora.Network
         }
     }
 
+    public class CompanionVoiceTextPacket : Packet
+    {
+        public string Transcript;
+        public string Context;
+
+        public CompanionVoiceTextPacket(string transcript, string context) : base(58)
+        {
+            Transcript = transcript;
+            Context = context;
+        }
+
+        public CompanionVoiceTextPacket() : base(58) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, Transcript ?? string.Empty);
+            PutString(writer, Context ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            Transcript = ReadString(reader);
+            Context = ReadString(reader);
+        }
+    }
+
     public class MultiplayerJoinPacket : Packet
     {
         public string PlayerName;
@@ -767,8 +794,9 @@ namespace Mentora.Network
         public float PositionZ;
         public float Yaw;
         public int Sequence;
+        public string ModelId;
 
-        public MultiplayerPlayerStatePacket(string clientId, string playerName, UnityEngine.Vector3 position, float yaw, int sequence = 0) : base(51)
+        public MultiplayerPlayerStatePacket(string clientId, string playerName, UnityEngine.Vector3 position, float yaw, int sequence = 0, string modelId = "") : base(51)
         {
             ClientId = clientId;
             PlayerName = playerName;
@@ -777,6 +805,7 @@ namespace Mentora.Network
             PositionZ = position.z;
             Yaw = yaw;
             Sequence = sequence;
+            ModelId = modelId;
         }
         public MultiplayerPlayerStatePacket() : base(51) { }
         protected override void Write(BinaryWriter writer)
@@ -788,6 +817,7 @@ namespace Mentora.Network
             writer.Write(PositionZ);
             writer.Write(Yaw);
             WriteInt32BigEndian(writer, Sequence);
+            PutString(writer, ModelId ?? string.Empty);
         }
         protected override void Read(BinaryReader reader)
         {
@@ -800,6 +830,9 @@ namespace Mentora.Network
             Sequence = reader.BaseStream.Position + 4 <= reader.BaseStream.Length
                 ? ReadInt32BigEndian(reader)
                 : 0;
+            ModelId = reader.BaseStream.Position + 4 <= reader.BaseStream.Length
+                ? ReadString(reader)
+                : string.Empty;
         }
     }
 

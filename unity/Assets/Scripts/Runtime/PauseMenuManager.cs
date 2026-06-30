@@ -65,6 +65,7 @@ public class PauseMenuManager : MonoBehaviour
     private Text multiplayerStatusText;
     private InputField multiplayerNameInput;
     private InputField multiplayerAddressInput;
+    private Button playerModelButton;
     private Button voiceChatButton;
     private Button microphoneDeviceButton;
     private Text voiceHintText;
@@ -832,19 +833,24 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerNameInput.contentType = InputField.ContentType.Standard;
         multiplayerNameInput.characterLimit = 18;
 
-        CreateText("VoiceSettingsLabel", mpRight.transform, "Voice Settings", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, -18f), new Vector2(220f, 28f));
+        playerModelButton = CreateButton(mpRight.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, -14f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 36f);
+        playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
+        playerModelButton.onClick.AddListener(OnPlayerModelClicked);
 
-        voiceChatButton = CreateButton(mpRight.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, -58f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        CreateText("VoiceSettingsLabel", mpRight.transform, "Voice Settings", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, -58f), new Vector2(220f, 28f));
+
+        voiceChatButton = CreateButton(mpRight.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, -96f), new Color(0.18f, 0.55f, 0.80f, 1f));
         voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
         voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
         voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
 
-        microphoneDeviceButton = CreateButton(mpRight.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -106f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        microphoneDeviceButton = CreateButton(mpRight.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -142f), new Color(0.26f, 0.42f, 0.68f, 1f));
         microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
         microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
         microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
 
-        voiceHintText = CreateText("VoiceHintText", mpRight.transform, "Push-to-talk key: V", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -148f), new Vector2(240f, 24f));
+        voiceHintText = CreateText("VoiceHintText", mpRight.transform, "Push-to-talk key: V", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -180f), new Vector2(240f, 24f));
 
         // Quiz Options button — only visible to host when Quiz Island is selected
         quizOptionsButton = CreateButton(mpRight.transform, "QuizOptionsBtn", "Quiz Options", new Vector2(0f, 140f), new Color(0.45f, 0.18f, 0.72f, 1f));
@@ -1064,7 +1070,20 @@ public class PauseMenuManager : MonoBehaviour
             multiplayerSession.StatusChanged += OnMultiplayerStatusChanged;
             OnMultiplayerStatusChanged(multiplayerSession.CurrentStatus);
             RefreshVoiceChatButton();
+            RefreshPlayerModelButton();
         }
+    }
+
+    private void OnPlayerModelClicked()
+    {
+        EnsureMultiplayerSession();
+        if (multiplayerSession == null)
+        {
+            return;
+        }
+
+        multiplayerSession.CyclePlayerModel();
+        RefreshPlayerModelButton();
     }
 
     private void OnVoiceChatClicked()
@@ -1089,6 +1108,20 @@ public class PauseMenuManager : MonoBehaviour
 
         multiplayerSession.CycleMicrophoneDevice();
         RefreshVoiceChatButton();
+    }
+
+    private void RefreshPlayerModelButton()
+    {
+        if (playerModelButton == null || multiplayerSession == null)
+        {
+            return;
+        }
+
+        Text label = playerModelButton.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.text = "Model: " + multiplayerSession.CurrentPlayerModelLabel;
+        }
     }
 
     private void RefreshVoiceChatButton()
@@ -1174,6 +1207,7 @@ public class PauseMenuManager : MonoBehaviour
         }
 
         RefreshVoiceChatButton();
+        RefreshPlayerModelButton();
     }
 
     private static string GetLocalLanIp()

@@ -3,6 +3,11 @@ using UnityEngine;
 /// <summary>Spawns a simple first-person capsule if none exists so you can explore the map in FPS mode.</summary>
 public static class FpsBootstrap
 {
+    private const string PlayerModelPrefKey = "MultiplayerPlayerModel";
+    private const string MaleModelId = "male";
+    private const string FemaleModelResourcePath = "Characters/SM_Bean_Female_01";
+    private const string MaleModelResourcePath = "Characters/SM_Bean_Cowboy_01";
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Spawn()
     {
@@ -23,10 +28,10 @@ public static class FpsBootstrap
 
     private static void AddBeanBody(GameObject player, CharacterController cc)
     {
-        var beanPrefab = Resources.Load<GameObject>("Characters/SM_Bean_Female_01");
+        var beanPrefab = Resources.Load<GameObject>(GetSavedModelResourcePath());
         if (beanPrefab == null)
         {
-            Debug.LogWarning("[FpsBootstrap] Bean prefab not found in Resources/Characters/");
+            Debug.LogWarning("[FpsBootstrap] Player model prefab not found in Resources/Characters/");
             return;
         }
 
@@ -57,6 +62,14 @@ public static class FpsBootstrap
         go.layer = layer;
         foreach (Transform child in go.transform)
             SetLayerRecursively(child.gameObject, layer);
+    }
+
+    private static string GetSavedModelResourcePath()
+    {
+        string modelId = PlayerPrefs.GetString(PlayerModelPrefKey, string.Empty);
+        return string.Equals(modelId, MaleModelId, System.StringComparison.OrdinalIgnoreCase)
+            ? MaleModelResourcePath
+            : FemaleModelResourcePath;
     }
 
     private static Vector3 GuessSpawnPosition()

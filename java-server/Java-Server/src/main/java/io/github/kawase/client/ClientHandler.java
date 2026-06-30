@@ -9,6 +9,7 @@ import io.github.kawase.packet.impl.ai.GenerateAiTaskPacket;
 import io.github.kawase.packet.impl.ai.GenerateAiTaskResponsePacket;
 import io.github.kawase.packet.impl.companion.CompanionSpeakPacket;
 import io.github.kawase.packet.impl.companion.CompanionSpeakResponsePacket;
+import io.github.kawase.packet.impl.companion.CompanionVoiceTextPacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
 import io.github.kawase.packet.impl.course.FetchCourseDetailPacket;
@@ -58,6 +59,7 @@ public class ClientHandler {
                     && currentPacketId != 43
                     && currentPacketId != 44
                     && currentPacketId != 47 // CompanionSpeakPacket — ARIA greets before auth
+                    && currentPacketId != 58 // CompanionVoiceTextPacket — Rudolf voice can run before auth
                     && !client.isAuth()) {
                 connection.send(new ActionResponsePacket(currentPacketId, false, "Unauthorized. Please log in first.", -1).encode());
                 return;
@@ -620,6 +622,21 @@ public class ClientHandler {
                             .generateCompanionLine(client.getChildId(), companionSpeakPacket.getTrigger());
 
                     String line = (lineAndEmotion != null) ? lineAndEmotion[0] : "Hey, I'm here if you need me!";
+                    String emotion = (lineAndEmotion != null) ? lineAndEmotion[1] : "encouraging";
+                    connection.send(new CompanionSpeakResponsePacket(line, emotion).encode());
+                }
+
+                case CompanionVoiceTextPacket companionVoiceTextPacket -> {
+                    System.out.println("CompanionVoice transcript=" + companionVoiceTextPacket.getTranscript());
+                    final String[] lineAndEmotion = Server.getInstance()
+                            .getLearningProfileService()
+                            .generateCompanionVoiceReply(
+                                    client.getChildId(),
+                                    companionVoiceTextPacket.getTranscript(),
+                                    companionVoiceTextPacket.getContext()
+                            );
+
+                    String line = (lineAndEmotion != null) ? lineAndEmotion[0] : "I heard you. Tell me a bit more.";
                     String emotion = (lineAndEmotion != null) ? lineAndEmotion[1] : "encouraging";
                     connection.send(new CompanionSpeakResponsePacket(line, emotion).encode());
                 }
