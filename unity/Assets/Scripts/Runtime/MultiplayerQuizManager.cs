@@ -401,6 +401,41 @@ public class MultiplayerQuizManager : MonoBehaviour
         currentQuestionIndex = 0;
         quizRunning          = true;
         scores.Clear();
+        StartCoroutine(CountdownThenQuestion());
+    }
+
+    private IEnumerator CountdownThenQuestion()
+    {
+        // Show player count for 2 seconds
+        int playerCount = MultiplayerSessionManager.Instance?.ConnectedPlayerCount ?? 1;
+        if (theaterQuestionText != null)
+        {
+            theaterQuestionText.fontSize = 48;
+            theaterQuestionText.text     = playerCount + " player" + (playerCount != 1 ? "s" : "") + " in the session";
+        }
+        if (theaterSubText != null)
+        {
+            theaterSubText.text  = "Quiz is starting…";
+            theaterSubText.color = new Color(0.7f, 0.7f, 1f);
+        }
+        for (int j = 0; j < 4; j++)
+            if (theaterAnswerBgs[j] != null) theaterAnswerBgs[j].color = new Color(0.1f, 0.1f, 0.18f, 1f);
+        yield return new WaitForSeconds(2f);
+
+        // Countdown 5 → 1
+        for (int i = 5; i >= 1; i--)
+        {
+            if (theaterSubText != null) theaterSubText.text = "Get ready!";
+            if (theaterQuestionText != null)
+            {
+                theaterQuestionText.fontSize = 120;
+                theaterQuestionText.text     = i.ToString();
+                theaterQuestionText.color    = Color.white;
+            }
+            yield return new WaitForSeconds(1f);
+        }
+
+        if (theaterQuestionText != null) theaterQuestionText.fontSize = 34;
         SendNextQuestion();
     }
 

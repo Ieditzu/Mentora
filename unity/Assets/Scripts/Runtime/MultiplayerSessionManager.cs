@@ -69,6 +69,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     public event Action<Packet> OnQuizPacket;
 
     public string LocalClientId => localClientId;
+    public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
 
     public enum VoiceChatMode
     {
