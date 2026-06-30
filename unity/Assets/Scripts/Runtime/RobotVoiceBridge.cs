@@ -26,10 +26,11 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     public float MicLevel { get; private set; }
     public bool HasSpeechRecognition => witConfigured;
     public bool IsListening => listeningRequested && microphoneManager != null && microphoneManager.IsMicrophoneCapturing;
-    public bool IsSpeaking => speaker != null && speaker.IsActive;
+    public bool IsSpeaking => (speaker != null && speaker.IsActive) || (ttsAudioSource != null && ttsAudioSource.isPlaying);
 
     private TTSSpeaker speaker;
     private TTSWit ttsService;
+    private AudioSource ttsAudioSource;
     private MultiplayerSessionManager microphoneManager;
     private string witClientAccessToken;
     private string dictationEndpointUrl;
@@ -81,9 +82,9 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             audioStream = true
         };
 
-        AudioSource speechSource = ttsObject.AddComponent<AudioSource>();
-        speechSource.playOnAwake = false;
-        speechSource.spatialBlend = 0.35f;
+        ttsAudioSource = ttsObject.AddComponent<AudioSource>();
+        ttsAudioSource.playOnAwake = false;
+        ttsAudioSource.spatialBlend = 0.35f;
 
         speaker = ttsObject.AddComponent<TTSSpeaker>();
         speaker.presetVoiceID = string.Empty;
@@ -346,6 +347,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     {
         using (UnityWebRequest request = new UnityWebRequest(endpointUrl, UnityWebRequest.kHttpVerbPOST))
         {
+            request.chunkedTransfer = true;
             request.uploadHandler = new UploadHandlerRaw(pcm16);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", "Bearer " + witClientAccessToken);

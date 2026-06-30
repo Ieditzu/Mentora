@@ -105,6 +105,7 @@ public class RobotCompanion : MonoBehaviour
     private float      lastConversationHeard = -999f;
     private bool       voiceWasSpeaking;
     private float      resumeVoiceListeningAt;
+    private const float PostSpeechListenDelay = 1.25f;
     private readonly System.Collections.Generic.List<string> conversationHistory = new System.Collections.Generic.List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
@@ -736,7 +737,7 @@ public class RobotCompanion : MonoBehaviour
         if (speaking)
         {
             voiceWasSpeaking = true;
-            resumeVoiceListeningAt = Time.unscaledTime + 0.75f;
+            resumeVoiceListeningAt = Time.unscaledTime + PostSpeechListenDelay;
             voiceBridge.SetListening(false);
             return;
         }
@@ -744,7 +745,7 @@ public class RobotCompanion : MonoBehaviour
         if (voiceWasSpeaking)
         {
             voiceWasSpeaking = false;
-            resumeVoiceListeningAt = Time.unscaledTime + 0.75f;
+            resumeVoiceListeningAt = Time.unscaledTime + PostSpeechListenDelay;
         }
 
         bool shouldListen = voiceBridge.HasSpeechRecognition && !waiting && Time.unscaledTime >= resumeVoiceListeningAt;
