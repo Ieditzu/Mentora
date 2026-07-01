@@ -157,10 +157,12 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             audioSource.playOnAwake = false;
             audioSource.loop = true;
-            audioSource.spatialBlend = 0f;
-            audioSource.minDistance = 1.5f;
-            audioSource.maxDistance = 20f;
+            audioSource.spatialBlend = 1f;
+            audioSource.minDistance = 1.25f;
+            audioSource.maxDistance = 18f;
             audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+            audioSource.dopplerLevel = 0f;
+            audioSource.spread = 45f;
             audioSource.volume = 1f;
 
             streamClip = AudioClip.Create("RemoteVoiceStream", sampleRate, 1, sampleRate, true, OnAudioRead);

@@ -1,7 +1,9 @@
 package io.github.kawase.database.services;
 
+import io.github.kawase.cpp.CppExecutor;
 import io.github.kawase.database.entity.Child;
 import io.github.kawase.database.repository.ChildRepository;
+import io.github.kawase.python.PythonExecutor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -533,6 +535,7 @@ public class LearningProfileService {
         }
 
         String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
+        String executionContext = buildCompanionExecutionContext(cleanedTranscript, context);
         String prompt =
             "You are Rudolf, a friendly robot companion inside a 3D educational game called Mentora.\n" +
             "You are talking to a child aged 9-13 who is learning to code. Your answer appears in a speech bubble and may also be spoken aloud.\n" +
@@ -540,10 +543,13 @@ public class LearningProfileService {
             "Be a mentor, not an answer machine: teach the next step, ask a good follow-up when useful, and avoid dumping full solutions unless requested.\n\n" +
             "Student profile:\n" + profileContext + "\n\n" +
             "Voice interaction context: " + (context == null ? "general" : context) + "\n" +
+            (executionContext.isBlank() ? "" : "Server code execution result:\n" + executionContext + "\n\n") +
             "The student just said: \"" + cleanedTranscript + "\"\n\n" +
             "Response rules:\n" +
             "- If recent conversation is provided in the context, use it to remember what the student asked and what you already answered.\n" +
             "- Treat the current student message as a follow-up when it refers to earlier turns with words like it, that, this, again, or why.\n" +
+            "- If a server code execution result is provided, use the exact stdout/stderr/exit code to answer. Say briefly that you ran it.\n" +
+            "- If the student asks you to run code but no runnable code is available, ask them to paste or open the code in the game instead of pretending you ran it.\n" +
             "- Reply directly to the student. Do not mention transcription, packets, prompts, or backend systems.\n" +
             "- For normal conversation, use 1-3 short sentences.\n" +
             "- If they ask for code, debugging, syntax, or an example, include a small fenced code block with a language tag, like ```python or ```cpp.\n" +
@@ -560,6 +566,112 @@ public class LearningProfileService {
 
         line = line.trim().replaceAll("^[\"']|[\"']$", "");
         return new String[]{line, "encouraging"};
+    }
+
+    private String buildCompanionExecutionContext(final String transcript, final String context) {
+        String combined = (transcript == null ? "" : transcript) + "\n" + (context == null ? "" : context);
+        if (!looksLikeExecutionRequest(combined)) {
+            return "";
+        }
+
+        String code = extractLastFencedCode(combined);
+        if (code.isBlank()) {
+            return "The student asked to execute code, but no fenced runnable code was available in the current conversation.";
+        }
+
+        if (code.length() > 5000) {
+            return "The student asked to execute code, but the snippet is too long to run safely in a quick voice reply.";
+        }
+
+        String language = inferExecutionLanguage(combined, code);
+        if ("cpp".equals(language)) {
+            CppExecutor.ExecutionResult result = CppExecutor.execute(code, 8);
+            return formatExecutionResult("C++", result.output, result.error, result.exitCode, result.isTimeout);
+        }
+
+        PythonExecutor.ExecutionResult result = PythonExecutor.execute(code, 8);
+        return formatExecutionResult("Python", result.output, result.error, result.exitCode, result.isTimeout);
+    }
+
+    private boolean looksLikeExecutionRequest(final String text) {
+        if (text == null) {
+            return false;
+        }
+
+        String normalized = text.toLowerCase();
+        boolean wantsRun =
+            normalized.contains("run ") ||
+            normalized.contains("execute") ||
+            normalized.contains("test ") ||
+            normalized.contains("try ") ||
+            normalized.contains("output") ||
+            normalized.contains("what does") ||
+            normalized.contains("what will") ||
+            normalized.contains("what prints") ||
+            normalized.contains("compile");
+        return wantsRun && (normalized.contains("```") || normalized.contains("print") || normalized.contains("cout") || normalized.contains("int main") || normalized.contains("def "));
+    }
+
+    private String extractLastFencedCode(final String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+
+        String lastCode = "";
+        int searchIndex = 0;
+        while (true) {
+            int start = text.indexOf("```", searchIndex);
+            if (start < 0) {
+                break;
+            }
+
+            int contentStart = text.indexOf('\n', start + 3);
+            if (contentStart < 0) {
+                break;
+            }
+
+            int end = text.indexOf("```", contentStart + 1);
+            if (end < 0) {
+                break;
+            }
+
+            String code = text.substring(contentStart + 1, end).trim();
+            if (!code.isBlank()) {
+                lastCode = code;
+            }
+
+            searchIndex = end + 3;
+        }
+
+        if (!lastCode.isBlank()) {
+            return lastCode;
+        }
+
+        String normalized = text.trim();
+        if (normalized.contains("print") || normalized.contains("cout") || normalized.contains("int main") || normalized.contains("def ")) {
+            return normalized;
+        }
+
+        return "";
+    }
+
+    private String inferExecutionLanguage(final String text, final String code) {
+        String normalized = ((text == null ? "" : text) + "\n" + (code == null ? "" : code)).toLowerCase();
+        if (normalized.contains("c++") || normalized.contains("cpp") || normalized.contains("#include") || normalized.contains("std::") || normalized.contains("cout") || normalized.contains("int main")) {
+            return "cpp";
+        }
+
+        return "python";
+    }
+
+    private String formatExecutionResult(final String language, final String output, final String error, final int exitCode, final boolean timeout) {
+        String safeOutput = truncate(output == null || output.isBlank() ? "(no stdout)" : output.trim(), 1200);
+        String safeError = truncate(error == null || error.isBlank() ? "(no stderr)" : error.trim(), 1200);
+        return "Language: " + language + "\n" +
+            "Exit code: " + exitCode + "\n" +
+            "Timed out: " + timeout + "\n" +
+            "stdout:\n" + safeOutput + "\n" +
+            "stderr:\n" + safeError;
     }
 
     private String emotionForTrigger(final String trigger) {

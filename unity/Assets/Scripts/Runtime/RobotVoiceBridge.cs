@@ -21,6 +21,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private const float PreRollSeconds = 0.35f;
     private const int MinVoicedFrames = 6;
     private const float MinPeakLevel = 0.028f;
+    private const float TargetSttPeak = 0.82f;
+    private const float MaxSttGain = 8f;
 
     public event Action<string> FullTranscriptionReceived;
     public float MicLevel { get; private set; }
@@ -43,7 +45,6 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private bool transcriptionRequestActive;
     private float utteranceStartTime;
     private float lastSpeechTime;
-    private float noTranscriptCooldownUntil;
     private float utterancePeakLevel;
     private int voicedFrameCount;
     private int utteranceSampleRate = 16000;
@@ -84,7 +85,12 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
         ttsAudioSource = ttsObject.AddComponent<AudioSource>();
         ttsAudioSource.playOnAwake = false;
-        ttsAudioSource.spatialBlend = 0.35f;
+        ttsAudioSource.spatialBlend = 1f;
+        ttsAudioSource.minDistance = 1.2f;
+        ttsAudioSource.maxDistance = 12f;
+        ttsAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+        ttsAudioSource.dopplerLevel = 0f;
+        ttsAudioSource.spread = 35f;
 
         speaker = ttsObject.AddComponent<TTSSpeaker>();
         speaker.presetVoiceID = string.Empty;
@@ -192,8 +198,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             pcm16 == null ||
             pcm16.Length == 0 ||
             IsSpeaking ||
-            transcriptionRequestActive ||
-            Time.unscaledTime < noTranscriptCooldownUntil)
+            transcriptionRequestActive)
         {
             return;
         }
@@ -326,16 +331,95 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             transcript = ExtractTranscript(speechResponse);
             if (string.IsNullOrWhiteSpace(transcript))
             {
-                UnityEngine.Debug.LogWarning(
-                    "[RobotVoice] Wit had no transcript. bytes=" + pcm16.Length +
-                    " peak=" + peakLevel.ToString("0.000") +
-                    " dictationError=" + dictationError +
-                    " dictationResponse=" + dictationResponse +
-                    " speechError=" + speechError +
-                    " speechResponse=" + speechResponse);
-                noTranscriptCooldownUntil = Time.unscaledTime + 0.6f;
-                transcriptionRequestActive = false;
-                yield break;
+                byte[] normalizedPcm = NormalizePcm16ForStt(pcm16, out float appliedGain, out float audioPeak);
+                if (appliedGain > 1.05f)
+                {
+                    string normalizedDictationResponse = string.Empty;
+                    string normalizedDictationError = string.Empty;
+                    yield return SendWitAudioRequest(dictationEndpointUrl, normalizedPcm, sampleRate, (response, error) =>
+                    {
+                        normalizedDictationResponse = response;
+                        normalizedDictationError = error;
+                    });
+
+                    transcript = ExtractTranscript(normalizedDictationResponse);
+                    if (string.IsNullOrWhiteSpace(transcript))
+                    {
+                        string normalizedSpeechResponse = string.Empty;
+                        string normalizedSpeechError = string.Empty;
+                        yield return SendWitAudioRequest(speechEndpointUrl, normalizedPcm, sampleRate, (response, error) =>
+                        {
+                            normalizedSpeechResponse = response;
+                            normalizedSpeechError = error;
+                        });
+
+                        transcript = ExtractTranscript(normalizedSpeechResponse);
+                        if (string.IsNullOrWhiteSpace(transcript))
+                        {
+                            string wavSpeechResponse = string.Empty;
+                            string wavSpeechError = string.Empty;
+                            yield return SendWitWavRequest(speechEndpointUrl, normalizedPcm, sampleRate, (response, error) =>
+                            {
+                                wavSpeechResponse = response;
+                                wavSpeechError = error;
+                            });
+
+                            transcript = ExtractTranscript(wavSpeechResponse);
+                            if (string.IsNullOrWhiteSpace(transcript))
+                            {
+                                LogNoTranscript(
+                                    pcm16.Length,
+                                    peakLevel,
+                                    audioPeak,
+                                    appliedGain,
+                                    dictationError,
+                                    dictationResponse,
+                                    speechError,
+                                    speechResponse,
+                                    normalizedDictationError,
+                                    normalizedDictationResponse,
+                                    normalizedSpeechError,
+                                    normalizedSpeechResponse + " wavSpeechError=" + wavSpeechError + " wavSpeechResponse=" + wavSpeechResponse);
+                                transcriptionRequestActive = false;
+                                yield break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    string wavSpeechResponse = string.Empty;
+                    string wavSpeechError = string.Empty;
+                    yield return SendWitWavRequest(speechEndpointUrl, pcm16, sampleRate, (response, error) =>
+                    {
+                        wavSpeechResponse = response;
+                        wavSpeechError = error;
+                    });
+
+                    transcript = ExtractTranscript(wavSpeechResponse);
+                    if (!string.IsNullOrWhiteSpace(transcript))
+                    {
+                        transcriptionRequestActive = false;
+                        RaiseFullTranscription(transcript);
+                        yield break;
+                    }
+
+                    LogNoTranscript(
+                        pcm16.Length,
+                        peakLevel,
+                        audioPeak,
+                        appliedGain,
+                        dictationError,
+                        dictationResponse,
+                        speechError,
+                        speechResponse,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        "wavSpeechError=" + wavSpeechError + " wavSpeechResponse=" + wavSpeechResponse);
+                    transcriptionRequestActive = false;
+                    yield break;
+                }
             }
         }
 
@@ -343,15 +427,108 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         RaiseFullTranscription(transcript);
     }
 
+    private static byte[] NormalizePcm16ForStt(byte[] pcm16, out float appliedGain, out float audioPeak)
+    {
+        appliedGain = 1f;
+        audioPeak = 0f;
+        if (pcm16 == null || pcm16.Length < 2)
+        {
+            return pcm16;
+        }
+
+        int maxAbs = 0;
+        for (int i = 0; i + 1 < pcm16.Length; i += 2)
+        {
+            short sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+            int abs = Mathf.Abs(sample);
+            if (abs > maxAbs)
+            {
+                maxAbs = abs;
+            }
+        }
+
+        audioPeak = maxAbs / 32768f;
+        if (maxAbs <= 0)
+        {
+            return pcm16;
+        }
+
+        appliedGain = Mathf.Clamp((TargetSttPeak * 32767f) / maxAbs, 1f, MaxSttGain);
+        if (appliedGain <= 1.05f)
+        {
+            return pcm16;
+        }
+
+        byte[] normalized = new byte[pcm16.Length];
+        for (int i = 0; i + 1 < pcm16.Length; i += 2)
+        {
+            short sample = (short)(pcm16[i] | (pcm16[i + 1] << 8));
+            int amplified = Mathf.Clamp(Mathf.RoundToInt(sample * appliedGain), short.MinValue, short.MaxValue);
+            normalized[i] = (byte)(amplified & 0xff);
+            normalized[i + 1] = (byte)((amplified >> 8) & 0xff);
+        }
+
+        return normalized;
+    }
+
+    private static void LogNoTranscript(
+        int byteCount,
+        float vadPeak,
+        float audioPeak,
+        float appliedGain,
+        string dictationError,
+        string dictationResponse,
+        string speechError,
+        string speechResponse,
+        string normalizedDictationError,
+        string normalizedDictationResponse,
+        string normalizedSpeechError,
+        string normalizedSpeechResponse)
+    {
+        UnityEngine.Debug.LogWarning(
+            "[RobotVoice] Wit had no transcript. bytes=" + byteCount +
+            " vadPeak=" + vadPeak.ToString("0.000") +
+            " audioPeak=" + audioPeak.ToString("0.000") +
+            " gain=" + appliedGain.ToString("0.00") +
+            " dictationError=" + dictationError +
+            " dictationResponse=" + dictationResponse +
+            " speechError=" + speechError +
+            " speechResponse=" + speechResponse +
+            " normalizedDictationError=" + normalizedDictationError +
+            " normalizedDictationResponse=" + normalizedDictationResponse +
+            " normalizedSpeechError=" + normalizedSpeechError +
+            " normalizedSpeechResponse=" + normalizedSpeechResponse);
+    }
+
     private IEnumerator SendWitAudioRequest(string endpointUrl, byte[] pcm16, int sampleRate, Action<string, string> complete)
     {
         using (UnityWebRequest request = new UnityWebRequest(endpointUrl, UnityWebRequest.kHttpVerbPOST))
         {
             request.chunkedTransfer = true;
-            request.uploadHandler = new UploadHandlerRaw(pcm16);
+            string contentType = "audio/raw;bits=16;rate=" + (sampleRate / 1000) + "k;encoding=signed-integer;endian=little";
+            request.uploadHandler = new UploadHandlerRaw(pcm16) { contentType = contentType };
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", "Bearer " + witClientAccessToken);
-            request.SetRequestHeader("Content-Type", "audio/raw;bits=16;rate=" + (sampleRate / 1000) + "k;encoding=signed-integer;endian=little");
+            request.SetRequestHeader("Content-Type", contentType);
+            request.SetRequestHeader("Accept", "application/json");
+
+            yield return request.SendWebRequest();
+
+            string response = request.downloadHandler == null ? string.Empty : request.downloadHandler.text;
+            string error = request.result == UnityWebRequest.Result.Success ? string.Empty : request.error;
+            complete?.Invoke(response, error);
+        }
+    }
+
+    private IEnumerator SendWitWavRequest(string endpointUrl, byte[] pcm16, int sampleRate, Action<string, string> complete)
+    {
+        byte[] wavBytes = BuildWavBytes(pcm16, sampleRate);
+        using (UnityWebRequest request = new UnityWebRequest(endpointUrl, UnityWebRequest.kHttpVerbPOST))
+        {
+            request.uploadHandler = new UploadHandlerRaw(wavBytes) { contentType = "audio/wav" };
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Authorization", "Bearer " + witClientAccessToken);
+            request.SetRequestHeader("Content-Type", "audio/wav");
             request.SetRequestHeader("Accept", "application/json");
 
             yield return request.SendWebRequest();
@@ -509,7 +686,12 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
     private static byte[] BuildWavBytes(List<byte> pcm16, int sampleRate)
     {
-        int dataLength = pcm16.Count;
+        return BuildWavBytes(pcm16.ToArray(), sampleRate);
+    }
+
+    private static byte[] BuildWavBytes(byte[] pcm16, int sampleRate)
+    {
+        int dataLength = pcm16.Length;
         byte[] wav = new byte[44 + dataLength];
         WriteAscii(wav, 0, "RIFF");
         WriteInt32(wav, 4, 36 + dataLength);
@@ -524,7 +706,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         WriteInt16(wav, 34, 16);
         WriteAscii(wav, 36, "data");
         WriteInt32(wav, 40, dataLength);
-        pcm16.CopyTo(wav, 44);
+        Buffer.BlockCopy(pcm16, 0, wav, 44, dataLength);
         return wav;
     }
 
