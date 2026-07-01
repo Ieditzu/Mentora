@@ -538,6 +538,10 @@ public class LearningProfileService {
             return null;
         }
 
+        if (!shouldProcessCompanionVoiceIntent(cleanedTranscript, context)) {
+            return null;
+        }
+
         String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
         String executionContext = buildCompanionExecutionContext(cleanedTranscript, context);
         String prompt =
@@ -547,6 +551,7 @@ public class LearningProfileService {
             "Be a mentor, not an answer machine: teach the next step, ask a good follow-up when useful, and avoid dumping full solutions unless requested.\n\n" +
             "VERY IMPORTANT INTENT GATE:\n" +
             "The microphone may capture random speech that is not meant for Rudolf. First decide whether the student is actually trying to talk to Rudolf.\n" +
+            "For passive single-player microphone input, be strict: do not answer unless the transcript directly addresses Rudolf/the robot or clearly asks for game, coding, debugging, or navigation help.\n" +
             "Respond only when one of these is true:\n" +
             "- The text directly addresses Rudolf/the robot/the mentor/bot, even if speech-to-text misspells the name.\n" +
             "- The context says conversation_active=true, meaning this is a follow-up in an ongoing Rudolf conversation.\n" +
@@ -654,6 +659,110 @@ public class LearningProfileService {
             compact.equals("testing") ||
             compact.equals("hello") ||
             compact.equals("hi");
+    }
+
+    private boolean shouldProcessCompanionVoiceIntent(final String transcript, final String context) {
+        String normalized = normalizeCompanionVoiceText(transcript);
+        if (normalized.isBlank()) {
+            return false;
+        }
+
+        boolean activeConversation = context != null && context.toLowerCase().contains("conversation_active=true");
+        boolean addressedToCompanion = containsCompanionAddress(normalized);
+        if (addressedToCompanion) {
+            return true;
+        }
+
+        boolean mentionsIsland = normalized.contains(" island") ||
+            normalized.contains("python") ||
+            normalized.contains("c plus plus") ||
+            normalized.contains("cplusplus") ||
+            normalized.contains("cpp") ||
+            normalized.contains("logic") ||
+            normalized.contains("community");
+        boolean asksForRoute = normalized.contains("take me") ||
+            normalized.contains("guide me") ||
+            normalized.contains("lead me") ||
+            normalized.contains("show me") ||
+            normalized.contains("bring me") ||
+            normalized.contains("go to") ||
+            normalized.contains("where is") ||
+            normalized.contains("route to");
+        if (mentionsIsland && asksForRoute) {
+            return true;
+        }
+
+        if (isPassiveBackgroundSpeech(normalized)) {
+            return false;
+        }
+
+        if (activeConversation) {
+            return true;
+        }
+
+        return normalized.contains("help") ||
+            normalized.contains("explain") ||
+            normalized.contains("teach") ||
+            normalized.contains("debug") ||
+            normalized.contains("error") ||
+            normalized.contains("fix") ||
+            normalized.contains("code") ||
+            normalized.contains("run this") ||
+            normalized.contains("what is") ||
+            normalized.contains("how do") ||
+            normalized.contains("how can") ||
+            normalized.contains("why does") ||
+            normalized.contains("what does");
+    }
+
+    private boolean isPassiveBackgroundSpeech(final String normalized) {
+        if (normalized.matches(".*\\bfuck\\s+you\\b.*")) {
+            return true;
+        }
+
+        if ((normalized.contains("next one") || normalized.contains("next slide")) &&
+            (normalized.contains("going to") || normalized.contains("go to") || normalized.contains("move on"))) {
+            return true;
+        }
+
+        if (normalized.startsWith("i am going to ") || normalized.startsWith("im going to ")) {
+            return true;
+        }
+
+        String[] words = normalized.split("\\s+");
+        return words.length <= 5 &&
+            !containsCompanionAddress(normalized) &&
+            !normalized.contains("help") &&
+            !normalized.contains("guide") &&
+            !normalized.contains("take me") &&
+            !normalized.contains("explain") &&
+            !normalized.contains("what is") &&
+            !normalized.contains("how do");
+    }
+
+    private boolean containsCompanionAddress(final String normalized) {
+        return normalized.contains("rudolf") ||
+            normalized.contains("rudolph") ||
+            normalized.contains("rodolf") ||
+            normalized.contains("hey robot") ||
+            normalized.contains("the robot") ||
+            normalized.contains("robot can") ||
+            normalized.contains("robot please") ||
+            normalized.contains("mentor") ||
+            normalized.contains("bot");
+    }
+
+    private String normalizeCompanionVoiceText(final String transcript) {
+        if (transcript == null) {
+            return "";
+        }
+
+        return transcript
+            .toLowerCase()
+            .replace("c++", "c plus plus")
+            .replaceAll("[^a-z0-9+]+", " ")
+            .replaceAll("\\s+", " ")
+            .trim();
     }
 
     private String extractCompanionStructuredField(final String raw, final String key) {
