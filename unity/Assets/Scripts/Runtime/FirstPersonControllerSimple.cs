@@ -235,15 +235,9 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (PauseMenuManager.IsGamePaused)
         {
-            if (IsVrConfigured())
-            {
-                TryApplyXrHeadPose();
-            }
-
-            if (ShouldDriveVrControllerVisuals())
-            {
-                UpdateVrControllerVisuals();
-            }
+            if (IsVrConfigured()) TryApplyXrHeadPose();
+            if (ShouldDriveVrControllerVisuals()) UpdateVrControllerVisuals();
+            ApplyGravityOnly();
             return;
         }
 
@@ -262,7 +256,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
             return;
         }
 
-        if (cameraControlEnabled)
+        if (cameraControlEnabled && !PauseMenuManager.IsGamePaused)
         {
             Look();
         }
