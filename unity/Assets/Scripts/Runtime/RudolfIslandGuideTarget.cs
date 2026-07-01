@@ -74,7 +74,14 @@ public sealed class RudolfIslandGuideTarget : MonoBehaviour
             return true;
         }
 
-        if (normalized.Contains("python") || normalized.Contains("py island"))
+        if (normalized.Contains("python") ||
+            normalized.Contains("py island") ||
+            normalized.Contains("piton") ||
+            normalized.Contains("pithon") ||
+            normalized.Contains("pythong") ||
+            normalized.Contains("pie thon") ||
+            normalized.Contains("pie ton") ||
+            normalized.Contains("high thon"))
         {
             islandId = IslandId.Python;
             return true;

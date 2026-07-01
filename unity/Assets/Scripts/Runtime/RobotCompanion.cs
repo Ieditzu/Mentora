@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.UI;
 using Mentora.Network;
 
@@ -87,6 +88,17 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float guideWaitSpeed = 0.35f;
     [SerializeField] private float guideWaitForPlayerDistance = 16f;
     [SerializeField] private float guidePlayerArrivalDistance = 10f;
+    [SerializeField] private float guideHoverAboveGround = 3.4f;
+    [SerializeField] private float guideWaypointReachDistance = 3f;
+    [SerializeField] private float guideNavMeshSampleDistance = 14f;
+    [SerializeField] private float guideGroundProbeHeight = 26f;
+    [SerializeField] private float guideGroundProbeDistance = 70f;
+    [SerializeField] private float guideCollisionRadius = 0.48f;
+    [SerializeField] private float guideObstacleProbeDistance = 2.6f;
+    [SerializeField] private float guideDetourDistance = 4.5f;
+    [SerializeField] private float guideDetourReachDistance = 1.6f;
+    [SerializeField] private float guideStuckRepathSeconds = 1.25f;
+    [SerializeField] private float guideOutlineWidth = 0.045f;
 
     // ── Internal ─────────────────────────────────────────────────────────────
 
@@ -112,12 +124,34 @@ public class RobotCompanion : MonoBehaviour
     private float      lastConversationHeard = -999f;
     private bool       voiceWasSpeaking;
     private float      resumeVoiceListeningAt;
+    private float      lastNoTranscriptWakeAt = -999f;
+    private float      lastNoTranscriptPromptAt = -999f;
+    private float      nextSakuraCollisionRefresh;
+    private int        ignoredSakuraColliderCount = -1;
     private RudolfIslandGuideTarget guideTarget;
     private bool       guideActive;
     private bool       guideWaitingForPlayer;
     private Light      guideLight;
     private float      lastGuideWaitLine = -999f;
+    private int        guidePathIndex;
+    private Vector3    guideDestinationPosition;
+    private Vector3    lastGuideProgressPosition;
+    private Vector3    guideDetourTarget;
+    private float      guideStuckTimer;
+    private bool       guideDetourActive;
+    private readonly List<Vector3> guidePathCorners = new List<Vector3>(16);
+    private GameObject guideGlowRoot;
+    private GameObject boosterRoot;
+    private Material   guideOutlineMaterial;
+    private Material   guideChamsMaterial;
+    private Material   boosterRingMaterial;
+    private readonly List<Renderer> guideShellRenderers = new List<Renderer>(16);
+    private readonly List<LineRenderer> boosterRings = new List<LineRenderer>(3);
+    private static readonly Color GuideAqua = new Color(0.0f, 0.95f, 1f, 1f);
     private const float PostSpeechListenDelay = 1.25f;
+    private const float NoTranscriptWakeCooldown = 2f;
+    private const float NoTranscriptWakeVadPeak = 0.026f;
+    private const float NoTranscriptWakeAudioPeak = 0.012f;
     private readonly List<string> conversationHistory = new List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
@@ -135,7 +169,10 @@ public class RobotCompanion : MonoBehaviour
         BuildBubble();
         ResolvePlayer();
         SetupPhysics();
+        RefreshIgnoredSakuraCollisions(true);
         SetupGuideHighlight();
+        SetupGuideGlowVisuals();
+        SetupBoosterRings();
         SetupVoiceBridge();
         EnsureGameClientExists();
 
@@ -154,7 +191,10 @@ public class RobotCompanion : MonoBehaviour
             GameClient.Instance.OnPacketReceived -= OnPacket;
         OnTrigger -= HandleTrigger;
         if (voiceBridge != null)
+        {
             voiceBridge.FullTranscriptionReceived -= OnVoiceTranscription;
+            voiceBridge.TranscriptionFailedWithoutText -= OnVoiceNoTranscript;
+        }
         if (_instance == this) _instance = null;
     }
 
@@ -186,7 +226,7 @@ public class RobotCompanion : MonoBehaviour
             + orbitDir * followDistance;
         if (guiding && guideTarget != null)
         {
-            targetPos = guideTarget.GetGuidePosition(bob);
+            targetPos = GetGuideFlightTarget(bob);
         }
         else if (inConversation && fpsCam != null)
         {
@@ -224,11 +264,19 @@ public class RobotCompanion : MonoBehaviour
         if (fpsCam != null)
             headPos = fpsCam.transform.position;
 
-        Vector3 lookDir = headPos - transform.position;
+        Vector3 lookDir = guiding
+            ? GetGuideLookDirection(targetPos, next)
+            : headPos - transform.position;
         if (lookDir.sqrMagnitude > 0.001f)
         {
             Quaternion desiredRot = Quaternion.LookRotation(lookDir.normalized);
-            if (!inConversation && !guiding)
+            if (guiding)
+            {
+                float bank = -tiltAngle * Mathf.Clamp01(Vector3.Distance(transform.position, targetPos) / 7f);
+                float pitch = Mathf.Sin(Time.time * 7.5f) * 3f;
+                desiredRot *= Quaternion.Euler(pitch, 0f, bank);
+            }
+            else if (!inConversation)
             {
                 desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(
                     Vector3.Distance(transform.position, targetPos) - followDistance));
@@ -263,6 +311,8 @@ public class RobotCompanion : MonoBehaviour
         }
 
         UpdateGuideState();
+        UpdateBoosterRings(guiding);
+        RefreshIgnoredSakuraCollisions(false);
         UpdateVoiceListening(fpsCamForBubble);
     }
 
@@ -275,12 +325,12 @@ public class RobotCompanion : MonoBehaviour
     /// </summary>
     private Vector3 SteerAround(Vector3 origin, Vector3 desired)
     {
-        const float probeRadius  = 0.35f; // slightly smaller than the collider
-        const float probeLength  = 1.2f;  // how far ahead to look
+        float probeRadius = Mathf.Max(0.35f, guideCollisionRadius);
+        float probeLength = Mathf.Max(1.2f, guideObstacleProbeDistance);
 
         // Happy path — nothing ahead
         if (!Physics.SphereCast(origin, probeRadius, desired, out _, probeLength,
-                ~LayerMask.GetMask("Rudolf", "Ignore Raycast")))
+                GetGuideCollisionMask(), QueryTriggerInteraction.Ignore))
             return desired;
 
         // Try escape directions in priority order
@@ -300,7 +350,7 @@ public class RobotCompanion : MonoBehaviour
         foreach (var dir in candidates)
         {
             if (!Physics.SphereCast(origin, probeRadius, dir, out _, probeLength,
-                    ~LayerMask.GetMask("Rudolf", "Ignore Raycast")))
+                    GetGuideCollisionMask(), QueryTriggerInteraction.Ignore))
                 return dir;
         }
 
@@ -338,6 +388,11 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnCollisionEnter(Collision col)
     {
+        if (col != null && col.collider != null && IsSakuraNoClipTransform(col.collider.transform))
+        {
+            return;
+        }
+
         bounceVelocity = col.contacts[0].normal * 3.5f;
         bounceVelocity.y = Mathf.Abs(bounceVelocity.y) + 1.2f;
         StartCoroutine(BounceRoutine());
@@ -478,6 +533,7 @@ public class RobotCompanion : MonoBehaviour
         voiceBridge = gameObject.AddComponent<RobotVoiceBridge>();
         voiceBridge.Initialize();
         voiceBridge.FullTranscriptionReceived += OnVoiceTranscription;
+        voiceBridge.TranscriptionFailedWithoutText += OnVoiceNoTranscript;
     }
 
     private void HandleTrigger(string trigger, string context)
@@ -510,12 +566,17 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnVoiceTranscription(string transcript)
     {
-        if (waiting || Time.time - lastSpoke < 1.5f)
+        if (waiting)
         {
             return;
         }
 
         bool wasConversationActive = IsConversationActive();
+        if (!wasConversationActive && Time.time - lastSpoke < 1f)
+        {
+            return;
+        }
+
         string command;
         if (wasConversationActive)
         {
@@ -547,6 +608,49 @@ public class RobotCompanion : MonoBehaviour
 
         waiting = true;
         StartCoroutine(RequestVoiceReply(command));
+    }
+
+    private void OnVoiceNoTranscript(int byteCount, float vadPeak, float audioPeak, float appliedGain)
+    {
+        if (waiting || voiceBridge == null || voiceBridge.IsSpeaking)
+        {
+            return;
+        }
+
+        bool active = IsConversationActive();
+        if (active)
+        {
+            lastConversationHeard = Time.time;
+            if (Time.time - lastNoTranscriptPromptAt > 3.5f)
+            {
+                lastNoTranscriptPromptAt = Time.time;
+                ShowLine("I didn't catch that — try again.", 2.2f);
+            }
+            return;
+        }
+
+        if (Time.time - lastNoTranscriptWakeAt < NoTranscriptWakeCooldown ||
+            vadPeak < NoTranscriptWakeVadPeak ||
+            audioPeak < NoTranscriptWakeAudioPeak)
+        {
+            return;
+        }
+
+        if (IsInMultiplayerSession())
+        {
+            Camera fpsCamera = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
+            if (!IsPlayerLookingAtRudolf(fpsCamera))
+            {
+                return;
+            }
+        }
+
+        lastNoTranscriptWakeAt = Time.time;
+        lastNoTranscriptPromptAt = Time.time;
+        conversationHistory.Clear();
+        conversationActive = true;
+        lastConversationHeard = Time.time;
+        ShowLine("Listening…", 3f);
     }
 
     private IEnumerator RequestVoiceReply(string transcript)
@@ -779,6 +883,225 @@ public class RobotCompanion : MonoBehaviour
         guideLight.enabled = false;
     }
 
+    private void SetupGuideGlowVisuals()
+    {
+        Transform existingRoot = transform.Find("RudolfGuideGlowShells");
+        guideGlowRoot = existingRoot != null ? existingRoot.gameObject : new GameObject("RudolfGuideGlowShells");
+        guideGlowRoot.transform.SetParent(transform, false);
+        guideGlowRoot.transform.localPosition = Vector3.zero;
+        guideGlowRoot.transform.localRotation = Quaternion.identity;
+        guideGlowRoot.transform.localScale = Vector3.one;
+        guideGlowRoot.layer = gameObject.layer;
+
+        Shader glowShader = Shader.Find("Mentora/RudolfGuideGlow");
+        if (glowShader == null)
+        {
+            glowShader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+
+        guideOutlineMaterial = new Material(glowShader);
+        guideOutlineMaterial.name = "RudolfGuideOutlineRuntime";
+        guideOutlineMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, 0.72f));
+        guideOutlineMaterial.SetFloat("_Extrude", guideOutlineWidth);
+        guideOutlineMaterial.SetFloat("_ZTest", 4f);
+        guideOutlineMaterial.SetFloat("_Cull", 1f);
+
+        guideChamsMaterial = new Material(glowShader);
+        guideChamsMaterial.name = "RudolfGuideChamsRuntime";
+        guideChamsMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, 0.22f));
+        guideChamsMaterial.SetFloat("_Extrude", 0.006f);
+        guideChamsMaterial.SetFloat("_ZTest", 8f);
+        guideChamsMaterial.SetFloat("_Cull", 0f);
+
+        guideShellRenderers.Clear();
+        MeshRenderer[] meshRenderers = GetComponentsInChildren<MeshRenderer>(true);
+        for (int i = 0; i < meshRenderers.Length; i++)
+        {
+            MeshRenderer source = meshRenderers[i];
+            if (source == null ||
+                source.transform.IsChildOf(guideGlowRoot.transform) ||
+                source.name.EndsWith("_GuideOutline", StringComparison.Ordinal) ||
+                source.name.EndsWith("_GuideChams", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            MeshFilter filter = source.GetComponent<MeshFilter>();
+            if (filter == null || filter.sharedMesh == null)
+            {
+                continue;
+            }
+
+            CreateGuideMeshShell(source, filter.sharedMesh, guideOutlineMaterial, "_GuideOutline");
+            CreateGuideMeshShell(source, filter.sharedMesh, guideChamsMaterial, "_GuideChams");
+        }
+
+        SkinnedMeshRenderer[] skinnedRenderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+        for (int i = 0; i < skinnedRenderers.Length; i++)
+        {
+            SkinnedMeshRenderer source = skinnedRenderers[i];
+            if (source == null ||
+                source.sharedMesh == null ||
+                source.transform.IsChildOf(guideGlowRoot.transform) ||
+                source.name.EndsWith("_GuideOutline", StringComparison.Ordinal) ||
+                source.name.EndsWith("_GuideChams", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            CreateGuideSkinnedShell(source, guideOutlineMaterial, "_GuideOutline");
+            CreateGuideSkinnedShell(source, guideChamsMaterial, "_GuideChams");
+        }
+
+        SetGuideShellsActive(false);
+    }
+
+    private void CreateGuideMeshShell(MeshRenderer source, Mesh mesh, Material material, string suffix)
+    {
+        GameObject shell = new GameObject(source.name + suffix);
+        shell.layer = gameObject.layer;
+        shell.transform.SetParent(source.transform, false);
+        shell.transform.localPosition = Vector3.zero;
+        shell.transform.localRotation = Quaternion.identity;
+        shell.transform.localScale = Vector3.one;
+
+        MeshFilter shellFilter = shell.AddComponent<MeshFilter>();
+        shellFilter.sharedMesh = mesh;
+
+        MeshRenderer shellRenderer = shell.AddComponent<MeshRenderer>();
+        shellRenderer.sharedMaterial = material;
+        shellRenderer.enabled = false;
+        shellRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        shellRenderer.receiveShadows = false;
+        guideShellRenderers.Add(shellRenderer);
+    }
+
+    private void CreateGuideSkinnedShell(SkinnedMeshRenderer source, Material material, string suffix)
+    {
+        GameObject shell = new GameObject(source.name + suffix);
+        shell.layer = gameObject.layer;
+        shell.transform.SetParent(source.transform.parent != null ? source.transform.parent : transform, false);
+        shell.transform.localPosition = source.transform.localPosition;
+        shell.transform.localRotation = source.transform.localRotation;
+        shell.transform.localScale = source.transform.localScale;
+
+        SkinnedMeshRenderer shellRenderer = shell.AddComponent<SkinnedMeshRenderer>();
+        shellRenderer.sharedMesh = source.sharedMesh;
+        shellRenderer.bones = source.bones;
+        shellRenderer.rootBone = source.rootBone;
+        shellRenderer.updateWhenOffscreen = true;
+        shellRenderer.sharedMaterial = material;
+        shellRenderer.enabled = false;
+        shellRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        shellRenderer.receiveShadows = false;
+        guideShellRenderers.Add(shellRenderer);
+    }
+
+    private void SetupBoosterRings()
+    {
+        Transform existingRoot = transform.Find("RudolfBoostRings");
+        GameObject boosterRootObject = existingRoot != null ? existingRoot.gameObject : new GameObject("RudolfBoostRings");
+        boosterRoot = boosterRootObject;
+        boosterRootObject.layer = gameObject.layer;
+        boosterRootObject.transform.SetParent(transform, false);
+        boosterRootObject.transform.localPosition = Vector3.down * 0.38f;
+        boosterRootObject.transform.localRotation = Quaternion.identity;
+        boosterRootObject.transform.localScale = GetInverseParentScale();
+
+        Shader ringShader = Shader.Find("Sprites/Default");
+        if (ringShader == null)
+        {
+            ringShader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+
+        boosterRingMaterial = new Material(ringShader);
+        boosterRingMaterial.name = "RudolfBoostRingRuntime";
+        boosterRingMaterial.color = GuideAqua;
+
+        boosterRings.Clear();
+        for (int i = 0; i < 3; i++)
+        {
+            Transform existingRing = boosterRootObject.transform.Find("BoostRing_" + i);
+            GameObject ringObject = existingRing != null ? existingRing.gameObject : new GameObject("BoostRing_" + i);
+            ringObject.layer = gameObject.layer;
+            ringObject.transform.SetParent(boosterRootObject.transform, false);
+            ringObject.transform.localRotation = Quaternion.identity;
+
+            LineRenderer ring = ringObject.GetComponent<LineRenderer>();
+            if (ring == null)
+            {
+                ring = ringObject.AddComponent<LineRenderer>();
+            }
+
+            ring.useWorldSpace = false;
+            ring.loop = true;
+            ring.positionCount = 72;
+            ring.enabled = true;
+            ring.sharedMaterial = boosterRingMaterial;
+            ring.textureMode = LineTextureMode.Stretch;
+            ring.alignment = LineAlignment.View;
+            ring.numCapVertices = 4;
+            ring.numCornerVertices = 4;
+            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ring.receiveShadows = false;
+            SetRingCircle(ring, 0.62f + i * 0.12f);
+            boosterRings.Add(ring);
+        }
+    }
+
+    private static void SetRingCircle(LineRenderer ring, float radius)
+    {
+        for (int i = 0; i < ring.positionCount; i++)
+        {
+            float angle = ((float)i / ring.positionCount) * Mathf.PI * 2f;
+            ring.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
+        }
+    }
+
+    private void UpdateBoosterRings(bool guiding)
+    {
+        if (boosterRoot != null)
+        {
+            boosterRoot.transform.position = transform.position + Vector3.down * 0.38f;
+            boosterRoot.transform.rotation = Quaternion.identity;
+            boosterRoot.transform.localScale = GetInverseParentScale();
+        }
+
+        float alphaBase = guiding ? 0.78f : 0.42f;
+        float speed = guiding ? 1.85f : 1.1f;
+        for (int i = 0; i < boosterRings.Count; i++)
+        {
+            LineRenderer ring = boosterRings[i];
+            if (ring == null)
+            {
+                continue;
+            }
+
+            float phase = Mathf.Repeat(Time.time * speed + i * 0.33f, 1f);
+            float alpha = alphaBase * (1f - phase);
+            float scale = Mathf.Lerp(0.48f, guiding ? 1.08f : 0.88f, phase);
+            ring.transform.localScale = new Vector3(scale, scale, scale);
+            ring.transform.localPosition = Vector3.down * (0.05f + phase * 0.42f);
+            ring.transform.Rotate(Vector3.up, (guiding ? 95f : 52f) * Time.deltaTime * (i % 2 == 0 ? 1f : -1f), Space.Self);
+            ring.widthMultiplier = Mathf.Lerp(0.045f, 0.012f, phase);
+
+            Color ringColor = new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, alpha);
+            ring.startColor = ringColor;
+            ring.endColor = ringColor;
+        }
+    }
+
+    private Vector3 GetInverseParentScale()
+    {
+        Vector3 parentScale = transform.lossyScale;
+        return new Vector3(SafeInverseScale(parentScale.x), SafeInverseScale(parentScale.y), SafeInverseScale(parentScale.z));
+    }
+
+    private static float SafeInverseScale(float value)
+    {
+        return Mathf.Abs(value) > 0.0001f ? 1f / value : 1f;
+    }
+
     private bool TryHandleGuideCommand(string command)
     {
         string normalized = NormalizeCommand(command);
@@ -821,6 +1144,10 @@ public class RobotCompanion : MonoBehaviour
         guideActive = true;
         guideWaitingForPlayer = false;
         lastGuideWaitLine = -999f;
+        guideStuckTimer = 0f;
+        guideDetourActive = false;
+        lastGuideProgressPosition = transform.position;
+        BuildGuidePath(target);
         conversationActive = true;
         lastConversationHeard = Time.time;
         SetGuideHighlight(true);
@@ -840,6 +1167,10 @@ public class RobotCompanion : MonoBehaviour
         guideActive = false;
         guideTarget = null;
         guideWaitingForPlayer = false;
+        guidePathCorners.Clear();
+        guidePathIndex = 0;
+        guideDetourActive = false;
+        guideStuckTimer = 0f;
         SetGuideHighlight(false);
 
         if (!string.IsNullOrWhiteSpace(line))
@@ -889,6 +1220,8 @@ public class RobotCompanion : MonoBehaviour
 
         Vector3 steer = SteerAround(transform.position, toTarget.normalized);
         Vector3 next = transform.position + steer * speed * Time.deltaTime;
+        next = ResolveGuideCollision(next);
+        next = ApplyGuideHover(next, targetPos.y, Mathf.Sin(Time.time * bobSpeed) * bobAmplitude);
         if (Vector3.Distance(transform.position, targetPos) <= speed * Time.deltaTime)
         {
             return targetPos;
@@ -909,6 +1242,7 @@ public class RobotCompanion : MonoBehaviour
             guideLight.intensity = 2.1f + Mathf.Sin(Time.time * 5.5f) * 0.55f;
             guideLight.range = 7.5f + Mathf.Sin(Time.time * 3f) * 0.8f;
         }
+        UpdateGuideGlowMaterials();
 
         if (guideWaitingForPlayer && Time.time - lastGuideWaitLine > 8f)
         {
@@ -916,7 +1250,27 @@ public class RobotCompanion : MonoBehaviour
             ShowLine("I'll slow down — follow the glow.", 3.2f);
         }
 
-        float robotDistance = Vector3.Distance(transform.position, guideTarget.GetGuidePosition(0f));
+        if (!guideWaitingForPlayer)
+        {
+            if (HorizontalDistance(transform.position, lastGuideProgressPosition) < 0.08f)
+            {
+                guideStuckTimer += Time.deltaTime;
+            }
+            else
+            {
+                guideStuckTimer = 0f;
+                lastGuideProgressPosition = transform.position;
+            }
+
+            if (guideStuckTimer >= guideStuckRepathSeconds)
+            {
+                guideStuckTimer = 0f;
+                guideDetourActive = false;
+                BuildGuidePath(guideTarget);
+            }
+        }
+
+        float robotDistance = Vector3.Distance(transform.position, ApplyGuideHover(guideDestinationPosition, guideDestinationPosition.y + guideHoverAboveGround, 0f));
         float playerDistance = player != null ? Vector3.Distance(player.position, guideTarget.transform.position) : float.MaxValue;
         if (robotDistance <= guideTarget.ArrivalRadius && playerDistance <= guidePlayerArrivalDistance)
         {
@@ -945,6 +1299,447 @@ public class RobotCompanion : MonoBehaviour
         {
             guideLight.intensity = 0f;
         }
+
+        SetGuideShellsActive(active);
+    }
+
+    private void BuildGuidePath(RudolfIslandGuideTarget target)
+    {
+        guidePathCorners.Clear();
+        guidePathIndex = 0;
+        guideDetourActive = false;
+        if (target == null)
+        {
+            return;
+        }
+
+        guideDestinationPosition = target.transform.position;
+        Vector3 startSource = transform.position;
+        NavMeshHit startHit;
+        NavMeshHit targetHit;
+        if (NavMesh.SamplePosition(startSource, out startHit, guideNavMeshSampleDistance, NavMesh.AllAreas) &&
+            NavMesh.SamplePosition(target.transform.position, out targetHit, guideNavMeshSampleDistance, NavMesh.AllAreas))
+        {
+            guideDestinationPosition = targetHit.position;
+            NavMeshPath path = new NavMeshPath();
+            if (NavMesh.CalculatePath(startHit.position, targetHit.position, NavMesh.AllAreas, path) &&
+                path.corners != null &&
+                path.corners.Length > 1)
+            {
+                for (int i = 1; i < path.corners.Length; i++)
+                {
+                    guidePathCorners.Add(path.corners[i]);
+                }
+            }
+        }
+
+        if (guidePathCorners.Count == 0)
+        {
+            guidePathCorners.Add(guideDestinationPosition);
+        }
+        else
+        {
+            Vector3 finalCorner = guidePathCorners[guidePathCorners.Count - 1];
+            if (Vector3.Distance(finalCorner, guideDestinationPosition) > guideWaypointReachDistance)
+            {
+                guidePathCorners.Add(guideDestinationPosition);
+            }
+        }
+    }
+
+    private Vector3 GetGuideFlightTarget(float bob)
+    {
+        if (guideTarget == null)
+        {
+            return transform.position;
+        }
+
+        if (guideDetourActive)
+        {
+            if (HorizontalDistance(transform.position, guideDetourTarget) <= guideDetourReachDistance)
+            {
+                guideDetourActive = false;
+            }
+            else
+            {
+                return ApplyGuideHover(guideDetourTarget, guideDetourTarget.y + guideHoverAboveGround + bob, bob);
+            }
+        }
+
+        if (guidePathCorners.Count == 0)
+        {
+            guidePathCorners.Add(guideDestinationPosition);
+        }
+
+        while (guidePathIndex < guidePathCorners.Count - 1 &&
+               HorizontalDistance(transform.position, guidePathCorners[guidePathIndex]) <= guideWaypointReachDistance)
+        {
+            guidePathIndex++;
+        }
+
+        Vector3 waypoint = guidePathCorners[Mathf.Clamp(guidePathIndex, 0, guidePathCorners.Count - 1)];
+        return ApplyGuideHover(waypoint, waypoint.y + guideHoverAboveGround + bob, bob);
+    }
+
+    private Vector3 GetGuideLookDirection(Vector3 targetPos, Vector3 next)
+    {
+        Vector3 direction = next - transform.position;
+        if (direction.sqrMagnitude < 0.01f)
+        {
+            direction = targetPos - transform.position;
+        }
+
+        direction.y *= 0.35f;
+        if (direction.sqrMagnitude < 0.01f && guideTarget != null)
+        {
+            direction = guideTarget.transform.position - transform.position;
+            direction.y = 0f;
+        }
+
+        return direction;
+    }
+
+    private Vector3 ApplyGuideHover(Vector3 position, float fallbackY, float bob)
+    {
+        Vector3 probeOrigin = new Vector3(position.x, position.y + guideGroundProbeHeight, position.z);
+        RaycastHit[] hits = Physics.RaycastAll(probeOrigin, Vector3.down, guideGroundProbeDistance, GetGuideCollisionMask(), QueryTriggerInteraction.Ignore);
+        if (hits != null && hits.Length > 0)
+        {
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit hit = hits[i];
+                if (IsGuideGroundHit(hit))
+                {
+                    position.y = hit.point.y + guideHoverAboveGround + bob;
+                    return position;
+                }
+            }
+        }
+
+        position.y = fallbackY;
+        return position;
+    }
+
+    private Vector3 ResolveGuideCollision(Vector3 desiredNext)
+    {
+        Vector3 move = desiredNext - transform.position;
+        float distance = move.magnitude;
+        if (distance <= 0.001f)
+        {
+            return desiredNext;
+        }
+
+        RaycastHit[] hits = Physics.SphereCastAll(
+            transform.position,
+            guideCollisionRadius,
+            move.normalized,
+            distance + 0.08f,
+            GetGuideCollisionMask(),
+            QueryTriggerInteraction.Ignore);
+
+        if (hits == null || hits.Length == 0)
+        {
+            return desiredNext;
+        }
+
+        Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit hit = hits[i];
+            if (ShouldIgnoreGuideCollider(hit.collider))
+            {
+                continue;
+            }
+
+            Vector3 detour;
+            if (TryFindGuideDetour(hit, desiredNext, out detour))
+            {
+                guideDetourTarget = detour;
+                guideDetourActive = true;
+                Vector3 toDetour = detour - transform.position;
+                if (toDetour.sqrMagnitude > 0.01f)
+                {
+                    return transform.position + toDetour.normalized * Mathf.Min(distance, guideSpeed * Time.deltaTime);
+                }
+            }
+
+            float safeDistance = Mathf.Max(0f, hit.distance - 0.08f);
+            Vector3 safePosition = transform.position + move.normalized * Mathf.Min(safeDistance, distance);
+            Vector3 remainingMove = desiredNext - safePosition;
+            Vector3 slide = Vector3.ProjectOnPlane(remainingMove, hit.normal);
+            if (slide.sqrMagnitude <= 0.0001f)
+            {
+                return safePosition;
+            }
+
+            return safePosition + slide.normalized * Mathf.Min(slide.magnitude, guideSpeed * Time.deltaTime * 0.65f);
+        }
+
+        return desiredNext;
+    }
+
+    private bool TryFindGuideDetour(RaycastHit obstacleHit, Vector3 desiredNext, out Vector3 detour)
+    {
+        detour = Vector3.zero;
+        if (obstacleHit.collider == null)
+        {
+            return false;
+        }
+
+        Vector3 desiredFlat = desiredNext - transform.position;
+        desiredFlat.y = 0f;
+        if (desiredFlat.sqrMagnitude < 0.01f && guideTarget != null)
+        {
+            desiredFlat = guideDestinationPosition - transform.position;
+            desiredFlat.y = 0f;
+        }
+        if (desiredFlat.sqrMagnitude < 0.01f)
+        {
+            return false;
+        }
+
+        Vector3 forward = desiredFlat.normalized;
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+        if (right.sqrMagnitude < 0.01f)
+        {
+            return false;
+        }
+
+        Bounds bounds = obstacleHit.collider.bounds;
+        float obstacleRadius = Mathf.Clamp(Mathf.Max(bounds.extents.x, bounds.extents.z) + guideDetourDistance, guideDetourDistance, 10f);
+        Vector3 basePoint = obstacleHit.point;
+        basePoint.y = transform.position.y;
+
+        Vector3[] candidates =
+        {
+            basePoint + right * obstacleRadius + forward * 1.5f,
+            basePoint - right * obstacleRadius + forward * 1.5f,
+            bounds.center + right * obstacleRadius,
+            bounds.center - right * obstacleRadius,
+            transform.position + right * guideDetourDistance,
+            transform.position - right * guideDetourDistance,
+            transform.position + (right + forward).normalized * guideDetourDistance,
+            transform.position + (-right + forward).normalized * guideDetourDistance
+        };
+
+        float bestScore = float.MaxValue;
+        Vector3 best = Vector3.zero;
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Vector3 candidate = ProjectGuideDetourToWalkable(candidates[i]);
+            candidate = ApplyGuideHover(candidate, candidate.y + guideHoverAboveGround, 0f);
+            if (!IsGuidePathClear(transform.position, candidate))
+            {
+                continue;
+            }
+
+            float score = HorizontalDistance(candidate, guideDestinationPosition) + HorizontalDistance(transform.position, candidate) * 0.25f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        if (bestScore >= float.MaxValue * 0.5f)
+        {
+            return false;
+        }
+
+        detour = best;
+        return true;
+    }
+
+    private Vector3 ProjectGuideDetourToWalkable(Vector3 candidate)
+    {
+        NavMeshHit navHit;
+        if (NavMesh.SamplePosition(candidate, out navHit, guideNavMeshSampleDistance, NavMesh.AllAreas))
+        {
+            candidate.x = navHit.position.x;
+            candidate.z = navHit.position.z;
+            candidate.y = navHit.position.y;
+        }
+
+        return candidate;
+    }
+
+    private bool IsGuidePathClear(Vector3 from, Vector3 to)
+    {
+        Vector3 move = to - from;
+        float distance = move.magnitude;
+        if (distance <= 0.05f)
+        {
+            return true;
+        }
+
+        RaycastHit[] hits = Physics.SphereCastAll(
+            from,
+            guideCollisionRadius,
+            move.normalized,
+            distance,
+            GetGuideCollisionMask(),
+            QueryTriggerInteraction.Ignore);
+
+        if (hits == null || hits.Length == 0)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            if (!ShouldIgnoreGuideCollider(hits[i].collider))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private int GetGuideCollisionMask()
+    {
+        return ~LayerMask.GetMask("Rudolf", "Ignore Raycast");
+    }
+
+    private void RefreshIgnoredSakuraCollisions(bool force)
+    {
+        if (!force && Time.unscaledTime < nextSakuraCollisionRefresh)
+        {
+            return;
+        }
+
+        nextSakuraCollisionRefresh = Time.unscaledTime + (ignoredSakuraColliderCount > 0 ? 6f : 1f);
+        Collider[] rudolfColliders = GetComponentsInChildren<Collider>(true);
+        if (rudolfColliders == null || rudolfColliders.Length == 0)
+        {
+            return;
+        }
+
+        Collider[] sceneColliders = UnityEngine.Object.FindObjectsOfType<Collider>(true);
+        int ignoredCount = 0;
+        for (int i = 0; i < sceneColliders.Length; i++)
+        {
+            Collider sakuraCollider = sceneColliders[i];
+            if (!IsSakuraNoClipCollider(sakuraCollider))
+            {
+                continue;
+            }
+
+            ignoredCount++;
+            for (int j = 0; j < rudolfColliders.Length; j++)
+            {
+                Collider rudolfCollider = rudolfColliders[j];
+                if (rudolfCollider == null || rudolfCollider == sakuraCollider)
+                {
+                    continue;
+                }
+
+                Physics.IgnoreCollision(rudolfCollider, sakuraCollider, true);
+            }
+        }
+
+        ignoredSakuraColliderCount = ignoredCount;
+    }
+
+    private bool IsGuideGroundHit(RaycastHit hit)
+    {
+        if (ShouldIgnoreGuideCollider(hit.collider))
+        {
+            return false;
+        }
+
+        if (hit.normal.y < 0.45f)
+        {
+            return false;
+        }
+
+        return !IsTreeOrFoliage(hit.collider.transform);
+    }
+
+    private bool ShouldIgnoreGuideCollider(Collider guideCollider)
+    {
+        return guideCollider == null ||
+               guideCollider.isTrigger ||
+               guideCollider.transform.IsChildOf(transform) ||
+               IsSakuraNoClipCollider(guideCollider);
+    }
+
+    private static bool IsSakuraNoClipCollider(Collider guideCollider)
+    {
+        return guideCollider != null && IsSakuraNoClipTransform(guideCollider.transform);
+    }
+
+    private static bool IsSakuraNoClipTransform(Transform hitTransform)
+    {
+        while (hitTransform != null)
+        {
+            string name = hitTransform.name.ToLowerInvariant();
+            if (name == "sakura2" ||
+                name.Contains("sakura2") ||
+                name.Contains("sakura") ||
+                name.Contains("cherry") ||
+                name.Contains("blossom"))
+            {
+                return true;
+            }
+
+            hitTransform = hitTransform.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsTreeOrFoliage(Transform hitTransform)
+    {
+        while (hitTransform != null)
+        {
+            string name = hitTransform.name.ToLowerInvariant();
+            if (name.Contains("tree") ||
+                name.Contains("leaf") ||
+                name.Contains("leaves") ||
+                name.Contains("foliage") ||
+                name.Contains("branch") ||
+                name.Contains("trunk"))
+            {
+                return true;
+            }
+
+            hitTransform = hitTransform.parent;
+        }
+
+        return false;
+    }
+
+    private static float HorizontalDistance(Vector3 a, Vector3 b)
+    {
+        a.y = 0f;
+        b.y = 0f;
+        return Vector3.Distance(a, b);
+    }
+
+    private void SetGuideShellsActive(bool active)
+    {
+        for (int i = 0; i < guideShellRenderers.Count; i++)
+        {
+            if (guideShellRenderers[i] != null)
+            {
+                guideShellRenderers[i].enabled = active;
+            }
+        }
+    }
+
+    private void UpdateGuideGlowMaterials()
+    {
+        if (guideOutlineMaterial == null || guideChamsMaterial == null)
+        {
+            return;
+        }
+
+        float pulse = 0.5f + Mathf.Sin(Time.time * 6f) * 0.5f;
+        guideOutlineMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, Mathf.Lerp(0.62f, 0.88f, pulse)));
+        guideOutlineMaterial.SetFloat("_Extrude", Mathf.Lerp(guideOutlineWidth * 0.8f, guideOutlineWidth * 1.25f, pulse));
+        guideChamsMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, Mathf.Lerp(0.16f, 0.28f, pulse)));
     }
 
     private static string NormalizeCommand(string command)
@@ -1223,21 +2018,19 @@ public class RobotCompanion : MonoBehaviour
         string trimmed = transcript.Trim();
         string normalized = NormalizeWakeText(trimmed);
         string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        int wakeIndex = FindWakeNameIndex(words);
-        if (wakeIndex < 0)
+        int wakeStartIndex;
+        int wakeEndIndex;
+        if (!TryFindWakeName(words, out wakeStartIndex, out wakeEndIndex))
         {
             return false;
         }
 
-        bool hasWakeLead = wakeIndex == 0 ||
-            (wakeIndex <= 4 && IsWakeLead(words[Mathf.Max(0, wakeIndex - 1)])) ||
-            (wakeIndex <= 5 && normalized.Contains("hey " + words[wakeIndex]));
-        if (!hasWakeLead)
+        if (!HasWakeActivationLead(words, wakeStartIndex))
         {
             return false;
         }
 
-        command = BuildCommandAfterWake(words, wakeIndex);
+        command = BuildCommandAfterWake(words, wakeEndIndex);
         return true;
     }
 
@@ -1250,13 +2043,14 @@ public class RobotCompanion : MonoBehaviour
 
         string normalized = NormalizeWakeText(transcript);
         string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        int wakeIndex = FindWakeNameIndex(words);
-        if (wakeIndex < 0)
+        int wakeStartIndex;
+        int wakeEndIndex;
+        if (!TryFindWakeName(words, out wakeStartIndex, out wakeEndIndex))
         {
             return transcript;
         }
 
-        string command = BuildCommandAfterWake(words, wakeIndex);
+        string command = BuildCommandAfterWake(words, wakeEndIndex);
         return string.IsNullOrWhiteSpace(command) ? transcript : command;
     }
 
@@ -1271,17 +2065,55 @@ public class RobotCompanion : MonoBehaviour
         return builder.ToString();
     }
 
-    private static int FindWakeNameIndex(string[] words)
+    private static bool TryFindWakeName(string[] words, out int startIndex, out int endIndex)
     {
+        startIndex = -1;
+        endIndex = -1;
         int limit = Mathf.Min(words.Length, 8);
         for (int i = 0; i < limit; i++)
         {
             if (IsWakeName(words[i]))
             {
-                return i;
+                startIndex = i;
+                endIndex = i;
+                return true;
+            }
+
+            if (i + 1 < words.Length && IsWakeName(words[i] + words[i + 1]))
+            {
+                startIndex = i;
+                endIndex = i + 1;
+                return true;
+            }
+
+            if (i + 2 < words.Length && IsWakeName(words[i] + words[i + 1] + words[i + 2]))
+            {
+                startIndex = i;
+                endIndex = i + 2;
+                return true;
             }
         }
-        return -1;
+
+        return false;
+    }
+
+    private static bool HasWakeActivationLead(string[] words, int wakeStartIndex)
+    {
+        if (wakeStartIndex <= 0)
+        {
+            return true;
+        }
+
+        int leadStart = Mathf.Max(0, wakeStartIndex - 3);
+        for (int i = leadStart; i < wakeStartIndex; i++)
+        {
+            if (IsWakeLead(words[i]))
+            {
+                return true;
+            }
+        }
+
+        return wakeStartIndex <= 2;
     }
 
     private static bool IsWakeLead(string word)
@@ -1296,22 +2128,78 @@ public class RobotCompanion : MonoBehaviour
             return false;
         }
 
-        return word == "rudolf" ||
-               word == "rudolph" ||
-               word == "rodolf" ||
-               word == "rudolfs" ||
-               word == "rudolphs" ||
-               word == "robot" ||
-               word.StartsWith("rudol", StringComparison.Ordinal) ||
-               word.StartsWith("rudop", StringComparison.Ordinal);
+        string compact = word.Replace(" ", "").Replace("-", "");
+        if (compact == "rudolf" ||
+            compact == "rudolph" ||
+            compact == "rodolf" ||
+            compact == "rudolfs" ||
+            compact == "rudolphs" ||
+            compact == "robot" ||
+            compact == "robo" ||
+            compact == "rudo" ||
+            compact == "rudy" ||
+            compact == "rudoff" ||
+            compact == "rudeoff" ||
+            compact == "routeoff" ||
+            compact == "rootoff" ||
+            compact == "roadoff" ||
+            compact == "ruleoff")
+        {
+            return true;
+        }
+
+        if (compact.StartsWith("rudol", StringComparison.Ordinal) ||
+            compact.StartsWith("rudop", StringComparison.Ordinal) ||
+            compact.StartsWith("rudof", StringComparison.Ordinal) ||
+            compact.StartsWith("rodol", StringComparison.Ordinal) ||
+            compact.StartsWith("rudolph", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (compact.Length >= 4 && compact.Length <= 9)
+        {
+            return WakeEditDistance(compact, "rudolf") <= 2 ||
+                   WakeEditDistance(compact, "rudolph") <= 2 ||
+                   WakeEditDistance(compact, "rodolf") <= 2;
+        }
+
+        return false;
     }
 
-    private static string BuildCommandAfterWake(string[] words, int wakeIndex)
+    private static int WakeEditDistance(string a, string b)
     {
-        int start = wakeIndex + 1;
-        while (start < words.Length && (words[start] == "please" || words[start] == "can" || words[start] == "you"))
+        int[,] distances = new int[a.Length + 1, b.Length + 1];
+        for (int i = 0; i <= a.Length; i++)
         {
-            break;
+            distances[i, 0] = i;
+        }
+
+        for (int j = 0; j <= b.Length; j++)
+        {
+            distances[0, j] = j;
+        }
+
+        for (int i = 1; i <= a.Length; i++)
+        {
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                distances[i, j] = Mathf.Min(
+                    Mathf.Min(distances[i - 1, j] + 1, distances[i, j - 1] + 1),
+                    distances[i - 1, j - 1] + cost);
+            }
+        }
+
+        return distances[a.Length, b.Length];
+    }
+
+    private static string BuildCommandAfterWake(string[] words, int wakeEndIndex)
+    {
+        int start = wakeEndIndex + 1;
+        while (start < words.Length && IsWakeCommandFiller(words[start]))
+        {
+            start++;
         }
 
         if (start >= words.Length)
@@ -1320,6 +2208,16 @@ public class RobotCompanion : MonoBehaviour
         }
 
         return string.Join(" ", words, start, words.Length - start).Trim();
+    }
+
+    private static bool IsWakeCommandFiller(string word)
+    {
+        return word == "please" ||
+               word == "can" ||
+               word == "could" ||
+               word == "would" ||
+               word == "will" ||
+               word == "you";
     }
 
     private static string FallbackLine(string trigger, string context)

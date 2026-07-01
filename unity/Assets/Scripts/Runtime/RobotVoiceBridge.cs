@@ -13,18 +13,19 @@ using UnityEngine.Networking;
 public sealed class RobotVoiceBridge : MonoBehaviour
 {
     private const string WitConfigurationResourcePath = "Voice/RobotWitConfiguration";
-    private const float SpeechStartLevel = 0.018f;
-    private const float SpeechContinueLevel = 0.009f;
-    private const float EndSilenceSeconds = 0.72f;
-    private const float MinUtteranceSeconds = 0.35f;
-    private const float MaxUtteranceSeconds = 7f;
-    private const float PreRollSeconds = 0.35f;
-    private const int MinVoicedFrames = 6;
-    private const float MinPeakLevel = 0.028f;
-    private const float TargetSttPeak = 0.82f;
-    private const float MaxSttGain = 8f;
+    private const float SpeechStartLevel = 0.012f;
+    private const float SpeechContinueLevel = 0.0065f;
+    private const float EndSilenceSeconds = 0.9f;
+    private const float MinUtteranceSeconds = 0.25f;
+    private const float MaxUtteranceSeconds = 8f;
+    private const float PreRollSeconds = 0.55f;
+    private const int MinVoicedFrames = 4;
+    private const float MinPeakLevel = 0.014f;
+    private const float TargetSttPeak = 0.9f;
+    private const float MaxSttGain = 18f;
 
     public event Action<string> FullTranscriptionReceived;
+    public event Action<int, float, float, float> TranscriptionFailedWithoutText;
     public float MicLevel { get; private set; }
     public bool HasSpeechRecognition => witConfigured;
     public bool IsListening => listeningRequested && microphoneManager != null && microphoneManager.IsMicrophoneCapturing;
@@ -368,6 +369,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
                             transcript = ExtractTranscript(wavSpeechResponse);
                             if (string.IsNullOrWhiteSpace(transcript))
                             {
+                                RaiseNoTranscript(pcm16.Length, peakLevel, audioPeak, appliedGain);
                                 LogNoTranscript(
                                     pcm16.Length,
                                     peakLevel,
@@ -418,6 +420,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
                         string.Empty,
                         string.Empty,
                         "wavSpeechError=" + wavSpeechError + " wavSpeechResponse=" + wavSpeechResponse);
+                    RaiseNoTranscript(pcm16.Length, peakLevel, audioPeak, appliedGain);
                     transcriptionRequestActive = false;
                     yield break;
                 }
@@ -426,6 +429,11 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
         transcriptionRequestActive = false;
         RaiseFullTranscription(transcript);
+    }
+
+    private void RaiseNoTranscript(int byteCount, float vadPeak, float audioPeak, float appliedGain)
+    {
+        TranscriptionFailedWithoutText?.Invoke(byteCount, vadPeak, audioPeak, appliedGain);
     }
 
     private static byte[] NormalizePcm16ForStt(byte[] pcm16, out float appliedGain, out float audioPeak)
@@ -505,8 +513,8 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     {
         using (UnityWebRequest request = new UnityWebRequest(endpointUrl, UnityWebRequest.kHttpVerbPOST))
         {
-            request.chunkedTransfer = true;
-            string contentType = "audio/raw;bits=16;rate=" + (sampleRate / 1000) + "k;encoding=signed-integer;endian=little";
+            request.chunkedTransfer = false;
+            string contentType = "audio/raw;encoding=signed-integer;bits=16;rate=" + sampleRate + ";endian=little";
             request.uploadHandler = new UploadHandlerRaw(pcm16) { contentType = contentType };
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", "Bearer " + witClientAccessToken);
