@@ -548,11 +548,14 @@ public class LearningProfileService {
             "Response rules:\n" +
             "- If recent conversation is provided in the context, use it to remember what the student asked and what you already answered.\n" +
             "- Treat the current student message as a follow-up when it refers to earlier turns with words like it, that, this, again, or why.\n" +
+            "- You have access to a real server-side execution tool for Python and C++ snippets. It runs code with strict time/resource limits and returns stdout, stderr, exit code, and timeout status.\n" +
             "- If a server code execution result is provided, use the exact stdout/stderr/exit code to answer. Say briefly that you ran it.\n" +
             "- If the student asks you to run code but no runnable code is available, ask them to paste or open the code in the game instead of pretending you ran it.\n" +
             "- Reply directly to the student. Do not mention transcription, packets, prompts, or backend systems.\n" +
             "- For normal conversation, use 1-3 short sentences.\n" +
             "- If they ask for code, debugging, syntax, or an example, include a small fenced code block with a language tag, like ```python or ```cpp.\n" +
+            "- If you include Python or C++ code that is meant to run, make it a complete runnable snippet when possible, because the server will execute generated code once before the final answer.\n" +
+            "- When generated code execution results are supplied, revise your answer to include the observed output or error instead of guessing.\n" +
             "- Keep code snippets minimal: usually 3-10 lines. Prefer showing the exact pattern or fix, not a whole program.\n" +
             "- Before or after code, add one short sentence explaining why it works.\n" +
             "- Use Markdown only for code fences; avoid tables and long bullet lists because the game bubble is small.\n" +
@@ -565,7 +568,89 @@ public class LearningProfileService {
         }
 
         line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        String generatedExecutionContext = buildGeneratedCodeExecutionContext(line);
+        if (!generatedExecutionContext.isBlank()) {
+            String revisionPrompt = prompt + "\n\n" +
+                "Your draft response was:\n" + line + "\n\n" +
+                "The server executed the runnable code you included in that draft:\n" + generatedExecutionContext + "\n\n" +
+                "Rewrite the final answer for the student. Keep the useful code if it helps, but include the observed stdout/stderr/exit code in plain language. " +
+                "Do not claim a different output. Keep it under 900 characters.";
+            String revisedLine = ai.generate(revisionPrompt);
+            if (revisedLine != null && !revisedLine.isBlank() && !revisedLine.startsWith("AI Error")) {
+                line = revisedLine.trim().replaceAll("^[\"']|[\"']$", "");
+            } else {
+                line = appendExecutionSummary(line, generatedExecutionContext);
+            }
+        }
+
         return new String[]{line, "encouraging"};
+    }
+
+    private String buildGeneratedCodeExecutionContext(final String generatedResponse) {
+        String code = extractLastFencedCode(generatedResponse);
+        if (code.isBlank() || !looksLikeGeneratedRunnableCode(generatedResponse, code)) {
+            return "";
+        }
+
+        if (code.length() > 5000) {
+            return "Rudolf generated code, but the snippet was too long to run safely in a quick voice reply.";
+        }
+
+        String language = inferExecutionLanguage(generatedResponse, code);
+        if ("cpp".equals(language)) {
+            CppExecutor.ExecutionResult result = CppExecutor.execute(code, 8);
+            return formatExecutionResult("C++", result.output, result.error, result.exitCode, result.isTimeout);
+        }
+
+        PythonExecutor.ExecutionResult result = PythonExecutor.execute(code, 8);
+        return formatExecutionResult("Python", result.output, result.error, result.exitCode, result.isTimeout);
+    }
+
+    private boolean looksLikeGeneratedRunnableCode(final String generatedResponse, final String code) {
+        String response = generatedResponse == null ? "" : generatedResponse.toLowerCase();
+        String snippet = code == null ? "" : code.toLowerCase();
+        return response.contains("```python") ||
+            response.contains("```py") ||
+            response.contains("```cpp") ||
+            response.contains("```c++") ||
+            snippet.contains("print") ||
+            snippet.contains("cout") ||
+            snippet.contains("int main") ||
+            snippet.contains("#include") ||
+            snippet.contains("def ");
+    }
+
+    private String appendExecutionSummary(final String line, final String executionContext) {
+        String output = extractExecutionField(executionContext, "stdout:");
+        String error = extractExecutionField(executionContext, "stderr:");
+        String summary = "I ran it. Output: " + (output.isBlank() ? "(no stdout)" : truncate(output, 160));
+        if (!error.isBlank() && !"(no stderr)".equals(error)) {
+            summary += " Error: " + truncate(error, 160);
+        }
+
+        return truncate(line + "\n\n" + summary, 900);
+    }
+
+    private String extractExecutionField(final String executionContext, final String marker) {
+        if (executionContext == null || marker == null) {
+            return "";
+        }
+
+        int start = executionContext.indexOf(marker);
+        if (start < 0) {
+            return "";
+        }
+
+        start += marker.length();
+        int end = executionContext.length();
+        if ("stdout:".equals(marker)) {
+            int stderrIndex = executionContext.indexOf("\nstderr:", start);
+            if (stderrIndex >= 0) {
+                end = stderrIndex;
+            }
+        }
+
+        return executionContext.substring(start, end).trim();
     }
 
     private String buildCompanionExecutionContext(final String transcript, final String context) {

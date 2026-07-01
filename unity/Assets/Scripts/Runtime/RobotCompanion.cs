@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
@@ -81,6 +82,12 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float minCooldown     = 8f;
     [SerializeField] private float conversationTimeout = 18f;
 
+    [Header("Guide")]
+    [SerializeField] private float guideSpeed = 6.5f;
+    [SerializeField] private float guideWaitSpeed = 0.35f;
+    [SerializeField] private float guideWaitForPlayerDistance = 16f;
+    [SerializeField] private float guidePlayerArrivalDistance = 10f;
+
     // ── Internal ─────────────────────────────────────────────────────────────
 
     private Transform  player;
@@ -105,8 +112,13 @@ public class RobotCompanion : MonoBehaviour
     private float      lastConversationHeard = -999f;
     private bool       voiceWasSpeaking;
     private float      resumeVoiceListeningAt;
+    private RudolfIslandGuideTarget guideTarget;
+    private bool       guideActive;
+    private bool       guideWaitingForPlayer;
+    private Light      guideLight;
+    private float      lastGuideWaitLine = -999f;
     private const float PostSpeechListenDelay = 1.25f;
-    private readonly System.Collections.Generic.List<string> conversationHistory = new System.Collections.Generic.List<string>(8);
+    private readonly List<string> conversationHistory = new List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
 
@@ -123,6 +135,7 @@ public class RobotCompanion : MonoBehaviour
         BuildBubble();
         ResolvePlayer();
         SetupPhysics();
+        SetupGuideHighlight();
         SetupVoiceBridge();
         EnsureGameClientExists();
 
@@ -160,9 +173,10 @@ public class RobotCompanion : MonoBehaviour
 
         var fpsCam = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
         bool inConversation = IsConversationActive();
+        bool guiding = IsGuideActive();
 
         // ── Orbit slowly — smooth world-space angle, no snapping ─────────────
-        if (!inConversation)
+        if (!inConversation && !guiding)
             orbitAngle = (orbitAngle + 12f * Time.deltaTime) % 360f;
 
         float bob        = Mathf.Sin(Time.time * bobSpeed) * bobAmplitude;
@@ -170,7 +184,11 @@ public class RobotCompanion : MonoBehaviour
         Vector3 targetPos = player.position
             + Vector3.up * (hoverHeight + bob)
             + orbitDir * followDistance;
-        if (inConversation && fpsCam != null)
+        if (guiding && guideTarget != null)
+        {
+            targetPos = guideTarget.GetGuidePosition(bob);
+        }
+        else if (inConversation && fpsCam != null)
         {
             targetPos = fpsCam.transform.position
                 + fpsCam.transform.forward * 2.35f
@@ -179,11 +197,21 @@ public class RobotCompanion : MonoBehaviour
         }
 
         // ── Move toward orbit target — exponential smoothing, no snapping ───────
-        float t = 1f - Mathf.Exp(-followSpeed * Time.deltaTime);
-        Vector3 steer = inConversation
-            ? (targetPos - transform.position).normalized
-            : SteerAround(transform.position, (targetPos - transform.position).normalized);
-        Vector3 next = Vector3.Lerp(transform.position, transform.position + steer * Vector3.Distance(transform.position, targetPos), t);
+        Vector3 next;
+        if (guiding)
+        {
+            next = CalculateGuideNextPosition(targetPos);
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-followSpeed * Time.deltaTime);
+            Vector3 desiredDirection = (targetPos - transform.position).normalized;
+            Vector3 steer = inConversation
+                ? desiredDirection
+                : SteerAround(transform.position, desiredDirection);
+            next = Vector3.Lerp(transform.position, transform.position + steer * Vector3.Distance(transform.position, targetPos), t);
+        }
+
         if (rb != null && rb.isKinematic)
             rb.MovePosition(next);
         else
@@ -200,7 +228,7 @@ public class RobotCompanion : MonoBehaviour
         if (lookDir.sqrMagnitude > 0.001f)
         {
             Quaternion desiredRot = Quaternion.LookRotation(lookDir.normalized);
-            if (!inConversation)
+            if (!inConversation && !guiding)
             {
                 desiredRot *= Quaternion.Euler(0f, 0f, -tiltAngle * Mathf.Clamp01(
                     Vector3.Distance(transform.position, targetPos) - followDistance));
@@ -234,6 +262,7 @@ public class RobotCompanion : MonoBehaviour
                 bubble.transform.position - fpsCamForBubble.transform.position);
         }
 
+        UpdateGuideState();
         UpdateVoiceListening(fpsCamForBubble);
     }
 
@@ -511,6 +540,11 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
+        if (TryHandleGuideCommand(command))
+        {
+            return;
+        }
+
         waiting = true;
         StartCoroutine(RequestVoiceReply(command));
     }
@@ -721,6 +755,259 @@ public class RobotCompanion : MonoBehaviour
     private void ResolvePlayer()
     {
         player = PlayerCache.ResolvePlayerTransform();
+    }
+
+    private void SetupGuideHighlight()
+    {
+        Transform existing = transform.Find("RudolfGuideHighlight");
+        GameObject lightObject = existing != null ? existing.gameObject : new GameObject("RudolfGuideHighlight");
+        lightObject.transform.SetParent(transform, false);
+        lightObject.transform.localPosition = Vector3.up * 0.65f;
+        lightObject.transform.localRotation = Quaternion.identity;
+
+        guideLight = lightObject.GetComponent<Light>();
+        if (guideLight == null)
+        {
+            guideLight = lightObject.AddComponent<Light>();
+        }
+
+        guideLight.type = LightType.Point;
+        guideLight.color = new Color(0.25f, 0.85f, 1f, 1f);
+        guideLight.range = 7f;
+        guideLight.intensity = 0f;
+        guideLight.shadows = LightShadows.None;
+        guideLight.enabled = false;
+    }
+
+    private bool TryHandleGuideCommand(string command)
+    {
+        string normalized = NormalizeCommand(command);
+        if (IsGuideCancelCommand(normalized))
+        {
+            StopGuide("Okay, I'll stop guiding.");
+            return true;
+        }
+
+        if (!RudolfIslandGuideTarget.TryParse(command, out RudolfIslandGuideTarget.IslandId islandId))
+        {
+            return false;
+        }
+
+        if (!HasGuideIntent(normalized))
+        {
+            return false;
+        }
+
+        StartGuide(islandId);
+        return true;
+    }
+
+    private void StartGuide(RudolfIslandGuideTarget.IslandId islandId)
+    {
+        RudolfIslandGuideTarget target = RudolfIslandGuideTarget.Find(islandId);
+        string islandName = RudolfIslandGuideTarget.GetDisplayName(islandId);
+        if (target == null)
+        {
+            string missingLine = "I don't have a guide marker for " + islandName + " yet.";
+            ShowLine(missingLine, 5f);
+            if (voiceBridge != null)
+            {
+                voiceBridge.Speak(missingLine);
+            }
+            return;
+        }
+
+        guideTarget = target;
+        guideActive = true;
+        guideWaitingForPlayer = false;
+        lastGuideWaitLine = -999f;
+        conversationActive = true;
+        lastConversationHeard = Time.time;
+        SetGuideHighlight(true);
+
+        string line = "Follow me — I'll guide you to " + target.DisplayName + ".";
+        AddConversationTurn("Student", "Guide me to " + target.DisplayName + ".");
+        AddConversationTurn("Rudolf", line);
+        ShowLine(line, 5f);
+        if (voiceBridge != null)
+        {
+            voiceBridge.Speak(line);
+        }
+    }
+
+    private void StopGuide(string line)
+    {
+        guideActive = false;
+        guideTarget = null;
+        guideWaitingForPlayer = false;
+        SetGuideHighlight(false);
+
+        if (!string.IsNullOrWhiteSpace(line))
+        {
+            AddConversationTurn("Rudolf", line);
+            ShowLine(line, 4f);
+            if (voiceBridge != null)
+            {
+                voiceBridge.Speak(line);
+            }
+        }
+    }
+
+    private bool IsGuideActive()
+    {
+        if (!guideActive)
+        {
+            return false;
+        }
+
+        if (guideTarget != null)
+        {
+            return true;
+        }
+
+        guideActive = false;
+        SetGuideHighlight(false);
+        return false;
+    }
+
+    private Vector3 CalculateGuideNextPosition(Vector3 targetPos)
+    {
+        if (guideTarget == null)
+        {
+            return transform.position;
+        }
+
+        float playerDistance = player != null ? Vector3.Distance(player.position, transform.position) : 0f;
+        guideWaitingForPlayer = playerDistance > guideWaitForPlayerDistance;
+
+        float speed = guideWaitingForPlayer ? guideWaitSpeed : guideSpeed;
+        Vector3 toTarget = targetPos - transform.position;
+        if (toTarget.sqrMagnitude <= 0.0025f)
+        {
+            return targetPos;
+        }
+
+        Vector3 steer = SteerAround(transform.position, toTarget.normalized);
+        Vector3 next = transform.position + steer * speed * Time.deltaTime;
+        if (Vector3.Distance(transform.position, targetPos) <= speed * Time.deltaTime)
+        {
+            return targetPos;
+        }
+
+        return next;
+    }
+
+    private void UpdateGuideState()
+    {
+        if (!IsGuideActive())
+        {
+            return;
+        }
+
+        if (guideLight != null)
+        {
+            guideLight.intensity = 2.1f + Mathf.Sin(Time.time * 5.5f) * 0.55f;
+            guideLight.range = 7.5f + Mathf.Sin(Time.time * 3f) * 0.8f;
+        }
+
+        if (guideWaitingForPlayer && Time.time - lastGuideWaitLine > 8f)
+        {
+            lastGuideWaitLine = Time.time;
+            ShowLine("I'll slow down — follow the glow.", 3.2f);
+        }
+
+        float robotDistance = Vector3.Distance(transform.position, guideTarget.GetGuidePosition(0f));
+        float playerDistance = player != null ? Vector3.Distance(player.position, guideTarget.transform.position) : float.MaxValue;
+        if (robotDistance <= guideTarget.ArrivalRadius && playerDistance <= guidePlayerArrivalDistance)
+        {
+            string arrivedLine = "We're here — this is " + guideTarget.DisplayName + ".";
+            StopGuide(null);
+            conversationActive = true;
+            lastConversationHeard = Time.time;
+            AddConversationTurn("Rudolf", arrivedLine);
+            ShowLine(arrivedLine, 5f);
+            if (voiceBridge != null)
+            {
+                voiceBridge.Speak(arrivedLine);
+            }
+        }
+    }
+
+    private void SetGuideHighlight(bool active)
+    {
+        if (guideLight == null)
+        {
+            return;
+        }
+
+        guideLight.enabled = active;
+        if (!active)
+        {
+            guideLight.intensity = 0f;
+        }
+    }
+
+    private static string NormalizeCommand(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return string.Empty;
+        }
+
+        string lower = command.ToLowerInvariant().Replace("+", " plus ");
+        var builder = new StringBuilder(lower.Length);
+        for (int index = 0; index < lower.Length; index++)
+        {
+            char current = lower[index];
+            builder.Append(char.IsLetterOrDigit(current) ? current : ' ');
+        }
+
+        string normalized = builder.ToString();
+        while (normalized.Contains("  "))
+        {
+            normalized = normalized.Replace("  ", " ");
+        }
+
+        return normalized.Trim();
+    }
+
+    private static bool HasGuideIntent(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.Contains("take me") ||
+               normalized.Contains("guide me") ||
+               normalized.Contains("lead me") ||
+               normalized.Contains("show me") ||
+               normalized.Contains("bring me") ||
+               normalized.Contains("go to") ||
+               normalized.Contains("where is") ||
+               normalized.Contains("walk me") ||
+               normalized.Contains("fly me") ||
+               normalized.Contains("path to") ||
+               normalized.Contains("take us") ||
+               normalized.Contains("guide us") ||
+               normalized.Contains("lead us");
+    }
+
+    private static bool IsGuideCancelCommand(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized.Contains("stop guiding") ||
+               normalized.Contains("stop guide") ||
+               normalized.Contains("cancel guide") ||
+               normalized.Contains("cancel guiding") ||
+               normalized.Contains("never mind") ||
+               normalized.Contains("nevermind") ||
+               normalized.Contains("dont guide") ||
+               normalized.Contains("do not guide");
     }
 
     private void UpdateVoiceListening(Camera fpsCamera)

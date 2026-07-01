@@ -85,12 +85,13 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
         ttsAudioSource = ttsObject.AddComponent<AudioSource>();
         ttsAudioSource.playOnAwake = false;
-        ttsAudioSource.spatialBlend = 1f;
-        ttsAudioSource.minDistance = 1.2f;
-        ttsAudioSource.maxDistance = 12f;
+        ttsAudioSource.spatialBlend = 0.2f;
+        ttsAudioSource.minDistance = 15f;
+        ttsAudioSource.maxDistance = 80f;
         ttsAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
         ttsAudioSource.dopplerLevel = 0f;
-        ttsAudioSource.spread = 35f;
+        ttsAudioSource.spread = 160f;
+        ttsAudioSource.volume = 1f;
 
         speaker = ttsObject.AddComponent<TTSSpeaker>();
         speaker.presetVoiceID = string.Empty;

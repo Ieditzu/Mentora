@@ -139,6 +139,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private sealed class VoicePlaybackSource : MonoBehaviour
     {
+        private const float PlaybackGain = 1.8f;
         private readonly Queue<float> queuedSamples = new Queue<float>();
         private readonly object queueLock = new object();
         private AudioSource audioSource;
@@ -157,12 +158,12 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             audioSource.playOnAwake = false;
             audioSource.loop = true;
-            audioSource.spatialBlend = 1f;
-            audioSource.minDistance = 1.25f;
-            audioSource.maxDistance = 18f;
+            audioSource.spatialBlend = 0.35f;
+            audioSource.minDistance = 10f;
+            audioSource.maxDistance = 60f;
             audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
             audioSource.dopplerLevel = 0f;
-            audioSource.spread = 45f;
+            audioSource.spread = 130f;
             audioSource.volume = 1f;
 
             streamClip = AudioClip.Create("RemoteVoiceStream", sampleRate, 1, sampleRate, true, OnAudioRead);
@@ -215,7 +216,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             {
                 for (int i = 0; i < data.Length; i++)
                 {
-                    data[i] = queuedSamples.Count > 0 ? queuedSamples.Dequeue() : 0f;
+                    data[i] = queuedSamples.Count > 0 ? Mathf.Clamp(queuedSamples.Dequeue() * PlaybackGain, -1f, 1f) : 0f;
                 }
             }
         }
