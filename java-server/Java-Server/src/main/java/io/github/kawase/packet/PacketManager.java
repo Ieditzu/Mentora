@@ -7,6 +7,7 @@ import io.github.kawase.packet.impl.ai.GenerateAiTaskPacket;
 import io.github.kawase.packet.impl.ai.GenerateAiTaskResponsePacket;
 import io.github.kawase.packet.impl.companion.CompanionSpeakPacket;
 import io.github.kawase.packet.impl.companion.CompanionSpeakResponsePacket;
+import io.github.kawase.packet.impl.companion.CompanionVoiceAudioPacket;
 import io.github.kawase.packet.impl.companion.CompanionVoiceTextPacket;
 import io.github.kawase.packet.impl.auth.*;
 import io.github.kawase.packet.impl.child.*;
@@ -73,6 +74,7 @@ public class PacketManager {
             case 47 -> new CompanionSpeakPacket();
             case 48 -> new CompanionSpeakResponsePacket();
             case 58 -> new CompanionVoiceTextPacket();
+            case 59 -> new CompanionVoiceAudioPacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

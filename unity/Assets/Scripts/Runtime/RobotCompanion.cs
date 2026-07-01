@@ -122,9 +122,9 @@ public class RobotCompanion : MonoBehaviour
     private int        voiceConnectFailureCount;
     private bool       conversationActive;
     private float      lastConversationHeard = -999f;
+    private string     pendingVoiceTranscript;
     private bool       voiceWasSpeaking;
     private float      resumeVoiceListeningAt;
-    private float      lastNoTranscriptWakeAt = -999f;
     private float      lastNoTranscriptPromptAt = -999f;
     private float      nextSakuraCollisionRefresh;
     private int        ignoredSakuraColliderCount = -1;
@@ -149,9 +149,6 @@ public class RobotCompanion : MonoBehaviour
     private readonly List<LineRenderer> boosterRings = new List<LineRenderer>(3);
     private static readonly Color GuideAqua = new Color(0.0f, 0.95f, 1f, 1f);
     private const float PostSpeechListenDelay = 1.25f;
-    private const float NoTranscriptWakeCooldown = 2f;
-    private const float NoTranscriptWakeVadPeak = 0.026f;
-    private const float NoTranscriptWakeAudioPeak = 0.012f;
     private readonly List<string> conversationHistory = new List<string>(8);
 
     // ── Unity lifecycle ──────────────────────────────────────────────────────
@@ -193,6 +190,7 @@ public class RobotCompanion : MonoBehaviour
         if (voiceBridge != null)
         {
             voiceBridge.FullTranscriptionReceived -= OnVoiceTranscription;
+            voiceBridge.VoiceUtteranceCapturedForServer -= OnVoiceUtteranceCapturedForServer;
             voiceBridge.TranscriptionFailedWithoutText -= OnVoiceNoTranscript;
         }
         if (_instance == this) _instance = null;
@@ -533,6 +531,7 @@ public class RobotCompanion : MonoBehaviour
         voiceBridge = gameObject.AddComponent<RobotVoiceBridge>();
         voiceBridge.Initialize();
         voiceBridge.FullTranscriptionReceived += OnVoiceTranscription;
+        voiceBridge.VoiceUtteranceCapturedForServer += OnVoiceUtteranceCapturedForServer;
         voiceBridge.TranscriptionFailedWithoutText += OnVoiceNoTranscript;
     }
 
@@ -577,37 +576,55 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
-        string command;
-        if (wasConversationActive)
-        {
-            command = StripWakePhraseIfPresent(transcript).Trim();
-        }
-        else if (!TryExtractWakeCommand(transcript, out command))
+        string command = wasConversationActive
+            ? StripWakePhraseIfPresent(transcript).Trim()
+            : (transcript ?? string.Empty).Trim();
+        if (ShouldDiscardVoiceTranscript(command, wasConversationActive))
         {
             return;
-        }
-        else
-        {
-            conversationHistory.Clear();
         }
 
         lastSpoke = Time.time;
-        conversationActive = true;
-        lastConversationHeard = Time.time;
-
-        if (string.IsNullOrWhiteSpace(command))
+        if (wasConversationActive)
         {
-            ShowLine("Listening…", 2.8f);
-            return;
-        }
-
-        if (TryHandleGuideCommand(command))
-        {
-            return;
+            conversationActive = true;
+            lastConversationHeard = Time.time;
         }
 
         waiting = true;
-        StartCoroutine(RequestVoiceReply(command));
+        StartCoroutine(RequestVoiceReply(command, wasConversationActive));
+    }
+
+    private static bool ShouldDiscardVoiceTranscript(string transcript, bool conversationIsActive)
+    {
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return true;
+        }
+
+        string normalized = NormalizeWakeText(transcript);
+        if (normalized.Length < (conversationIsActive ? 2 : 4))
+        {
+            return true;
+        }
+
+        string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            return true;
+        }
+
+        if (!conversationIsActive && words.Length == 1 && normalized.Length < 7)
+        {
+            return true;
+        }
+
+        return normalized == "um" ||
+               normalized == "uh" ||
+               normalized == "ah" ||
+               normalized == "hmm" ||
+               normalized == "mmm" ||
+               normalized == "test";
     }
 
     private void OnVoiceNoTranscript(int byteCount, float vadPeak, float audioPeak, float appliedGain)
@@ -629,31 +646,16 @@ public class RobotCompanion : MonoBehaviour
             return;
         }
 
-        if (Time.time - lastNoTranscriptWakeAt < NoTranscriptWakeCooldown ||
-            vadPeak < NoTranscriptWakeVadPeak ||
-            audioPeak < NoTranscriptWakeAudioPeak)
-        {
-            return;
-        }
-
-        if (IsInMultiplayerSession())
-        {
-            Camera fpsCamera = PlayerCache.GetFps()?.GetComponentInChildren<Camera>();
-            if (!IsPlayerLookingAtRudolf(fpsCamera))
-            {
-                return;
-            }
-        }
-
-        lastNoTranscriptWakeAt = Time.time;
-        lastNoTranscriptPromptAt = Time.time;
-        conversationHistory.Clear();
-        conversationActive = true;
-        lastConversationHeard = Time.time;
-        ShowLine("Listening…", 3f);
+        // No-transcript clips are noise for the new flow. Do not open a
+        // conversation from them; the server gate only receives real text.
     }
 
     private IEnumerator RequestVoiceReply(string transcript)
+    {
+        return RequestVoiceReply(transcript, IsConversationActive());
+    }
+
+    private IEnumerator RequestVoiceReply(string transcript, bool wasConversationActive)
     {
         yield return null;
 
@@ -664,17 +666,68 @@ public class RobotCompanion : MonoBehaviour
             yield break;
         }
 
+        string context = BuildVoiceRequestContext(wasConversationActive);
+
+        pendingVoiceTranscript = transcript;
+        yield return GameClient.Instance.SendPacket(new CompanionVoiceTextPacket(transcript, context));
+    }
+
+    private void OnVoiceUtteranceCapturedForServer(byte[] pcm16, int sampleRate, float peakLevel)
+    {
+        if (waiting)
+        {
+            return;
+        }
+
+        bool wasConversationActive = IsConversationActive();
+        if (!wasConversationActive && Time.time - lastSpoke < 1f)
+        {
+            return;
+        }
+
+        lastSpoke = Time.time;
+        if (wasConversationActive)
+        {
+            conversationActive = true;
+            lastConversationHeard = Time.time;
+        }
+
+        waiting = true;
+        StartCoroutine(RequestVoiceAudioReply(pcm16, sampleRate, peakLevel, wasConversationActive));
+    }
+
+    private IEnumerator RequestVoiceAudioReply(byte[] pcm16, int sampleRate, float peakLevel, bool wasConversationActive)
+    {
+        yield return null;
+
+        if (GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            waiting = false;
+            ShowLine("I heard you, but I'm not connected to the mentor server.");
+            yield break;
+        }
+
+        string context = BuildVoiceRequestContext(wasConversationActive) +
+            "\ntranscription_provider=groq_whisper_server" +
+            "\nvad_peak=" + peakLevel.ToString("0.000");
+
+        pendingVoiceTranscript = null;
+        yield return GameClient.Instance.SendPacket(new CompanionVoiceAudioPacket(sampleRate, pcm16, context));
+    }
+
+    private string BuildVoiceRequestContext(bool wasConversationActive)
+    {
         string context = IsInMultiplayerSession()
             ? "multiplayer_player_looked_at_robot"
             : "singleplayer_robot_always_listening";
+        context += "\nconversation_active=" + (wasConversationActive ? "true" : "false");
         string history = BuildConversationHistoryContext();
         if (!string.IsNullOrWhiteSpace(history))
         {
             context += "\nRecent conversation:\n" + history;
         }
 
-        yield return GameClient.Instance.SendPacket(new CompanionVoiceTextPacket(transcript, context));
-        AddConversationTurn("Student", transcript);
+        return context;
     }
 
     private IEnumerator GreetAfterDelay(float delay)
@@ -691,8 +744,30 @@ public class RobotCompanion : MonoBehaviour
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 waiting = false;
+                if (string.IsNullOrWhiteSpace(r.Line) ||
+                    string.Equals(r.Emotion, "ignore", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!IsConversationActive())
+                    {
+                        conversationActive = false;
+                    }
+                    pendingVoiceTranscript = null;
+                    return;
+                }
+
+                string transcript = string.IsNullOrWhiteSpace(pendingVoiceTranscript)
+                    ? r.SourceTranscript
+                    : pendingVoiceTranscript;
+                pendingVoiceTranscript = null;
+
+                if (!string.IsNullOrWhiteSpace(transcript) && TryHandleGuideCommand(transcript))
+                {
+                    return;
+                }
+
                 conversationActive = true;
                 lastConversationHeard = Time.time;
+                AddConversationTurn("Student", transcript);
                 AddConversationTurn("Rudolf", r.Line);
                 ShowLine(r.Line);
                 if (voiceBridge != null)
@@ -2007,33 +2082,6 @@ public class RobotCompanion : MonoBehaviour
         return builder.ToString();
     }
 
-    private static bool TryExtractWakeCommand(string transcript, out string command)
-    {
-        command = string.Empty;
-        if (string.IsNullOrWhiteSpace(transcript))
-        {
-            return false;
-        }
-
-        string trimmed = transcript.Trim();
-        string normalized = NormalizeWakeText(trimmed);
-        string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        int wakeStartIndex;
-        int wakeEndIndex;
-        if (!TryFindWakeName(words, out wakeStartIndex, out wakeEndIndex))
-        {
-            return false;
-        }
-
-        if (!HasWakeActivationLead(words, wakeStartIndex))
-        {
-            return false;
-        }
-
-        command = BuildCommandAfterWake(words, wakeEndIndex);
-        return true;
-    }
-
     private static string StripWakePhraseIfPresent(string transcript)
     {
         if (string.IsNullOrWhiteSpace(transcript))
@@ -2095,30 +2143,6 @@ public class RobotCompanion : MonoBehaviour
         }
 
         return false;
-    }
-
-    private static bool HasWakeActivationLead(string[] words, int wakeStartIndex)
-    {
-        if (wakeStartIndex <= 0)
-        {
-            return true;
-        }
-
-        int leadStart = Mathf.Max(0, wakeStartIndex - 3);
-        for (int i = leadStart; i < wakeStartIndex; i++)
-        {
-            if (IsWakeLead(words[i]))
-            {
-                return true;
-            }
-        }
-
-        return wakeStartIndex <= 2;
-    }
-
-    private static bool IsWakeLead(string word)
-    {
-        return word == "hey" || word == "hi" || word == "hello" || word == "yo" || word == "ok" || word == "okay";
     }
 
     private static bool IsWakeName(string word)

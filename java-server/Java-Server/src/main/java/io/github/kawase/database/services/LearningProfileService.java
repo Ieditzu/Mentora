@@ -531,7 +531,11 @@ public class LearningProfileService {
     public String[] generateCompanionVoiceReply(final Long childId, final String transcript, final String context) {
         String cleanedTranscript = transcript == null ? "" : transcript.trim();
         if (cleanedTranscript.isBlank()) {
-            return new String[]{"I couldn't hear that clearly. Try saying it again?", "concerned"};
+            return null;
+        }
+
+        if (isCheapCompanionVoiceNoise(cleanedTranscript, context)) {
+            return null;
         }
 
         String profileContext = (childId != null) ? buildAiHelpProfileContext(childId, null) : "New student, no profile yet.";
@@ -541,11 +545,23 @@ public class LearningProfileService {
             "You are talking to a child aged 9-13 who is learning to code. Your answer appears in a speech bubble and may also be spoken aloud.\n" +
             "Your personality: warm, concise, a little witty, technically accurate, and useful.\n" +
             "Be a mentor, not an answer machine: teach the next step, ask a good follow-up when useful, and avoid dumping full solutions unless requested.\n\n" +
+            "VERY IMPORTANT INTENT GATE:\n" +
+            "The microphone may capture random speech that is not meant for Rudolf. First decide whether the student is actually trying to talk to Rudolf.\n" +
+            "Respond only when one of these is true:\n" +
+            "- The text directly addresses Rudolf/the robot/the mentor/bot, even if speech-to-text misspells the name.\n" +
+            "- The context says conversation_active=true, meaning this is a follow-up in an ongoing Rudolf conversation.\n" +
+            "- The student is clearly asking the in-game robot for help, guidance, code help, debugging, a route to an island, or an explanation.\n" +
+            "Ignore when it is background chatter, self-talk, one-word noise, someone talking to another person, unrelated profanity, or text with no request for the game robot.\n" +
+            "If ignored, output exactly ACTION: IGNORE and no line.\n\n" +
             "Student profile:\n" + profileContext + "\n\n" +
             "Voice interaction context: " + (context == null ? "general" : context) + "\n" +
             (executionContext.isBlank() ? "" : "Server code execution result:\n" + executionContext + "\n\n") +
             "The student just said: \"" + cleanedTranscript + "\"\n\n" +
-            "Response rules:\n" +
+            "Output format:\n" +
+            "ACTION: RESPOND or IGNORE\n" +
+            "EMOTION: happy, encouraging, concerned, excited, or thinking\n" +
+            "LINE: your final line to say, or blank when ACTION is IGNORE\n\n" +
+            "Response rules when ACTION is RESPOND:\n" +
             "- If recent conversation is provided in the context, use it to remember what the student asked and what you already answered.\n" +
             "- Treat the current student message as a follow-up when it refers to earlier turns with words like it, that, this, again, or why.\n" +
             "- You have access to a real server-side execution tool for Python and C++ snippets. It runs code with strict time/resource limits and returns stdout, stderr, exit code, and timeout status.\n" +
@@ -562,12 +578,37 @@ public class LearningProfileService {
             "- Maximum response length: 900 characters. If the task is bigger, give the first step and ask if they want the next part.";
 
         io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
-        String line = ai.generate(prompt);
-        if (line == null || line.isBlank() || line.startsWith("AI Error")) {
-            line = "I heard you. Let's break it down one step at a time.";
+        String raw = ai.generate(prompt);
+        if (raw == null || raw.isBlank() || raw.startsWith("AI Error")) {
+            raw = "ACTION: RESPOND\nEMOTION: encouraging\nLINE: I heard you. Let's break it down one step at a time.";
+        }
+
+        String action = extractCompanionStructuredField(raw, "ACTION");
+        if ("IGNORE".equalsIgnoreCase(action) || raw.trim().equalsIgnoreCase("ACTION: IGNORE")) {
+            return null;
+        }
+
+        String emotion = extractCompanionStructuredField(raw, "EMOTION");
+        if (emotion.isBlank()) {
+            emotion = "encouraging";
+        }
+
+        String line = extractCompanionStructuredField(raw, "LINE");
+        if (line.isBlank()) {
+            line = raw == null ? "" : raw.trim();
+        }
+
+        if (line.equalsIgnoreCase("__IGNORE__") ||
+            line.equalsIgnoreCase("IGNORE") ||
+            line.toUpperCase().startsWith("ACTION: IGNORE")) {
+            return null;
         }
 
         line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        if (line.isBlank()) {
+            return null;
+        }
+
         String generatedExecutionContext = buildGeneratedCodeExecutionContext(line);
         if (!generatedExecutionContext.isBlank()) {
             String revisionPrompt = prompt + "\n\n" +
@@ -583,7 +624,67 @@ public class LearningProfileService {
             }
         }
 
-        return new String[]{line, "encouraging"};
+        return new String[]{line, normalizeCompanionEmotion(emotion)};
+    }
+
+    private boolean isCheapCompanionVoiceNoise(final String transcript, final String context) {
+        String normalized = transcript == null ? "" : transcript.trim().toLowerCase();
+        if (normalized.length() < 3) {
+            return true;
+        }
+
+        boolean activeConversation = context != null && context.toLowerCase().contains("conversation_active=true");
+        if (activeConversation) {
+            return false;
+        }
+
+        String compact = normalized.replaceAll("[^a-z0-9]+", " ").trim();
+        return compact.equals("um") ||
+            compact.equals("uh") ||
+            compact.equals("ah") ||
+            compact.equals("hmm") ||
+            compact.equals("mmm") ||
+            compact.equals("test") ||
+            compact.equals("testing") ||
+            compact.equals("hello") ||
+            compact.equals("hi");
+    }
+
+    private String extractCompanionStructuredField(final String raw, final String key) {
+        if (raw == null || raw.isBlank() || key == null || key.isBlank()) {
+            return "";
+        }
+
+        String marker = key + ":";
+        String upper = raw.toUpperCase();
+        int start = upper.indexOf(marker);
+        if (start < 0) {
+            return "";
+        }
+
+        start += marker.length();
+        int end = raw.length();
+        String[] nextMarkers = {"\nACTION:", "\nEMOTION:", "\nLINE:"};
+        for (String nextMarker : nextMarkers) {
+            int next = upper.indexOf(nextMarker, start);
+            if (next >= 0 && next < end) {
+                end = next;
+            }
+        }
+
+        return raw.substring(start, end).trim();
+    }
+
+    private String normalizeCompanionEmotion(final String emotion) {
+        if (emotion == null) {
+            return "encouraging";
+        }
+
+        String normalized = emotion.trim().toLowerCase();
+        return switch (normalized) {
+            case "happy", "encouraging", "concerned", "excited", "thinking", "ignore" -> normalized;
+            default -> "encouraging";
+        };
     }
 
     private String buildGeneratedCodeExecutionContext(final String generatedResponse) {

@@ -59,6 +59,7 @@ namespace Mentora.Network
                 56 => new MultiplayerVoicePacket(),
                 57 => new MultiplayerUdpHelloPacket(),
                 58 => new CompanionVoiceTextPacket(),
+                59 => new CompanionVoiceAudioPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -723,12 +724,14 @@ namespace Mentora.Network
     {
         public string Line;
         public string Emotion; // "happy" | "encouraging" | "concerned" | "excited" | "thinking"
+        public string SourceTranscript;
         public CompanionSpeakResponsePacket() : base(48) { }
         protected override void Write(BinaryWriter writer) { }
         protected override void Read(BinaryReader reader)
         {
             Line = ReadString(reader);
             Emotion = ReadString(reader);
+            SourceTranscript = reader.BaseStream.Position < reader.BaseStream.Length ? ReadString(reader) : string.Empty;
         }
     }
 
@@ -754,6 +757,48 @@ namespace Mentora.Network
         protected override void Read(BinaryReader reader)
         {
             Transcript = ReadString(reader);
+            Context = ReadString(reader);
+        }
+    }
+
+    public class CompanionVoiceAudioPacket : Packet
+    {
+        private const int MaxVoiceAudioBytes = 512 * 1024;
+
+        public int SampleRate;
+        public byte[] Pcm16;
+        public string Context;
+
+        public CompanionVoiceAudioPacket(int sampleRate, byte[] pcm16, string context) : base(59)
+        {
+            SampleRate = sampleRate;
+            Pcm16 = pcm16 ?? Array.Empty<byte>();
+            Context = context;
+        }
+
+        public CompanionVoiceAudioPacket() : base(59) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            WriteInt32BigEndian(writer, SampleRate);
+            byte[] data = Pcm16 ?? Array.Empty<byte>();
+            WriteInt32BigEndian(writer, data.Length);
+            writer.Write(data);
+            PutString(writer, Context ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            SampleRate = ReadInt32BigEndian(reader);
+            int length = ReadInt32BigEndian(reader);
+            if (length < 0 || length > MaxVoiceAudioBytes)
+            {
+                Pcm16 = Array.Empty<byte>();
+                Context = string.Empty;
+                return;
+            }
+
+            Pcm16 = reader.ReadBytes(length);
             Context = ReadString(reader);
         }
     }

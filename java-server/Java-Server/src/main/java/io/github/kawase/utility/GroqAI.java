@@ -67,6 +67,10 @@ public class GroqAI {
         return groq;
     }
 
+    public static String getConfiguredApiKey() {
+        return groqApiKey;
+    }
+
     private String getCached(final String prompt) {
         if (prompt == null || prompt.isBlank()) {
             return null;
