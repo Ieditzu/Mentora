@@ -1070,9 +1070,7 @@ public class PauseMenuManager : MonoBehaviour
         if (joinSubPanel != null) joinSubPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
 
-        // Always keep cursor visible and unlocked while any menu panel is open
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        // Keep cursor locked so player movement isn't interrupted
         if (panel == tasksPanel)
         {
             FetchProfilesForDevOptions();
@@ -1566,9 +1564,10 @@ public class PauseMenuManager : MonoBehaviour
         ReacquireControllerIfNeeded();
         ConfigureCanvasForCurrentMode();
         EnsureEventSystem();
-        previousTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
         IsGamePaused = true;
+        if (fpsController != null) fpsController.SetCameraControlEnabled(false);
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible   = true;
         if (canvas != null)
         {
             canvas.gameObject.SetActive(true);
@@ -1579,16 +1578,15 @@ public class PauseMenuManager : MonoBehaviour
             if (qrCodeImage != null && qrCodeImage.texture != null && loggedInChildId == -1) qrCodeImage.gameObject.SetActive(true);
             PlayMenuAnimation(true);
         }
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        // Keep cursor locked so player can still move
     }
 
     private void ResumeGame()
     {
         ResetVrPointerState();
         PlayMenuAnimation(false);
-        Time.timeScale = previousTimeScale <= 0f ? 1f : previousTimeScale;
         IsGamePaused = false;
+        if (fpsController != null) fpsController.SetCameraControlEnabled(true);
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
