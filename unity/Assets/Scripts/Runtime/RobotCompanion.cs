@@ -84,19 +84,18 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float conversationTimeout = 18f;
 
     [Header("Guide")]
-    [SerializeField] private float guideSpeed = 6.5f;
-    [SerializeField] private float guideWaitSpeed = 0.35f;
+    [SerializeField] private float guideSpeed = 4.8f;
+    [SerializeField] private float guideWaitSpeed = 1.2f;
     [SerializeField] private float guideWaitForPlayerDistance = 16f;
     [SerializeField] private float guidePlayerArrivalDistance = 10f;
-    [SerializeField] private float guideHoverAboveGround = 3.4f;
-    [SerializeField] private float guideWaypointReachDistance = 3f;
+    [SerializeField] private float guideHoverAboveGround = 0.65f;
+    [SerializeField] private float guideWaypointReachDistance = 1.35f;
     [SerializeField] private float guideNavMeshSampleDistance = 14f;
     [SerializeField] private float guideGroundProbeHeight = 26f;
     [SerializeField] private float guideGroundProbeDistance = 70f;
     [SerializeField] private float guideCollisionRadius = 0.48f;
     [SerializeField] private float guideObstacleProbeDistance = 2.6f;
     [SerializeField] private float guideDetourDistance = 4.5f;
-    [SerializeField] private float guideDetourReachDistance = 1.6f;
     [SerializeField] private float guideStuckRepathSeconds = 1.25f;
     [SerializeField] private float guideOutlineWidth = 0.045f;
 
@@ -138,7 +137,6 @@ public class RobotCompanion : MonoBehaviour
     private Vector3    lastGuideProgressPosition;
     private Vector3    guideDetourTarget;
     private float      guideStuckTimer;
-    private bool       guideDetourActive;
     private readonly List<Vector3> guidePathCorners = new List<Vector3>(16);
     private GameObject guideGlowRoot;
     private GameObject boosterRoot;
@@ -224,7 +222,7 @@ public class RobotCompanion : MonoBehaviour
             + orbitDir * followDistance;
         if (guiding && guideTarget != null)
         {
-            targetPos = GetGuideFlightTarget(bob);
+            targetPos = GetGuideGroundTarget();
         }
         else if (inConversation && fpsCam != null)
         {
@@ -271,7 +269,7 @@ public class RobotCompanion : MonoBehaviour
             if (guiding)
             {
                 float bank = -tiltAngle * Mathf.Clamp01(Vector3.Distance(transform.position, targetPos) / 7f);
-                float pitch = Mathf.Sin(Time.time * 7.5f) * 3f;
+                float pitch = Mathf.Sin(Time.time * 6.0f) * 1.25f;
                 desiredRot *= Quaternion.Euler(pitch, 0f, bank);
             }
             else if (!inConversation)
@@ -370,10 +368,10 @@ public class RobotCompanion : MonoBehaviour
         col.center = Vector3.zero;
 
         var mat = new PhysicMaterial("RudolfBounce");
-        mat.bounciness      = 0.75f;
-        mat.dynamicFriction = 0.05f;
-        mat.staticFriction  = 0.05f;
-        mat.bounceCombine   = PhysicMaterialCombine.Maximum;
+        mat.bounciness      = 0f;
+        mat.dynamicFriction = 0.25f;
+        mat.staticFriction  = 0.25f;
+        mat.bounceCombine   = PhysicMaterialCombine.Minimum;
         mat.frictionCombine = PhysicMaterialCombine.Minimum;
         col.material = mat;
 
@@ -386,6 +384,11 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnCollisionEnter(Collision col)
     {
+        if (IsGuideActive())
+        {
+            return;
+        }
+
         if (col != null && col.collider != null && IsSakuraNoClipTransform(col.collider.transform))
         {
             return;
@@ -403,6 +406,11 @@ public class RobotCompanion : MonoBehaviour
         Vector3 startVel = bounceVelocity;
         while (elapsed < duration)
         {
+            if (IsGuideActive())
+            {
+                yield break;
+            }
+
             elapsed += Time.deltaTime;
             // Decay the bounce velocity over time and apply it as a positional offset
             float frac = 1f - elapsed / duration;
@@ -771,7 +779,7 @@ public class RobotCompanion : MonoBehaviour
                 AddConversationTurn("Rudolf", r.Line);
                 ShowLine(r.Line);
                 if (voiceBridge != null)
-                    voiceBridge.Speak(r.Line);
+                    voiceBridge.Speak(r.Line, r.Emotion);
             });
     }
 
@@ -1220,7 +1228,6 @@ public class RobotCompanion : MonoBehaviour
         guideWaitingForPlayer = false;
         lastGuideWaitLine = -999f;
         guideStuckTimer = 0f;
-        guideDetourActive = false;
         lastGuideProgressPosition = transform.position;
         BuildGuidePath(target);
         conversationActive = true;
@@ -1233,7 +1240,7 @@ public class RobotCompanion : MonoBehaviour
         ShowLine(line, 5f);
         if (voiceBridge != null)
         {
-            voiceBridge.Speak(line);
+            voiceBridge.Speak(line, "excited");
         }
     }
 
@@ -1244,7 +1251,6 @@ public class RobotCompanion : MonoBehaviour
         guideWaitingForPlayer = false;
         guidePathCorners.Clear();
         guidePathIndex = 0;
-        guideDetourActive = false;
         guideStuckTimer = 0f;
         SetGuideHighlight(false);
 
@@ -1254,7 +1260,7 @@ public class RobotCompanion : MonoBehaviour
             ShowLine(line, 4f);
             if (voiceBridge != null)
             {
-                voiceBridge.Speak(line);
+                voiceBridge.Speak(line, "excited");
             }
         }
     }
@@ -1287,16 +1293,13 @@ public class RobotCompanion : MonoBehaviour
         guideWaitingForPlayer = playerDistance > guideWaitForPlayerDistance;
 
         float speed = guideWaitingForPlayer ? guideWaitSpeed : guideSpeed;
-        Vector3 toTarget = targetPos - transform.position;
-        if (toTarget.sqrMagnitude <= 0.0025f)
+        if (Vector3.Distance(transform.position, targetPos) <= 0.05f)
         {
             return targetPos;
         }
 
-        Vector3 steer = SteerAround(transform.position, toTarget.normalized);
-        Vector3 next = transform.position + steer * speed * Time.deltaTime;
-        next = ResolveGuideCollision(next);
-        next = ApplyGuideHover(next, targetPos.y, Mathf.Sin(Time.time * bobSpeed) * bobAmplitude);
+        Vector3 next = Vector3.MoveTowards(transform.position, targetPos, speed * Time.deltaTime);
+        next = SnapGuideToGround(next, targetPos.y - guideHoverAboveGround);
         if (Vector3.Distance(transform.position, targetPos) <= speed * Time.deltaTime)
         {
             return targetPos;
@@ -1340,12 +1343,11 @@ public class RobotCompanion : MonoBehaviour
             if (guideStuckTimer >= guideStuckRepathSeconds)
             {
                 guideStuckTimer = 0f;
-                guideDetourActive = false;
                 BuildGuidePath(guideTarget);
             }
         }
 
-        float robotDistance = Vector3.Distance(transform.position, ApplyGuideHover(guideDestinationPosition, guideDestinationPosition.y + guideHoverAboveGround, 0f));
+        float robotDistance = Vector3.Distance(transform.position, SnapGuideToGround(guideDestinationPosition, guideDestinationPosition.y));
         float playerDistance = player != null ? Vector3.Distance(player.position, guideTarget.transform.position) : float.MaxValue;
         if (robotDistance <= guideTarget.ArrivalRadius && playerDistance <= guidePlayerArrivalDistance)
         {
@@ -1357,7 +1359,7 @@ public class RobotCompanion : MonoBehaviour
             ShowLine(arrivedLine, 5f);
             if (voiceBridge != null)
             {
-                voiceBridge.Speak(arrivedLine);
+                voiceBridge.Speak(arrivedLine, "happy");
             }
         }
     }
@@ -1382,7 +1384,6 @@ public class RobotCompanion : MonoBehaviour
     {
         guidePathCorners.Clear();
         guidePathIndex = 0;
-        guideDetourActive = false;
         if (target == null)
         {
             return;
@@ -1422,23 +1423,11 @@ public class RobotCompanion : MonoBehaviour
         }
     }
 
-    private Vector3 GetGuideFlightTarget(float bob)
+    private Vector3 GetGuideGroundTarget()
     {
         if (guideTarget == null)
         {
             return transform.position;
-        }
-
-        if (guideDetourActive)
-        {
-            if (HorizontalDistance(transform.position, guideDetourTarget) <= guideDetourReachDistance)
-            {
-                guideDetourActive = false;
-            }
-            else
-            {
-                return ApplyGuideHover(guideDetourTarget, guideDetourTarget.y + guideHoverAboveGround + bob, bob);
-            }
         }
 
         if (guidePathCorners.Count == 0)
@@ -1453,7 +1442,7 @@ public class RobotCompanion : MonoBehaviour
         }
 
         Vector3 waypoint = guidePathCorners[Mathf.Clamp(guidePathIndex, 0, guidePathCorners.Count - 1)];
-        return ApplyGuideHover(waypoint, waypoint.y + guideHoverAboveGround + bob, bob);
+        return SnapGuideToGround(waypoint, waypoint.y);
     }
 
     private Vector3 GetGuideLookDirection(Vector3 targetPos, Vector3 next)
@@ -1496,6 +1485,37 @@ public class RobotCompanion : MonoBehaviour
         return position;
     }
 
+    private Vector3 SnapGuideToGround(Vector3 position, float fallbackGroundY)
+    {
+        NavMeshHit navHit;
+        float localSampleDistance = Mathf.Clamp(guideCollisionRadius * 2.5f, 0.8f, 1.6f);
+        if (NavMesh.SamplePosition(position, out navHit, localSampleDistance, NavMesh.AllAreas))
+        {
+            position = navHit.position;
+            position.y += guideHoverAboveGround;
+            return position;
+        }
+
+        Vector3 probeOrigin = new Vector3(position.x, position.y + guideGroundProbeHeight, position.z);
+        RaycastHit[] hits = Physics.RaycastAll(probeOrigin, Vector3.down, guideGroundProbeDistance, GetGuideCollisionMask(), QueryTriggerInteraction.Ignore);
+        if (hits != null && hits.Length > 0)
+        {
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit hit = hits[i];
+                if (IsGuideGroundHit(hit))
+                {
+                    position.y = hit.point.y + guideHoverAboveGround;
+                    return position;
+                }
+            }
+        }
+
+        position.y = fallbackGroundY + guideHoverAboveGround;
+        return position;
+    }
+
     private Vector3 ResolveGuideCollision(Vector3 desiredNext)
     {
         Vector3 move = desiredNext - transform.position;
@@ -1531,7 +1551,6 @@ public class RobotCompanion : MonoBehaviour
             if (TryFindGuideDetour(hit, desiredNext, out detour))
             {
                 guideDetourTarget = detour;
-                guideDetourActive = true;
                 Vector3 toDetour = detour - transform.position;
                 if (toDetour.sqrMagnitude > 0.01f)
                 {

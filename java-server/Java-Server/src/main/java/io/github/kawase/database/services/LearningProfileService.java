@@ -562,6 +562,7 @@ public class LearningProfileService {
             "EMOTION: happy, encouraging, concerned, excited, or thinking\n" +
             "LINE: your final line to say, or blank when ACTION is IGNORE\n\n" +
             "Response rules when ACTION is RESPOND:\n" +
+            "- The LINE field must contain only Rudolf's spoken message. Never put ACTION, EMOTION, or LINE labels inside the spoken message.\n" +
             "- If recent conversation is provided in the context, use it to remember what the student asked and what you already answered.\n" +
             "- Treat the current student message as a follow-up when it refers to earlier turns with words like it, that, this, again, or why.\n" +
             "- You have access to a real server-side execution tool for Python and C++ snippets. It runs code with strict time/resource limits and returns stdout, stderr, exit code, and timeout status.\n" +
@@ -604,7 +605,7 @@ public class LearningProfileService {
             return null;
         }
 
-        line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        line = sanitizeCompanionSpokenLine(line);
         if (line.isBlank()) {
             return null;
         }
@@ -615,13 +616,18 @@ public class LearningProfileService {
                 "Your draft response was:\n" + line + "\n\n" +
                 "The server executed the runnable code you included in that draft:\n" + generatedExecutionContext + "\n\n" +
                 "Rewrite the final answer for the student. Keep the useful code if it helps, but include the observed stdout/stderr/exit code in plain language. " +
-                "Do not claim a different output. Keep it under 900 characters.";
+                "Do not claim a different output. Keep it under 900 characters. Return only the final spoken line, with no ACTION, EMOTION, or LINE labels.";
             String revisedLine = ai.generate(revisionPrompt);
             if (revisedLine != null && !revisedLine.isBlank() && !revisedLine.startsWith("AI Error")) {
-                line = revisedLine.trim().replaceAll("^[\"']|[\"']$", "");
+                line = sanitizeCompanionSpokenLine(revisedLine);
             } else {
-                line = appendExecutionSummary(line, generatedExecutionContext);
+                line = sanitizeCompanionSpokenLine(appendExecutionSummary(line, generatedExecutionContext));
             }
+        }
+
+        line = sanitizeCompanionSpokenLine(line);
+        if (line.isBlank()) {
+            return null;
         }
 
         return new String[]{line, normalizeCompanionEmotion(emotion)};
@@ -685,6 +691,25 @@ public class LearningProfileService {
             case "happy", "encouraging", "concerned", "excited", "thinking", "ignore" -> normalized;
             default -> "encouraging";
         };
+    }
+
+    private String sanitizeCompanionSpokenLine(final String rawLine) {
+        if (rawLine == null || rawLine.isBlank()) {
+            return "";
+        }
+
+        String line = rawLine.trim().replaceAll("^[\"']|[\"']$", "");
+        String structuredLine = extractCompanionStructuredField(line, "LINE");
+        if (!structuredLine.isBlank()) {
+            line = structuredLine.trim();
+        }
+
+        line = line.replaceAll("(?im)^\\s*ACTION\\s*:\\s*.*(?:\\R|$)", "");
+        line = line.replaceAll("(?im)^\\s*EMOTION\\s*:\\s*.*(?:\\R|$)", "");
+        line = line.replaceAll("(?im)^\\s*LINE\\s*:\\s*", "");
+        line = line.replaceAll("(?i)^\\s*[\\[(]?(happy|encouraging|concerned|excited|thinking)[\\])]?[\\s:—\\-]+", "");
+        line = line.trim().replaceAll("^[\"']|[\"']$", "");
+        return line.trim();
     }
 
     private String buildGeneratedCodeExecutionContext(final String generatedResponse) {

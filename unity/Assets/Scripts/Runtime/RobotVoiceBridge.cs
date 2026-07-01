@@ -16,7 +16,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     public const string OpenAiApiKeyPrefKey = "RudolfOpenAIApiKey";
 
     private const string WitConfigurationResourcePath = "Voice/RobotWitConfiguration";
-    private const bool ServerSpeechTranscriptionEnabled = true;
+    private static readonly bool ServerSpeechTranscriptionEnabled = true;
     private const string OpenAiTranscriptionUrl = "https://api.openai.com/v1/audio/transcriptions";
     private const string OpenAiSpeechUrl = "https://api.openai.com/v1/audio/speech";
     private const string OpenAiTranscriptionModel = "gpt-4o-transcribe";
@@ -147,6 +147,11 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
     public void Speak(string text)
     {
+        Speak(text, "encouraging");
+    }
+
+    public void Speak(string text, string emotion)
+    {
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
@@ -155,7 +160,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         RefreshOpenAiConfiguration();
         if (openAiConfigured)
         {
-            StartCoroutine(SpeakOpenAi(text));
+            StartCoroutine(SpeakOpenAi(text, emotion));
             return;
         }
 
@@ -165,6 +170,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
+        ApplyFallbackVoiceEmotion(emotion);
         speaker.Speak(text);
     }
 
@@ -529,7 +535,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
     }
 
-    private IEnumerator SpeakOpenAi(string text)
+    private IEnumerator SpeakOpenAi(string text, string emotion)
     {
         if (openAiTtsRequestActive || string.IsNullOrWhiteSpace(text))
         {
@@ -542,7 +548,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             "\"model\":\"" + OpenAiTtsModel + "\"," +
             "\"voice\":\"" + OpenAiTtsVoice + "\"," +
             "\"response_format\":\"wav\"," +
-            "\"instructions\":\"Sound like a friendly, clear robot mentor for a coding game. Keep it natural, concise, and energetic without shouting.\"," +
+            "\"instructions\":\"" + EscapeJson(BuildTtsInstructions(emotion)) + "\"," +
             "\"input\":\"" + EscapeJson(text) + "\"" +
             "}";
 
@@ -582,6 +588,56 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
 
         openAiTtsRequestActive = false;
+    }
+
+    private void ApplyFallbackVoiceEmotion(string emotion)
+    {
+        if (ttsAudioSource == null)
+        {
+            return;
+        }
+
+        string normalized = NormalizeEmotion(emotion);
+        ttsAudioSource.pitch = normalized switch
+        {
+            "excited" => 1.08f,
+            "happy" => 1.04f,
+            "concerned" => 0.94f,
+            "thinking" => 0.97f,
+            _ => 1.0f
+        };
+        ttsAudioSource.volume = normalized == "concerned" ? 0.92f : 1f;
+    }
+
+    private static string BuildTtsInstructions(string emotion)
+    {
+        string normalized = NormalizeEmotion(emotion);
+        string baseLine = "Sound like Rudolf, a friendly, clear robot mentor in a coding game. Keep it natural, concise, and never read labels like emotion or action aloud. ";
+        return normalized switch
+        {
+            "excited" => baseLine + "Use a brighter, more energetic tone with a slightly faster pace, but do not shout.",
+            "happy" => baseLine + "Use a warm, upbeat tone with a small smile in the voice.",
+            "concerned" => baseLine + "Use a softer, calmer tone that reassures the student.",
+            "thinking" => baseLine + "Use a thoughtful, curious tone with measured pacing.",
+            _ => baseLine + "Use an encouraging mentor tone with medium energy."
+        };
+    }
+
+    private static string NormalizeEmotion(string emotion)
+    {
+        if (string.IsNullOrWhiteSpace(emotion))
+        {
+            return "encouraging";
+        }
+
+        string normalized = emotion.Trim().ToLowerInvariant();
+        return normalized == "happy" ||
+               normalized == "encouraging" ||
+               normalized == "concerned" ||
+               normalized == "excited" ||
+               normalized == "thinking"
+            ? normalized
+            : "encouraging";
     }
 
     private void RaiseNoTranscript(int byteCount, float vadPeak, float audioPeak, float appliedGain)
