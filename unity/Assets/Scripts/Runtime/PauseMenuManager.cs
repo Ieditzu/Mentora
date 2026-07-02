@@ -47,7 +47,7 @@ public class PauseMenuManager : MonoBehaviour
     private Coroutine menuAnim;
     private const float menuAnimDuration = 0.18f;
 
-    private Slider sensitivitySlider; // legacy, keep null
+    private Slider sensitivitySlider;
     private InputField sensitivityInput;
     private Text sensitivityValueText;
     private FirstPersonControllerSimple fpsController;
@@ -69,6 +69,7 @@ public class PauseMenuManager : MonoBehaviour
     private Button playerModelButton;
     private Button voiceChatButton;
     private Button microphoneDeviceButton;
+    private Button guideDebugLinesButton;
     private InputField rudolfApiKeyInput;
     private Text voiceHintText;
     private GameObject joinSubPanel;
@@ -656,7 +657,7 @@ public class PauseMenuManager : MonoBehaviour
 
         settingsPanel = CreateUiObject("SettingsPanel", canvas.transform);
         RectTransform settingsRect = settingsPanel.GetComponent<RectTransform>();
-        settingsRect.sizeDelta = new Vector2(720f, 560f);
+        settingsRect.sizeDelta = new Vector2(760f, 600f);
         settingsRect.anchoredPosition = Vector2.zero;
         settingsPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
         var settingsOutline = settingsPanel.AddComponent<Outline>();
@@ -665,8 +666,8 @@ public class PauseMenuManager : MonoBehaviour
 
         GameObject settingsTopBar = CreateUiObject("TopBar", settingsPanel.transform);
         RectTransform settingsTopRect = settingsTopBar.GetComponent<RectTransform>();
-        settingsTopRect.sizeDelta = new Vector2(720f, 88f);
-        settingsTopRect.anchoredPosition = new Vector2(0f, 216f);
+        settingsTopRect.sizeDelta = new Vector2(760f, 78f);
+        settingsTopRect.anchoredPosition = new Vector2(0f, 252f);
         settingsTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
         settingsTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
         CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
@@ -674,7 +675,7 @@ public class PauseMenuManager : MonoBehaviour
         CreateSensitivitySection(settingsPanel.transform);
         CreateGlobalVoiceSettingsSection(settingsPanel.transform);
 
-        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -240f), new Color(0.4f, 0.4f, 0.4f));
+        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -264f), new Color(0.4f, 0.4f, 0.4f));
         settingsBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
         settingsBackBtn.GetComponentInChildren<Text>().fontSize = 15;
         settingsBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
@@ -1110,6 +1111,7 @@ public class PauseMenuManager : MonoBehaviour
         {
             RefreshVoiceChatButton();
             RefreshPlayerModelButton();
+            RefreshGuideDebugLinesButton();
             RefreshRudolfApiKeyInput();
         }
     }
@@ -1165,6 +1167,35 @@ public class PauseMenuManager : MonoBehaviour
 
         multiplayerSession.CycleMicrophoneDevice();
         RefreshVoiceChatButton();
+    }
+
+    private void OnGuideDebugLinesClicked()
+    {
+        RobotCompanion.SetGuideDebugLinesEnabled(!RobotCompanion.GuideDebugLinesEnabled);
+        RefreshGuideDebugLinesButton();
+    }
+
+    private void RefreshGuideDebugLinesButton()
+    {
+        if (guideDebugLinesButton == null)
+        {
+            return;
+        }
+
+        bool enabled = RobotCompanion.GuideDebugLinesEnabled;
+        Text label = guideDebugLinesButton.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.text = "Rudolf Path Lines: " + (enabled ? "On" : "Off");
+        }
+
+        Image image = guideDebugLinesButton.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = enabled
+                ? new Color(0.0f, 0.55f, 0.70f, 1f)
+                : new Color(0.35f, 0.34f, 0.50f, 1f);
+        }
     }
 
     private void OnRudolfApiKeyChanged(string value)
@@ -1231,9 +1262,12 @@ public class PauseMenuManager : MonoBehaviour
         {
             string provider = "Rudolf STT: server Groq";
             string tts = HasRudolfOpenAiKeyConfigured() ? "TTS: OpenAI" : "TTS: Wit fallback";
-            string mode = multiplayerSession.CurrentVoiceMode == MultiplayerSessionManager.VoiceChatMode.PushToTalk
-                ? "Hold V to talk"
-                : "Click mode for push-to-talk";
+            string mode = multiplayerSession.CurrentVoiceMode switch
+            {
+                MultiplayerSessionManager.VoiceChatMode.PushToTalk => "Hold V for multiplayer + Rudolf",
+                MultiplayerSessionManager.VoiceChatMode.Muted => "Mic disabled for multiplayer + Rudolf",
+                _ => "Mic always enabled for multiplayer + Rudolf",
+            };
             voiceHintText.text = provider + " • " + tts + " • " + mode;
         }
     }
@@ -1543,70 +1577,59 @@ public class PauseMenuManager : MonoBehaviour
     {
         GameObject card = CreateUiObject("SensitivityCard", parent);
         RectTransform cardRect = card.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(400f, 140f);
-        cardRect.anchoredPosition = new Vector2(0f, 190f);
+        cardRect.sizeDelta = new Vector2(520f, 145f);
+        cardRect.anchoredPosition = new Vector2(0f, 175f);
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
 
-        CreateText("SensitivityLabel", card.transform, "Sensitivity", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 36f), new Vector2(200f, 30f));
-        sensitivityValueText = null;
+        CreateText("SensitivityLabel", card.transform, "Mouse Sensitivity", 20, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-116f, 42f), new Vector2(230f, 30f));
+        sensitivityValueText = CreateText("SensitivityValue", card.transform, "1.80", 18, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.55f, 0.92f, 1f), new Vector2(178f, 42f), new Vector2(90f, 28f));
+        CreateText("SensitivityHint", card.transform, "Lower = steadier aim, higher = faster camera turn.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.68f, 0.78f, 0.92f), new Vector2(0f, -47f), new Vector2(420f, 22f));
 
-        GameObject inputObj = CreateUiObject("SensitivityInput", card.transform);
-        RectTransform inputRect = inputObj.GetComponent<RectTransform>();
-        inputRect.sizeDelta = new Vector2(120f, 36f);
-        inputRect.anchoredPosition = new Vector2(0f, -12f);
-
-        Image inputBg = inputObj.AddComponent<Image>();
-        inputBg.color = new Color(0.18f, 0.22f, 0.30f, 0.95f);
-        Outline inputOutline = inputObj.AddComponent<Outline>();
-        inputOutline.effectColor = new Color(0.30f, 0.84f, 0.97f, 0.6f);
-        inputOutline.effectDistance = new Vector2(1f, -1f);
-
-        sensitivityInput = inputObj.AddComponent<InputField>();
-        sensitivityInput.contentType = InputField.ContentType.DecimalNumber;
-        sensitivityInput.textComponent = CreateText("InputText", inputObj.transform, "1.80", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(0f, 0f));
-        sensitivityInput.placeholder = CreateText("Placeholder", inputObj.transform, "1.80", 18, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(1f,1f,1f,0.4f), Vector2.zero, new Vector2(0f,0f));
-        sensitivityInput.textComponent.rectTransform.anchorMin = Vector2.zero; sensitivityInput.textComponent.rectTransform.anchorMax = Vector2.one;
-        sensitivityInput.textComponent.rectTransform.offsetMin = new Vector2(8f, 6f); sensitivityInput.textComponent.rectTransform.offsetMax = new Vector2(-8f, -6f);
-        ((Text)sensitivityInput.placeholder).rectTransform.anchorMin = Vector2.zero; ((Text)sensitivityInput.placeholder).rectTransform.anchorMax = Vector2.one;
-        ((Text)sensitivityInput.placeholder).rectTransform.offsetMin = new Vector2(8f, 6f); ((Text)sensitivityInput.placeholder).rectTransform.offsetMax = new Vector2(-8f, -6f);
-
-        sensitivityInput.onEndEdit.AddListener(OnSensitivityInputChanged);
+        sensitivityInput = null;
+        sensitivitySlider = CreateSlider(card.transform, "SensitivitySlider", new Vector2(0f, -5f), new Vector2(390f, 30f), 0.2f, 6f, PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f));
+        sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
     }
 
     private void CreateGlobalVoiceSettingsSection(Transform parent)
     {
         GameObject card = CreateUiObject("VoiceSettingsCard", parent);
         RectTransform cardRect = card.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(440f, 300f);
-        cardRect.anchoredPosition = new Vector2(0f, -30f);
+        cardRect.sizeDelta = new Vector2(500f, 340f);
+        cardRect.anchoredPosition = new Vector2(0f, -48f);
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
         card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
 
-        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 118f), new Vector2(240f, 30f));
+        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 140f), new Vector2(240f, 30f));
 
-        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 76f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 98f), new Color(0.26f, 0.50f, 0.58f, 1f));
         playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
         playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
         playerModelButton.onClick.AddListener(OnPlayerModelClicked);
 
-        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 34f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 56f), new Color(0.18f, 0.55f, 0.80f, 1f));
         voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
         voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
         voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
 
-        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -10f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, 12f), new Color(0.26f, 0.42f, 0.68f, 1f));
         microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
         microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
         microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
 
-        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -54f), new Vector2(260f, 22f));
-        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -86f), new Vector2(320f, 34f), false);
+        guideDebugLinesButton = CreateButton(card.transform, "GuideDebugLinesBtn", "Rudolf Path Lines: Off", new Vector2(0f, -32f), new Color(0.35f, 0.34f, 0.50f, 1f));
+        guideDebugLinesButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
+        guideDebugLinesButton.GetComponentInChildren<Text>().fontSize = 13;
+        guideDebugLinesButton.onClick.AddListener(OnGuideDebugLinesClicked);
+
+        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -76f), new Vector2(260f, 22f));
+        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -108f), new Vector2(340f, 34f), false);
         rudolfApiKeyInput.contentType = InputField.ContentType.Password;
         rudolfApiKeyInput.asteriskChar = '•';
         rudolfApiKeyInput.SetTextWithoutNotify(PlayerPrefs.GetString(RobotVoiceBridge.OpenAiApiKeyPrefKey, string.Empty));
         rudolfApiKeyInput.onEndEdit.AddListener(OnRudolfApiKeyChanged);
 
-        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -126f), new Vector2(370f, 28f));
+        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -150f), new Vector2(410f, 28f));
+        RefreshGuideDebugLinesButton();
     }
 
     private void GenerateQrLogin()
@@ -1752,18 +1775,35 @@ public class PauseMenuManager : MonoBehaviour
 
     private void SetSensitivityValue(float v, bool syncInput)
     {
-        if (syncInput && sensitivityInput != null) sensitivityInput.SetTextWithoutNotify(v.ToString("0.00"));
+        v = Mathf.Clamp(v, 0.2f, 6f);
+        if (sensitivitySlider != null && !Mathf.Approximately(sensitivitySlider.value, v))
+        {
+            sensitivitySlider.SetValueWithoutNotify(v);
+        }
+
+        if (syncInput && sensitivityInput != null)
+        {
+            sensitivityInput.SetTextWithoutNotify(v.ToString("0.00"));
+        }
+
+        PlayerPrefs.SetFloat(MouseSensitivityPrefKey, v);
+        PlayerPrefs.Save();
         UpdateSensitivityLabel(v);
         if (fpsController != null) fpsController.SetMouseSensitivity(v);
     }
 
     private float GetCurrentSensitivity()
     {
+        if (sensitivitySlider != null)
+        {
+            return Mathf.Clamp(sensitivitySlider.value, 0.2f, 6f);
+        }
+
         if (sensitivityInput != null && float.TryParse(sensitivityInput.text, out float val))
         {
             return Mathf.Clamp(val, 0.2f, 6f);
         }
-        if (sensitivitySlider != null) return Mathf.Clamp(sensitivitySlider.value, 0.2f, 6f);
+
         return PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f);
     }
 
@@ -2682,6 +2722,75 @@ public class PauseMenuManager : MonoBehaviour
                              Vector2.zero, new Vector2(380f, 44f));
         lbl.horizontalOverflow = HorizontalWrapMode.Overflow;
         return b;
+    }
+
+    private static Slider CreateSlider(Transform parent, string name, Vector2 pos, Vector2 size, float min, float max, float value)
+    {
+        GameObject obj = CreateUiObject(name, parent);
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        rect.sizeDelta = size;
+        rect.anchoredPosition = pos;
+
+        Slider slider = obj.AddComponent<Slider>();
+        slider.minValue = min;
+        slider.maxValue = max;
+        slider.wholeNumbers = false;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        GameObject background = CreateUiObject("Background", obj.transform);
+        RectTransform backgroundRect = background.GetComponent<RectTransform>();
+        backgroundRect.anchorMin = new Vector2(0f, 0.5f);
+        backgroundRect.anchorMax = new Vector2(1f, 0.5f);
+        backgroundRect.pivot = new Vector2(0.5f, 0.5f);
+        backgroundRect.sizeDelta = new Vector2(0f, 10f);
+        backgroundRect.anchoredPosition = Vector2.zero;
+        Image backgroundImage = background.AddComponent<Image>();
+        backgroundImage.sprite = GetRoundedSprite();
+        backgroundImage.type = Image.Type.Sliced;
+        backgroundImage.color = new Color(0.08f, 0.11f, 0.17f, 1f);
+
+        GameObject fillArea = CreateUiObject("Fill Area", obj.transform);
+        RectTransform fillAreaRect = fillArea.GetComponent<RectTransform>();
+        fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
+        fillAreaRect.anchorMax = new Vector2(1f, 0.5f);
+        fillAreaRect.pivot = new Vector2(0.5f, 0.5f);
+        fillAreaRect.sizeDelta = new Vector2(-22f, 10f);
+        fillAreaRect.anchoredPosition = Vector2.zero;
+
+        GameObject fill = CreateUiObject("Fill", fillArea.transform);
+        RectTransform fillRect = fill.GetComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
+        Image fillImage = fill.AddComponent<Image>();
+        fillImage.sprite = GetRoundedSprite();
+        fillImage.type = Image.Type.Sliced;
+        fillImage.color = new Color(0.10f, 0.78f, 0.95f, 1f);
+
+        GameObject handleArea = CreateUiObject("Handle Slide Area", obj.transform);
+        RectTransform handleAreaRect = handleArea.GetComponent<RectTransform>();
+        handleAreaRect.anchorMin = Vector2.zero;
+        handleAreaRect.anchorMax = Vector2.one;
+        handleAreaRect.offsetMin = new Vector2(8f, 0f);
+        handleAreaRect.offsetMax = new Vector2(-8f, 0f);
+
+        GameObject handle = CreateUiObject("Handle", handleArea.transform);
+        RectTransform handleRect = handle.GetComponent<RectTransform>();
+        handleRect.sizeDelta = new Vector2(22f, 22f);
+        Image handleImage = handle.AddComponent<Image>();
+        handleImage.sprite = GetRoundedSprite();
+        handleImage.type = Image.Type.Sliced;
+        handleImage.color = new Color(0.88f, 0.97f, 1f, 1f);
+        Outline handleOutline = handle.AddComponent<Outline>();
+        handleOutline.effectColor = new Color(0f, 0.85f, 1f, 0.7f);
+        handleOutline.effectDistance = new Vector2(1f, -1f);
+
+        slider.fillRect = fillRect;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handleImage;
+        slider.SetValueWithoutNotify(Mathf.Clamp(value, min, max));
+        return slider;
     }
 
     private static InputField CreateInputField(Transform parent, string name, string placeholder, Vector2 pos, Vector2 size, bool multiLine)

@@ -547,6 +547,16 @@ public class MultiplayerSessionManager : MonoBehaviour
         };
     }
 
+    public bool IsVoiceInputAllowedByMode()
+    {
+        return voiceMode switch
+        {
+            VoiceChatMode.AlwaysOn => true,
+            VoiceChatMode.PushToTalk => IsPushToTalkPressed(),
+            _ => false,
+        };
+    }
+
     public void SetHostAddress(string address)
     {
         hostAddress = string.IsNullOrWhiteSpace(address) ? "127.0.0.1" : address.Trim();

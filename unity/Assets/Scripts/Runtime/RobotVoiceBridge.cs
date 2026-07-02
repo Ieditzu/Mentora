@@ -240,7 +240,6 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
     private void OnLocalVoiceFrameCaptured(byte[] pcm16, int sampleRate, float level)
     {
-        MicLevel = Mathf.Clamp01(level);
         if (!listeningRequested ||
             pcm16 == null ||
             pcm16.Length == 0 ||
@@ -250,6 +249,14 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
+        if (microphoneManager != null && !microphoneManager.IsVoiceInputAllowedByMode())
+        {
+            MicLevel = 0f;
+            ResetUtterance();
+            return;
+        }
+
+        MicLevel = Mathf.Clamp01(level);
         float now = Time.unscaledTime;
         if (!utteranceActive)
         {

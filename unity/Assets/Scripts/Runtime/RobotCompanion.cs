@@ -17,6 +17,8 @@ using Mentora.Network;
 /// </summary>
 public class RobotCompanion : MonoBehaviour
 {
+    public const string GuideDebugLinesPrefKey = "RudolfGuideDebugLines";
+
     // ── Static trigger API ───────────────────────────────────────────────────
 
     public static event Action<string, string> OnTrigger; // (trigger, extraContext)
@@ -32,6 +34,17 @@ public class RobotCompanion : MonoBehaviour
 
     private static RobotCompanion _instance;
     public static RobotCompanion Instance => _instance;
+    public static bool GuideDebugLinesEnabled => PlayerPrefs.GetInt(GuideDebugLinesPrefKey, 0) == 1;
+
+    public static void SetGuideDebugLinesEnabled(bool enabled)
+    {
+        PlayerPrefs.SetInt(GuideDebugLinesPrefKey, enabled ? 1 : 0);
+        PlayerPrefs.Save();
+        if (_instance != null)
+        {
+            _instance.ApplyGuideDebugLinePreference();
+        }
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoSpawn()
@@ -208,6 +221,7 @@ public class RobotCompanion : MonoBehaviour
         SetupGuideHighlight();
         SetupGuideGlowVisuals();
         SetupBoosterRings();
+        ApplyGuideDebugLinePreference();
         SetupGuideDebugVisuals();
         SetupVoiceBridge();
         EnsureGameClientExists();
@@ -678,7 +692,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnVoiceTranscription(string transcript)
     {
-        if (waiting)
+        if (waiting || !IsRudolfVoiceInputAllowed())
         {
             return;
         }
@@ -693,6 +707,10 @@ public class RobotCompanion : MonoBehaviour
             ? StripWakePhraseIfPresent(transcript).Trim()
             : (transcript ?? string.Empty).Trim();
         if (ShouldDiscardVoiceTranscript(command, wasConversationActive))
+        {
+            return;
+        }
+        if (TryHandleConversationExit(command, wasConversationActive))
         {
             return;
         }
@@ -742,7 +760,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnVoiceNoTranscript(int byteCount, float vadPeak, float audioPeak, float appliedGain)
     {
-        if (waiting || voiceBridge == null || voiceBridge.IsSpeaking)
+        if (waiting || voiceBridge == null || voiceBridge.IsSpeaking || !IsRudolfVoiceInputAllowed())
         {
             return;
         }
@@ -787,7 +805,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void OnVoiceUtteranceCapturedForServer(byte[] pcm16, int sampleRate, float peakLevel)
     {
-        if (waiting)
+        if (waiting || !IsRudolfVoiceInputAllowed())
         {
             return;
         }
@@ -857,6 +875,16 @@ public class RobotCompanion : MonoBehaviour
             UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
                 waiting = false;
+                string transcript = string.IsNullOrWhiteSpace(pendingVoiceTranscript)
+                    ? r.SourceTranscript
+                    : pendingVoiceTranscript;
+                pendingVoiceTranscript = null;
+
+                if (!string.IsNullOrWhiteSpace(transcript) && TryHandleConversationExit(transcript, true))
+                {
+                    return;
+                }
+
                 if (string.IsNullOrWhiteSpace(r.Line) ||
                     string.Equals(r.Emotion, "ignore", StringComparison.OrdinalIgnoreCase))
                 {
@@ -864,14 +892,8 @@ public class RobotCompanion : MonoBehaviour
                     {
                         conversationActive = false;
                     }
-                    pendingVoiceTranscript = null;
                     return;
                 }
-
-                string transcript = string.IsNullOrWhiteSpace(pendingVoiceTranscript)
-                    ? r.SourceTranscript
-                    : pendingVoiceTranscript;
-                pendingVoiceTranscript = null;
 
                 if (!string.IsNullOrWhiteSpace(transcript) && TryHandleGuideCommand(transcript))
                 {
@@ -1281,7 +1303,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void SetupGuideDebugVisuals()
     {
-        if (!guideDebugDrawLines || guideDebugRoot != null)
+        if (!ShouldDrawGuideDebugLines() || guideDebugRoot != null)
         {
             return;
         }
@@ -1334,7 +1356,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void SetGuideDebugLinesActive(bool active)
     {
-        if (!guideDebugDrawLines)
+        if (!ShouldDrawGuideDebugLines())
         {
             return;
         }
@@ -1372,7 +1394,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void UpdateGuideDebugPathLine(IList<Vector3> points, Color color)
     {
-        if (!guideDebugEnabled || points == null || points.Count < 2)
+        if (!ShouldDrawGuideDebugLines() || points == null || points.Count < 2)
         {
             return;
         }
@@ -1426,7 +1448,7 @@ public class RobotCompanion : MonoBehaviour
 
     private void UpdateGuideDebugTargetLine(Vector3 target, Color color)
     {
-        if (!guideDebugEnabled)
+        if (!ShouldDrawGuideDebugLines())
         {
             return;
         }
@@ -1472,6 +1494,23 @@ public class RobotCompanion : MonoBehaviour
         {
             Debug.LogWarning("[RudolfGuide] " + message);
         }
+    }
+
+    private void ApplyGuideDebugLinePreference()
+    {
+        guideDebugDrawLines = GuideDebugLinesEnabled;
+        if (!guideDebugDrawLines)
+        {
+            ClearGuideDebugLines();
+            return;
+        }
+
+        SetupGuideDebugVisuals();
+    }
+
+    private bool ShouldDrawGuideDebugLines()
+    {
+        return guideDebugEnabled && guideDebugDrawLines;
     }
 
     private static string FormatGuideVector(Vector3 value)
@@ -3139,14 +3178,88 @@ public class RobotCompanion : MonoBehaviour
                normalized.Contains("do not guide");
     }
 
+    private bool TryHandleConversationExit(string transcript, bool conversationWasActive)
+    {
+        if (!conversationWasActive && !IsConversationActive())
+        {
+            return false;
+        }
+
+        string normalized = NormalizeCommand(StripWakePhraseIfPresent(transcript));
+        if (!IsConversationExitCommand(normalized))
+        {
+            return false;
+        }
+
+        EndVoiceConversation("Okay — talk later.");
+        return true;
+    }
+
+    private void EndVoiceConversation(string line)
+    {
+        waiting = false;
+        conversationActive = false;
+        pendingVoiceTranscript = null;
+        lastConversationHeard = -999f;
+        lastNoTranscriptPromptAt = -999f;
+        resumeVoiceListeningAt = Time.unscaledTime + 0.8f;
+        conversationHistory.Clear();
+
+        if (!string.IsNullOrWhiteSpace(line))
+        {
+            ShowLine(line, 2.6f);
+            if (voiceBridge != null)
+            {
+                voiceBridge.Speak(line, "happy");
+            }
+        }
+    }
+
+    private static bool IsConversationExitCommand(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized == "bye" ||
+               normalized == "goodbye" ||
+               normalized == "good bye" ||
+               normalized == "good by" ||
+               normalized == "see ya" ||
+               normalized == "see you" ||
+               normalized == "later" ||
+               normalized.StartsWith("bye ") ||
+               normalized.EndsWith(" bye") ||
+               normalized.Contains(" bye ") ||
+               normalized.StartsWith("goodbye ") ||
+               normalized.EndsWith(" goodbye") ||
+               normalized.Contains(" goodbye ") ||
+               normalized.StartsWith("good bye ") ||
+               normalized.EndsWith(" good bye") ||
+               normalized.Contains(" good bye ") ||
+               normalized.StartsWith("good by ") ||
+               normalized.EndsWith(" good by") ||
+               normalized.Contains(" good by ") ||
+               normalized.Contains("see you later") ||
+               normalized.Contains("talk later") ||
+               normalized.Contains("talk to you later") ||
+               normalized.Contains("thats all") ||
+               normalized.Contains("that is all") ||
+               normalized.Contains("end conversation") ||
+               normalized.Contains("stop listening") ||
+               normalized.Contains("stop talking") ||
+               normalized.Contains("go away") ||
+               normalized.Contains("good night") ||
+               normalized.Contains("goodnight");
+    }
+
     private void UpdateVoiceListening(Camera fpsCamera)
     {
         if (voiceBridge == null)
         {
             return;
         }
-
-        EnsureVoiceServerConnection();
 
         bool inConversation = IsConversationActive();
         bool speaking = voiceBridge.IsSpeaking;
@@ -3163,6 +3276,15 @@ public class RobotCompanion : MonoBehaviour
             voiceWasSpeaking = false;
             resumeVoiceListeningAt = Time.unscaledTime + PostSpeechListenDelay;
         }
+
+        bool voiceInputAllowed = IsRudolfVoiceInputAllowed();
+        if (!voiceInputAllowed)
+        {
+            voiceBridge.SetListening(false);
+            return;
+        }
+
+        EnsureVoiceServerConnection();
 
         bool shouldListen = voiceBridge.HasSpeechRecognition && !waiting && Time.unscaledTime >= resumeVoiceListeningAt;
         if (shouldListen && IsInMultiplayerSession() && !inConversation)
@@ -3270,6 +3392,12 @@ public class RobotCompanion : MonoBehaviour
     {
         return MultiplayerSessionManager.Instance != null &&
                !string.IsNullOrEmpty(MultiplayerSessionManager.Instance.LocalClientId);
+    }
+
+    private static bool IsRudolfVoiceInputAllowed()
+    {
+        MultiplayerSessionManager manager = MultiplayerSessionManager.Instance;
+        return manager != null && manager.IsVoiceInputAllowedByMode();
     }
 
     private bool IsConversationActive()
