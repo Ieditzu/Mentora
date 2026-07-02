@@ -1120,6 +1120,11 @@ public class MultiplayerSessionManager : MonoBehaviour
                         BroadcastServerPacket(codeWorldCommand);
                         break;
 
+                    case CodeWorldEditorSyncPacket codeWorldEditorSync:
+                        codeWorldEditorSync.AuthorClientId = peer.ClientId ?? string.Empty;
+                        BroadcastServerPacket(codeWorldEditorSync);
+                        break;
+
                     case MultiplayerVoicePacket voicePacket:
                         if (string.IsNullOrEmpty(peer.ClientId))
                         {
@@ -1247,6 +1252,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
             case CodeWorldCommandPacket _:
             case CodeWorldStatePacket _:
+            case CodeWorldEditorSyncPacket _:
                 EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
                 break;
 

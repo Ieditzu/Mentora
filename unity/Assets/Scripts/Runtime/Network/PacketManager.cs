@@ -62,6 +62,7 @@ namespace Mentora.Network
                 59 => new CompanionVoiceAudioPacket(),
                 60 => new CodeWorldCommandPacket(),
                 61 => new CodeWorldStatePacket(),
+                62 => new CodeWorldEditorSyncPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -991,11 +992,13 @@ namespace Mentora.Network
     {
         public bool IsActive;
         public string HistoryText;
+        public string EditorText;
 
-        public CodeWorldStatePacket(bool isActive, string historyText) : base(61)
+        public CodeWorldStatePacket(bool isActive, string historyText, string editorText) : base(61)
         {
             IsActive = isActive;
             HistoryText = historyText;
+            EditorText = editorText;
         }
 
         public CodeWorldStatePacket() : base(61) { }
@@ -1004,12 +1007,40 @@ namespace Mentora.Network
         {
             WriteInt32BigEndian(writer, IsActive ? 1 : 0);
             PutString(writer, HistoryText ?? string.Empty);
+            PutString(writer, EditorText ?? string.Empty);
         }
 
         protected override void Read(BinaryReader reader)
         {
             IsActive = ReadInt32BigEndian(reader) != 0;
             HistoryText = ReadString(reader);
+            EditorText = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldEditorSyncPacket : Packet
+    {
+        public string EditorText;
+        public string AuthorClientId;
+
+        public CodeWorldEditorSyncPacket(string editorText, string authorClientId = "") : base(62)
+        {
+            EditorText = editorText;
+            AuthorClientId = authorClientId;
+        }
+
+        public CodeWorldEditorSyncPacket() : base(62) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, EditorText ?? string.Empty);
+            PutString(writer, AuthorClientId ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            EditorText = ReadString(reader);
+            AuthorClientId = ReadString(reader);
         }
     }
 

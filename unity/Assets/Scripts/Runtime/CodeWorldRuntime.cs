@@ -13,6 +13,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private const string HostModePrefKey = "MP_HostMode";
     private const string CodeWorldModeValue = "codeworld";
     private const string CodeWorldActivePrefKey = "MP_CodeWorldActive";
+    private const float EditorSyncInterval = 0.12f;
 
     private static readonly Vector3 BuildSpawn = new Vector3(220f, 32f, 520f);
     private static readonly Quaternion BuildRotation = Quaternion.Euler(0f, 180f, 0f);
@@ -40,6 +41,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool editorVisible;
     private string lastEditorTrackedText = string.Empty;
     private bool suppressEditorTracking;
+    private bool suppressEditorSync;
+    private bool editorSyncDirty;
+    private float nextEditorSyncTime;
 
     public static bool ConsumesPauseInput => instance != null && instance.editorVisible;
     public static Vector3 SpawnPosition => BuildSpawn;
@@ -75,7 +79,7 @@ public class CodeWorldRuntime : MonoBehaviour
             return false;
         }
 
-        packet = new CodeWorldStatePacket(true, instance.SerializeHistory());
+        packet = new CodeWorldStatePacket(true, instance.SerializeHistory(), instance.GetEditorText());
         return true;
     }
 
@@ -172,6 +176,8 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             ExecuteLocalScript(editorInput != null ? editorInput.text : string.Empty);
         }
+
+        FlushPendingEditorSync();
     }
 
     private void OnGUI()
@@ -230,6 +236,12 @@ public class CodeWorldRuntime : MonoBehaviour
         if (packet is CodeWorldStatePacket statePacket)
         {
             ApplySnapshot(statePacket);
+            return;
+        }
+
+        if (packet is CodeWorldEditorSyncPacket editorSyncPacket)
+        {
+            ApplyRemoteEditorText(editorSyncPacket);
             return;
         }
 
@@ -325,6 +337,7 @@ public class CodeWorldRuntime : MonoBehaviour
         ActivateLocal(true, false);
         ClearSpawnedObjects();
         commandHistory.Clear();
+        SetEditorText(packet.EditorText);
 
         if (!string.IsNullOrWhiteSpace(packet.HistoryText))
         {
@@ -341,6 +354,28 @@ public class CodeWorldRuntime : MonoBehaviour
 
         RefreshHistoryText();
         SetStatus("Code World synced from host.");
+    }
+
+    private void ApplyRemoteEditorText(CodeWorldEditorSyncPacket packet)
+    {
+        if (packet == null)
+        {
+            return;
+        }
+
+        if (!modeActive)
+        {
+            ActivateLocal(false, false);
+        }
+
+        string incomingText = packet.EditorText ?? string.Empty;
+        if (editorInput != null && string.Equals(editorInput.text ?? string.Empty, incomingText, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SetEditorText(incomingText);
+        SetStatus("Shared code updated.");
     }
 
     private void EnsureWorld()
@@ -463,7 +498,7 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
-        sessionManager.BroadcastQuizPacketToRemotes(new CodeWorldStatePacket(true, SerializeHistory()));
+        sessionManager.BroadcastQuizPacketToRemotes(new CodeWorldStatePacket(true, SerializeHistory(), GetEditorText()));
     }
 
     private bool TryRunCommand(string commandLine, bool applyChange, out string feedback, out bool mutatedWorld)
@@ -1276,7 +1311,7 @@ public class CodeWorldRuntime : MonoBehaviour
         editorScrollRect.viewport = editorViewportRect;
         editorScrollRect.content = editorContentRect;
         editorScrollRect.inertia = false;
-        editorInput.onValueChanged.AddListener(_ => RefreshEditorLayout());
+        editorInput.onValueChanged.AddListener(HandleEditorInputChanged);
         RefreshEditorLayout();
 
         statusText = CreateText("Status", editorPanel.transform, "Press ` to open the editor.", 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
@@ -1478,6 +1513,62 @@ public class CodeWorldRuntime : MonoBehaviour
         SetStatus("Undid last edit.");
     }
 
+    private void HandleEditorInputChanged(string _)
+    {
+        RefreshEditorLayout();
+
+        if (suppressEditorSync)
+        {
+            return;
+        }
+
+        editorSyncDirty = true;
+        nextEditorSyncTime = Time.unscaledTime + EditorSyncInterval;
+    }
+
+    private void FlushPendingEditorSync()
+    {
+        if (!editorSyncDirty || editorInput == null || sessionManager == null || !sessionManager.IsConnectedToSession)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime < nextEditorSyncTime)
+        {
+            return;
+        }
+
+        string currentText = editorInput.text ?? string.Empty;
+        CodeWorldEditorSyncPacket packet = new CodeWorldEditorSyncPacket(currentText, sessionManager.LocalClientId);
+        if (sessionManager.IsHosting)
+        {
+            sessionManager.BroadcastQuizPacketToRemotes(packet);
+        }
+        else
+        {
+            sessionManager.SendQuizPacketToHost(packet);
+        }
+
+        editorSyncDirty = false;
+    }
+
+    private void SetEditorText(string value)
+    {
+        if (editorInput == null)
+        {
+            return;
+        }
+
+        suppressEditorTracking = true;
+        suppressEditorSync = true;
+        editorInput.text = value ?? string.Empty;
+        lastEditorTrackedText = editorInput.text;
+        suppressEditorTracking = false;
+        suppressEditorSync = false;
+        editorSyncDirty = false;
+        RefreshEditorLayout();
+    }
+
     private void CopySelectedEditorText()
     {
         if (editorInput == null)
@@ -1541,6 +1632,11 @@ public class CodeWorldRuntime : MonoBehaviour
             "        Color(\"box1\", \"cyan\");\n" +
             "    }\n" +
             "}";
+    }
+
+    private string GetEditorText()
+    {
+        return editorInput != null ? editorInput.text ?? string.Empty : BuildStarterScript();
     }
 
     private sealed class DraggableWindowHandle : MonoBehaviour, IPointerDownHandler, IDragHandler
