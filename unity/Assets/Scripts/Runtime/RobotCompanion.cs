@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Mentora.Network;
 
@@ -18,6 +19,8 @@ using Mentora.Network;
 public class RobotCompanion : MonoBehaviour
 {
     public const string GuideDebugLinesPrefKey = "RudolfGuideDebugLines";
+    public const string RudolfVoiceModePrefKey = "RudolfVoiceMode";
+    public const string RudolfPushToTalkLabel = "B";
 
     // ── Static trigger API ───────────────────────────────────────────────────
 
@@ -36,6 +39,22 @@ public class RobotCompanion : MonoBehaviour
     public static RobotCompanion Instance => _instance;
     public static bool GuideDebugLinesEnabled => PlayerPrefs.GetInt(GuideDebugLinesPrefKey, 0) == 1;
 
+    public enum RudolfVoiceMode
+    {
+        AlwaysOn,
+        PushToTalk,
+        Disabled
+    }
+
+    public static RudolfVoiceMode CurrentRudolfVoiceMode
+    {
+        get
+        {
+            int saved = PlayerPrefs.GetInt(RudolfVoiceModePrefKey, (int)RudolfVoiceMode.AlwaysOn);
+            return (RudolfVoiceMode)Mathf.Clamp(saved, 0, 2);
+        }
+    }
+
     public static void SetGuideDebugLinesEnabled(bool enabled)
     {
         PlayerPrefs.SetInt(GuideDebugLinesPrefKey, enabled ? 1 : 0);
@@ -52,6 +71,41 @@ public class RobotCompanion : MonoBehaviour
         {
             _instance.gameObject.SetActive(visible);
         }
+    }
+
+    public static RudolfVoiceMode CycleRudolfVoiceMode()
+    {
+        RudolfVoiceMode next = CurrentRudolfVoiceMode switch
+        {
+            RudolfVoiceMode.AlwaysOn => RudolfVoiceMode.PushToTalk,
+            RudolfVoiceMode.PushToTalk => RudolfVoiceMode.Disabled,
+            _ => RudolfVoiceMode.AlwaysOn,
+        };
+        SetRudolfVoiceMode(next);
+        return next;
+    }
+
+    public static void SetRudolfVoiceMode(RudolfVoiceMode mode)
+    {
+        PlayerPrefs.SetInt(RudolfVoiceModePrefKey, (int)mode);
+        PlayerPrefs.Save();
+
+        if (_instance != null && mode == RudolfVoiceMode.Disabled)
+        {
+            _instance.conversationActive = false;
+            _instance.pendingVoiceTranscript = null;
+            _instance.voiceBridge?.SetListening(false);
+        }
+    }
+
+    public static string GetRudolfVoiceModeLabel()
+    {
+        return CurrentRudolfVoiceMode switch
+        {
+            RudolfVoiceMode.PushToTalk => "Push To Talk (" + RudolfPushToTalkLabel + ")",
+            RudolfVoiceMode.Disabled => "Disabled",
+            _ => "Always On",
+        };
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -160,6 +214,8 @@ public class RobotCompanion : MonoBehaviour
     private string     pendingVoiceTranscript;
     private bool       voiceWasSpeaking;
     private float      resumeVoiceListeningAt;
+    private bool       rudolfPushToTalkWasPressed;
+    private float      rudolfPushToTalkSubmitGraceUntil;
     private float      lastNoTranscriptPromptAt = -999f;
     private float      nextSakuraCollisionRefresh;
     private int        ignoredSakuraColliderCount = -1;
@@ -3463,6 +3519,26 @@ public class RobotCompanion : MonoBehaviour
             resumeVoiceListeningAt = Time.unscaledTime + PostSpeechListenDelay;
         }
 
+        bool isPushToTalkMode = CurrentRudolfVoiceMode == RudolfVoiceMode.PushToTalk;
+        bool pushToTalkPressed = isPushToTalkMode && IsRudolfPushToTalkPressed();
+        if (isPushToTalkMode)
+        {
+            if (rudolfPushToTalkWasPressed && !pushToTalkPressed)
+            {
+                rudolfPushToTalkSubmitGraceUntil = Time.unscaledTime + 0.35f;
+                rudolfPushToTalkWasPressed = false;
+                voiceBridge.FinishListening(true);
+                return;
+            }
+
+            rudolfPushToTalkWasPressed = pushToTalkPressed;
+        }
+        else
+        {
+            rudolfPushToTalkWasPressed = false;
+            rudolfPushToTalkSubmitGraceUntil = 0f;
+        }
+
         bool voiceInputAllowed = IsRudolfVoiceInputAllowed();
         if (!voiceInputAllowed)
         {
@@ -3580,10 +3656,21 @@ public class RobotCompanion : MonoBehaviour
                !string.IsNullOrEmpty(MultiplayerSessionManager.Instance.LocalClientId);
     }
 
-    private static bool IsRudolfVoiceInputAllowed()
+    public static bool IsRudolfVoiceInputAllowed()
     {
-        MultiplayerSessionManager manager = MultiplayerSessionManager.Instance;
-        return manager != null && manager.IsVoiceInputAllowedByMode();
+        return CurrentRudolfVoiceMode switch
+        {
+            RudolfVoiceMode.AlwaysOn => true,
+            RudolfVoiceMode.PushToTalk => IsRudolfPushToTalkPressed() ||
+                                          (_instance != null && Time.unscaledTime <= _instance.rudolfPushToTalkSubmitGraceUntil),
+            _ => false,
+        };
+    }
+
+    private static bool IsRudolfPushToTalkPressed()
+    {
+        Keyboard keyboard = Keyboard.current;
+        return keyboard != null && keyboard.bKey.isPressed;
     }
 
     private bool IsConversationActive()

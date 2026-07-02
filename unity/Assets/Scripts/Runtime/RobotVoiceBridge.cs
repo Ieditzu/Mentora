@@ -40,6 +40,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     public bool HasSpeechRecognition => ServerSpeechTranscriptionEnabled || openAiConfigured || witConfigured;
     public bool IsListening => listeningRequested && microphoneManager != null && microphoneManager.IsMicrophoneCapturing;
     public bool IsSpeaking => openAiTtsRequestActive || (speaker != null && speaker.IsActive) || (ttsAudioSource != null && ttsAudioSource.isPlaying);
+    public bool HasPendingUtterance => utteranceActive && utterancePcm.Count > 0;
     public string VoiceProviderLabel => ServerSpeechTranscriptionEnabled ? "Server Groq Whisper" : (openAiConfigured ? "OpenAI Audio" : (witConfigured ? "Wit fallback" : "Not configured"));
 
     private TTSSpeaker speaker;
@@ -141,8 +142,13 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
         else
         {
-            EndSharedMicrophoneListening();
+            EndSharedMicrophoneListening(false);
         }
+    }
+
+    public void FinishListening(bool submitPendingUtterance)
+    {
+        EndSharedMicrophoneListening(submitPendingUtterance);
     }
 
     public void Speak(string text)
@@ -184,7 +190,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
 
     private void OnDestroy()
     {
-        EndSharedMicrophoneListening();
+        EndSharedMicrophoneListening(false);
     }
 
     private void RaiseFullTranscription(string text)
@@ -212,7 +218,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         microphoneAcquired = true;
     }
 
-    private void EndSharedMicrophoneListening()
+    private void EndSharedMicrophoneListening(bool submitPendingUtterance)
     {
         if (!listeningRequested && !microphoneAcquired)
         {
@@ -234,7 +240,14 @@ public sealed class RobotVoiceBridge : MonoBehaviour
         }
 
         microphoneManager = null;
-        ResetUtterance();
+        if (submitPendingUtterance && utteranceActive && !transcriptionRequestActive)
+        {
+            SubmitUtterance();
+        }
+        else
+        {
+            ResetUtterance();
+        }
         MicLevel = 0f;
     }
 
@@ -249,7 +262,7 @@ public sealed class RobotVoiceBridge : MonoBehaviour
             return;
         }
 
-        if (microphoneManager != null && !microphoneManager.IsVoiceInputAllowedByMode())
+        if (RobotCompanion.CurrentRudolfVoiceMode == RobotCompanion.RudolfVoiceMode.Disabled)
         {
             MicLevel = 0f;
             ResetUtterance();
@@ -303,8 +316,9 @@ public sealed class RobotVoiceBridge : MonoBehaviour
     private void SubmitUtterance()
     {
         float utteranceSeconds = Time.unscaledTime - utteranceStartTime;
+        int minByteCount = Mathf.RoundToInt(utteranceSampleRate * 2f * MinUtteranceSeconds);
         if (utteranceSeconds < MinUtteranceSeconds ||
-            utterancePcm.Count < utteranceSampleRate ||
+            utterancePcm.Count < minByteCount ||
             voicedFrameCount < MinVoicedFrames ||
             utterancePeakLevel < MinPeakLevel)
         {

@@ -528,7 +528,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         PlayerPrefs.SetInt(VoiceModePrefKey, (int)voiceMode);
         PlayerPrefs.Save();
 
-        if (voiceMode == VoiceChatMode.Muted)
+        if (voiceMode == VoiceChatMode.Muted && externalVoiceCaptureRequests <= 0)
         {
             StopVoiceCapture();
         }
@@ -579,7 +579,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
         bool restartCapture = microphoneClip != null;
         StopVoiceCapture();
-        if (restartCapture && voiceMode != VoiceChatMode.Muted)
+        if (restartCapture && (voiceMode != VoiceChatMode.Muted || externalVoiceCaptureRequests > 0))
         {
             StartVoiceCapture();
         }
@@ -1879,7 +1879,8 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     private void EnsureLocalVoiceHud()
     {
-        if ((mode == SessionMode.Idle && externalVoiceCaptureRequests <= 0) || voiceMode == VoiceChatMode.Muted)
+        if ((mode == SessionMode.Idle && externalVoiceCaptureRequests <= 0) ||
+            (voiceMode == VoiceChatMode.Muted && externalVoiceCaptureRequests <= 0))
         {
             DestroyLocalVoiceHud();
             return;
@@ -2081,7 +2082,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private void CaptureAndSendVoice()
     {
         bool canTransmit = IsClientConnected && !string.IsNullOrEmpty(localClientId);
-        bool shouldCapture = voiceMode != VoiceChatMode.Muted && (canTransmit || externalVoiceCaptureRequests > 0);
+        bool shouldCapture = (voiceMode != VoiceChatMode.Muted && canTransmit) || externalVoiceCaptureRequests > 0;
         if (!shouldCapture)
         {
             StopVoiceCapture();

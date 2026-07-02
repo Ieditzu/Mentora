@@ -68,6 +68,7 @@ public class PauseMenuManager : MonoBehaviour
     private InputField multiplayerAddressInput;
     private Button playerModelButton;
     private Button voiceChatButton;
+    private Button rudolfVoiceModeButton;
     private Button microphoneDeviceButton;
     private Button guideDebugLinesButton;
     private InputField rudolfApiKeyInput;
@@ -679,7 +680,7 @@ public class PauseMenuManager : MonoBehaviour
         CreateSensitivitySection(settingsPanel.transform);
         CreateGlobalVoiceSettingsSection(settingsPanel.transform);
 
-        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -264f), new Color(0.4f, 0.4f, 0.4f));
+        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -282f), new Color(0.4f, 0.4f, 0.4f));
         settingsBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
         settingsBackBtn.GetComponentInChildren<Text>().fontSize = 15;
         settingsBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
@@ -1166,6 +1167,7 @@ public class PauseMenuManager : MonoBehaviour
         else if (panel == settingsPanel)
         {
             RefreshVoiceChatButton();
+            RefreshRudolfVoiceModeButton();
             RefreshPlayerModelButton();
             RefreshGuideDebugLinesButton();
             RefreshRudolfApiKeyInput();
@@ -1186,6 +1188,7 @@ public class PauseMenuManager : MonoBehaviour
             multiplayerSession.FriendSessionsChanged += OnFriendSessionsChanged;
             OnMultiplayerStatusChanged(multiplayerSession.CurrentStatus);
             RefreshVoiceChatButton();
+            RefreshRudolfVoiceModeButton();
             RefreshPlayerModelButton();
         }
     }
@@ -1211,6 +1214,13 @@ public class PauseMenuManager : MonoBehaviour
         }
 
         multiplayerSession.CycleVoiceMode();
+        RefreshVoiceChatButton();
+    }
+
+    private void OnRudolfVoiceModeClicked()
+    {
+        RobotCompanion.CycleRudolfVoiceMode();
+        RefreshRudolfVoiceModeButton();
         RefreshVoiceChatButton();
     }
 
@@ -1277,6 +1287,32 @@ public class PauseMenuManager : MonoBehaviour
         }
     }
 
+    private void RefreshRudolfVoiceModeButton()
+    {
+        if (rudolfVoiceModeButton == null)
+        {
+            return;
+        }
+
+        RobotCompanion.RudolfVoiceMode mode = RobotCompanion.CurrentRudolfVoiceMode;
+        Text label = rudolfVoiceModeButton.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.text = "Rudolf: " + RobotCompanion.GetRudolfVoiceModeLabel();
+        }
+
+        Image image = rudolfVoiceModeButton.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = mode switch
+            {
+                RobotCompanion.RudolfVoiceMode.PushToTalk => new Color(0.42f, 0.36f, 0.72f, 1f),
+                RobotCompanion.RudolfVoiceMode.Disabled => new Color(0.55f, 0.22f, 0.22f, 1f),
+                _ => new Color(0.14f, 0.58f, 0.52f, 1f),
+            };
+        }
+    }
+
     private void RefreshVoiceChatButton()
     {
         if (voiceChatButton == null || multiplayerSession == null)
@@ -1319,13 +1355,19 @@ public class PauseMenuManager : MonoBehaviour
         {
             string provider = "Rudolf STT: server Groq";
             string tts = HasRudolfOpenAiKeyConfigured() ? "TTS: OpenAI" : "TTS: Wit fallback";
-            string mode = multiplayerSession.CurrentVoiceMode switch
+            string multiplayerMode = multiplayerSession.CurrentVoiceMode switch
             {
-                MultiplayerSessionManager.VoiceChatMode.PushToTalk => "Hold V for multiplayer + Rudolf",
-                MultiplayerSessionManager.VoiceChatMode.Muted => "Mic disabled for multiplayer + Rudolf",
-                _ => "Mic always enabled for multiplayer + Rudolf",
+                MultiplayerSessionManager.VoiceChatMode.PushToTalk => "MP: hold V",
+                MultiplayerSessionManager.VoiceChatMode.Muted => "MP: muted",
+                _ => "MP: always",
             };
-            voiceHintText.text = provider + " • " + tts + " • " + mode;
+            string rudolfMode = RobotCompanion.CurrentRudolfVoiceMode switch
+            {
+                RobotCompanion.RudolfVoiceMode.PushToTalk => "Rudolf: hold " + RobotCompanion.RudolfPushToTalkLabel,
+                RobotCompanion.RudolfVoiceMode.Disabled => "Rudolf: disabled",
+                _ => "Rudolf: always",
+            };
+            voiceHintText.text = provider + " • " + tts + " • " + multiplayerMode + " • " + rudolfMode;
         }
     }
 
@@ -1754,41 +1796,47 @@ public class PauseMenuManager : MonoBehaviour
     {
         GameObject card = CreateUiObject("VoiceSettingsCard", parent);
         RectTransform cardRect = card.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(500f, 340f);
-        cardRect.anchoredPosition = new Vector2(0f, -48f);
+        cardRect.sizeDelta = new Vector2(520f, 390f);
+        cardRect.anchoredPosition = new Vector2(0f, -68f);
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
         card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
 
-        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 140f), new Vector2(240f, 30f));
+        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 166f), new Vector2(240f, 30f));
 
-        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 98f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 124f), new Color(0.26f, 0.50f, 0.58f, 1f));
         playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
         playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
         playerModelButton.onClick.AddListener(OnPlayerModelClicked);
 
-        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 56f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 82f), new Color(0.18f, 0.55f, 0.80f, 1f));
         voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
         voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
         voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
 
-        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, 12f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        rudolfVoiceModeButton = CreateButton(card.transform, "RudolfVoiceModeBtn", "Rudolf: Always On", new Vector2(0f, 38f), new Color(0.14f, 0.58f, 0.52f, 1f));
+        rudolfVoiceModeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
+        rudolfVoiceModeButton.GetComponentInChildren<Text>().fontSize = 14;
+        rudolfVoiceModeButton.onClick.AddListener(OnRudolfVoiceModeClicked);
+
+        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -6f), new Color(0.26f, 0.42f, 0.68f, 1f));
         microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
         microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
         microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
 
-        guideDebugLinesButton = CreateButton(card.transform, "GuideDebugLinesBtn", "Rudolf Path Lines: Off", new Vector2(0f, -32f), new Color(0.35f, 0.34f, 0.50f, 1f));
+        guideDebugLinesButton = CreateButton(card.transform, "GuideDebugLinesBtn", "Rudolf Path Lines: Off", new Vector2(0f, -50f), new Color(0.35f, 0.34f, 0.50f, 1f));
         guideDebugLinesButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
         guideDebugLinesButton.GetComponentInChildren<Text>().fontSize = 13;
         guideDebugLinesButton.onClick.AddListener(OnGuideDebugLinesClicked);
 
-        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -76f), new Vector2(260f, 22f));
-        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -108f), new Vector2(340f, 34f), false);
+        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -92f), new Vector2(260f, 22f));
+        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -122f), new Vector2(340f, 34f), false);
         rudolfApiKeyInput.contentType = InputField.ContentType.Password;
         rudolfApiKeyInput.asteriskChar = '•';
         rudolfApiKeyInput.SetTextWithoutNotify(PlayerPrefs.GetString(RobotVoiceBridge.OpenAiApiKeyPrefKey, string.Empty));
         rudolfApiKeyInput.onEndEdit.AddListener(OnRudolfApiKeyChanged);
 
-        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -150f), new Vector2(410f, 28f));
+        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -166f), new Vector2(455f, 34f));
+        RefreshRudolfVoiceModeButton();
         RefreshGuideDebugLinesButton();
     }
 
