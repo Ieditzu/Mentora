@@ -459,7 +459,7 @@ public class PauseMenuManager : MonoBehaviour
 
     private bool WasPausePressedThisFrame()
     {
-        return IsEscapePressed();
+        return IsEscapePressed() && !CodeWorldRuntime.ConsumesPauseInput;
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -850,6 +850,7 @@ public class PauseMenuManager : MonoBehaviour
         mpDisconnectBtn.onClick.AddListener(() => {
             if (joinSubPanel != null) joinSubPanel.SetActive(false);
             if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
+            CodeWorldRuntime.DeactivateLocal();
             PlayerPrefs.SetInt("MP_UseCustomSpawn", 0);
             PlayerPrefs.Save();
             EnsureMultiplayerSession();
@@ -916,16 +917,18 @@ public class PauseMenuManager : MonoBehaviour
         CreateText("HostGameTitle", hgTopBar.transform, "HOST GAME", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
 
         // Subtitle
-        CreateText("HostGameSub", hostGamePanel.transform, "Choose which island to host on:", 20, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.7f, 0.85f, 1f), new Vector2(0f, 140f), new Vector2(560f, 30f));
+        CreateText("HostGameSub", hostGamePanel.transform, "Choose which multiplayer mode to host:", 20, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.7f, 0.85f, 1f), new Vector2(0f, 160f), new Vector2(560f, 30f));
 
         // Local Island button
         Button localIslandBtn = CreateButton(hostGamePanel.transform, "LocalIslandBtn", "Local Island", new Vector2(0f, 60f), new Color(0.18f, 0.55f, 0.80f, 1f));
         localIslandBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
         localIslandBtn.GetComponentInChildren<Text>().fontSize = 22;
         localIslandBtn.onClick.AddListener(() => {
+            CodeWorldRuntime.DeactivateLocal();
             HostMultiplayerGame();
             if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
             PlayerPrefs.SetInt("MP_UseCustomSpawn", 0);
+            PlayerPrefs.SetString("MP_HostMode", "local");
             PlayerPrefs.Save();
             ShowPanel(multiplayerPanel);
         });
@@ -938,17 +941,35 @@ public class PauseMenuManager : MonoBehaviour
         quizIslandBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
         quizIslandBtn.GetComponentInChildren<Text>().fontSize = 22;
         quizIslandBtn.onClick.AddListener(() => {
+            CodeWorldRuntime.DeactivateLocal();
             HostMultiplayerGame();
             TeleportPlayerToQuizIsland();
             if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(true);
+            PlayerPrefs.SetString("MP_HostMode", "quiz");
+            PlayerPrefs.Save();
             ShowPanel(multiplayerPanel);
         });
 
         // Description under Quiz Island
         CreateText("QuizIslandDesc", hostGamePanel.transform, "Host on the Quiz Island. All players will spawn there.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.6f, 1f), new Vector2(0f, -98f), new Vector2(500f, 26f));
 
+        Button codeWorldBtn = CreateButton(hostGamePanel.transform, "CodeWorldBtn", "Your Code Controls The World", new Vector2(0f, -180f), new Color(0.96f, 0.48f, 0.18f, 1f));
+        codeWorldBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
+        codeWorldBtn.GetComponentInChildren<Text>().fontSize = 20;
+        codeWorldBtn.onClick.AddListener(() => {
+            HostMultiplayerGame();
+            TeleportPlayerToCodeWorld();
+            CodeWorldRuntime.ActivateForHost();
+            if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
+            PlayerPrefs.SetString("MP_HostMode", "codeworld");
+            PlayerPrefs.Save();
+            ShowPanel(multiplayerPanel);
+        });
+
+        CreateText("CodeWorldDesc", hostGamePanel.transform, "Open the editor with `, type commands, and build the scene entirely from code while flying in noclip.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.98f, 0.8f, 0.62f), new Vector2(0f, -228f), new Vector2(560f, 44f));
+
         // Back button
-        Button hgBackBtn = CreateButton(hostGamePanel.transform, "HGBackBtn", "Back", new Vector2(0f, -210f), new Color(0.4f, 0.4f, 0.4f));
+        Button hgBackBtn = CreateButton(hostGamePanel.transform, "HGBackBtn", "Back", new Vector2(0f, -250f), new Color(0.4f, 0.4f, 0.4f));
         hgBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
         hgBackBtn.GetComponentInChildren<Text>().fontSize = 15;
         hgBackBtn.onClick.AddListener(() => ShowPanel(multiplayerPanel));
@@ -1340,6 +1361,7 @@ public class PauseMenuManager : MonoBehaviour
     }
 
     private static readonly Vector3 QuizIslandSpawn = new Vector3(76f, 9f, 426f);
+    private static readonly Quaternion CodeWorldSpawnRotation = Quaternion.Euler(0f, 180f, 0f);
 
     private static void TeleportPlayerToQuizIsland()
     {
@@ -1352,6 +1374,29 @@ public class PauseMenuManager : MonoBehaviour
         PlayerPrefs.SetFloat("MP_SpawnX", QuizIslandSpawn.x);
         PlayerPrefs.SetFloat("MP_SpawnY", QuizIslandSpawn.y);
         PlayerPrefs.SetFloat("MP_SpawnZ", QuizIslandSpawn.z);
+        PlayerPrefs.SetInt("MP_UseCustomSpawn", 1);
+        PlayerPrefs.Save();
+    }
+
+    private static void TeleportPlayerToCodeWorld()
+    {
+        FirstPersonControllerSimple fps = PlayerCache.GetFps();
+        if (fps != null)
+        {
+            fps.TeleportTo(CodeWorldRuntime.SpawnPosition, CodeWorldSpawnRotation);
+        }
+        else
+        {
+            Transform player = PlayerCache.ResolvePlayerTransform();
+            if (player != null)
+            {
+                player.SetPositionAndRotation(CodeWorldRuntime.SpawnPosition, CodeWorldSpawnRotation);
+            }
+        }
+
+        PlayerPrefs.SetFloat("MP_SpawnX", CodeWorldRuntime.SpawnPosition.x);
+        PlayerPrefs.SetFloat("MP_SpawnY", CodeWorldRuntime.SpawnPosition.y);
+        PlayerPrefs.SetFloat("MP_SpawnZ", CodeWorldRuntime.SpawnPosition.z);
         PlayerPrefs.SetInt("MP_UseCustomSpawn", 1);
         PlayerPrefs.Save();
     }
