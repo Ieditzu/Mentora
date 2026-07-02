@@ -30,6 +30,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private GameObject editorPanel;
     private RectTransform editorPanelRect;
     private InputField editorInput;
+    private ScrollRect editorScrollRect;
+    private RectTransform editorContentRect;
+    private RectTransform editorViewportRect;
     private Text statusText;
     private Text historyText;
     private readonly Stack<string> editorUndoStack = new Stack<string>();
@@ -109,11 +112,8 @@ public class CodeWorldRuntime : MonoBehaviour
         BuildEditorUi();
         UpdateEditorVisibility(false);
 
-        if (PlayerPrefs.GetInt(CodeWorldActivePrefKey, 0) == 1 ||
-            string.Equals(PlayerPrefs.GetString(HostModePrefKey, string.Empty), CodeWorldModeValue, StringComparison.OrdinalIgnoreCase))
-        {
-            ActivateLocal(false, true);
-        }
+        // Do not auto-enable code-world from saved prefs.
+        // It should only activate when the host explicitly chooses the code-world option.
     }
 
     private void OnEnable()
@@ -265,7 +265,6 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (persistPrefs)
         {
-            PlayerPrefs.SetInt(CodeWorldActivePrefKey, 1);
             PlayerPrefs.SetString(HostModePrefKey, CodeWorldModeValue);
             PlayerPrefs.Save();
         }
@@ -1199,11 +1198,60 @@ public class CodeWorldRuntime : MonoBehaviour
 
         CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
 
-        editorInput = CreateInputField(editorPanel.transform, "CodeInput", BuildStarterScript(), new Vector2(0f, 10f), new Vector2(590f, 300f));
+        GameObject codeViewport = CreateUiObject("CodeViewport", editorPanel.transform, new Vector2(590f, 300f), new Vector2(0f, 10f));
+        editorViewportRect = codeViewport.GetComponent<RectTransform>();
+        codeViewport.AddComponent<Image>().color = new Color(0.1f, 0.14f, 0.21f, 0.98f);
+        Outline codeOutline = codeViewport.AddComponent<Outline>();
+        codeOutline.effectColor = new Color(0.35f, 0.72f, 0.95f, 0.55f);
+        codeOutline.effectDistance = new Vector2(1f, -1f);
+
+        Mask codeMask = codeViewport.AddComponent<Mask>();
+        codeMask.showMaskGraphic = false;
+
+        editorScrollRect = codeViewport.AddComponent<ScrollRect>();
+        editorScrollRect.horizontal = false;
+        editorScrollRect.vertical = true;
+        editorScrollRect.scrollSensitivity = 24f;
+        editorScrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+        GameObject codeContent = CreateUiObject("CodeContent", codeViewport.transform, new Vector2(554f, 360f), Vector2.zero);
+        editorContentRect = codeContent.GetComponent<RectTransform>();
+        editorContentRect.anchorMin = new Vector2(0f, 1f);
+        editorContentRect.anchorMax = new Vector2(1f, 1f);
+        editorContentRect.pivot = new Vector2(0.5f, 1f);
+        editorContentRect.anchoredPosition = new Vector2(0f, -12f);
+        editorContentRect.sizeDelta = new Vector2(-24f, 360f);
+
+        editorInput = codeViewport.AddComponent<InputField>();
+        editorInput.targetGraphic = codeViewport.GetComponent<Image>();
         editorInput.lineType = InputField.LineType.MultiLineNewline;
         editorInput.text = BuildStarterScript();
         lastEditorTrackedText = editorInput.text;
         editorUndoStack.Clear();
+
+        Text codeText = CreateText("CodeInputText", codeContent.transform, string.Empty, 16, FontStyle.Normal, TextAnchor.UpperLeft, Color.white, Vector2.zero, new Vector2(530f, 320f));
+        RectTransform codeTextRect = codeText.rectTransform;
+        codeTextRect.anchorMin = Vector2.zero;
+        codeTextRect.anchorMax = Vector2.one;
+        codeTextRect.offsetMin = new Vector2(12f, 10f);
+        codeTextRect.offsetMax = new Vector2(-12f, -10f);
+        codeText.fontSize = 18;
+
+        Text codeHint = CreateText("CodePlaceholder", codeContent.transform, "Type C#-style code here...", 16, FontStyle.Italic, TextAnchor.UpperLeft, new Color(1f, 1f, 1f, 0.35f), Vector2.zero, new Vector2(530f, 320f));
+        RectTransform codeHintRect = codeHint.rectTransform;
+        codeHintRect.anchorMin = Vector2.zero;
+        codeHintRect.anchorMax = Vector2.one;
+        codeHintRect.offsetMin = new Vector2(12f, 10f);
+        codeHintRect.offsetMax = new Vector2(-12f, -10f);
+        codeHint.fontSize = 16;
+
+        editorInput.textComponent = codeText;
+        editorInput.placeholder = codeHint;
+        editorScrollRect.viewport = editorViewportRect;
+        editorScrollRect.content = editorContentRect;
+        editorScrollRect.inertia = false;
+        editorInput.onValueChanged.AddListener(_ => RefreshEditorLayout());
+        RefreshEditorLayout();
 
         statusText = CreateText("Status", editorPanel.transform, "Press ` to open the editor.", 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
         historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
@@ -1239,6 +1287,8 @@ public class CodeWorldRuntime : MonoBehaviour
 
             editorInput.ActivateInputField();
             editorInput.Select();
+            RefreshEditorLayout();
+            ScrollEditorToTop();
         }
     }
 
@@ -1400,10 +1450,38 @@ public class CodeWorldRuntime : MonoBehaviour
         SetStatus("Undid last edit.");
     }
 
+    private void RefreshEditorLayout()
+    {
+        if (editorInput == null || editorContentRect == null || editorViewportRect == null)
+        {
+            return;
+        }
+
+        Text textComponent = editorInput.textComponent;
+        string currentText = editorInput.text ?? string.Empty;
+        float lineHeight = textComponent != null ? Mathf.Max(20f, textComponent.fontSize * 1.25f) : 20f;
+        int lineCount = Mathf.Max(1, currentText.Split('\n').Length);
+        float preferredHeight = lineCount * lineHeight + 24f;
+        float viewportHeight = editorViewportRect.rect.height;
+        editorContentRect.sizeDelta = new Vector2(editorContentRect.sizeDelta.x, Mathf.Max(viewportHeight, preferredHeight));
+
+        if (textComponent != null)
+        {
+            textComponent.text = currentText;
+        }
+    }
+
+    private void ScrollEditorToTop()
+    {
+        if (editorScrollRect != null)
+        {
+            editorScrollRect.verticalNormalizedPosition = 1f;
+        }
+    }
+
     private static string BuildStarterScript()
     {
         return
-            "using UnityEngine;\n\n" +
             "public static class WorldScript\n" +
             "{\n" +
             "    public static void Run()\n" +
