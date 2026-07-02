@@ -186,6 +186,18 @@ public class RobotCompanion : MonoBehaviour
     private static readonly Vector3 GuideHubPosition = new Vector3(55f, 3f, 218.4f);
     private static readonly Vector3 CommunityBridgeEastAnchor = new Vector3(23.5f, 1.0f, 210.4f);
     private static readonly Vector3 CommunityBridgeCrownAnchor = new Vector3(19.5f, 5.6f, 214.4f);
+    private static readonly Vector3[] CppGuideAnchorProbes =
+    {
+        new Vector3(90f, 1f, 218f),
+        new Vector3(110f, 3.3f, 218f),
+        new Vector3(130f, 6.8f, 218f),
+        new Vector3(145f, 6.6f, 216f),
+        new Vector3(155f, 1.4f, 218f),
+        new Vector3(166f, 3.2f, 236f),
+        new Vector3(172f, 2.9f, 233f),
+        new Vector3(175f, 4.2f, 239f),
+        new Vector3(181f, 5.8f, 242f)
+    };
     private static readonly Vector2Int[] GuideAStarDirections =
     {
         new Vector2Int(1, 0),
@@ -2008,20 +2020,110 @@ public class RobotCompanion : MonoBehaviour
     {
         output.Clear();
         routeReason = "";
-        if (target == null || target.Island != RudolfIslandGuideTarget.IslandId.Community)
+        if (target == null)
         {
-            routeReason = "no configured anchors for target";
+            routeReason = "target was null";
             return false;
         }
 
-        return TryBuildGuidePathThroughAnchors(
-            start,
-            destination,
-            output,
-            out routeReason,
-            GuideHubPosition,
-            CommunityBridgeEastAnchor,
-            CommunityBridgeCrownAnchor);
+        if (target.Island == RudolfIslandGuideTarget.IslandId.Community)
+        {
+            return TryBuildGuidePathThroughAnchors(
+                start,
+                destination,
+                output,
+                out routeReason,
+                GuideHubPosition,
+                CommunityBridgeEastAnchor,
+                CommunityBridgeCrownAnchor);
+        }
+
+        if (target.Island == RudolfIslandGuideTarget.IslandId.Cpp)
+        {
+            return TryBuildCppGuideAnchorFallbackPath(start, destination, output, out routeReason);
+        }
+
+        routeReason = "no configured anchors for target";
+        return false;
+    }
+
+    private bool TryBuildCppGuideAnchorFallbackPath(
+        Vector3 start,
+        Vector3 destination,
+        List<Vector3> output,
+        out string routeReason)
+    {
+        output.Clear();
+        routeReason = "";
+        List<Vector3> sampledAnchors = new List<Vector3>(CppGuideAnchorProbes.Length);
+        List<Vector3> selectedAnchorProbes = new List<Vector3>(CppGuideAnchorProbes.Length);
+        int nearestAnchorIndex = -1;
+        float nearestAnchorDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < CppGuideAnchorProbes.Length; i++)
+        {
+            Vector3 anchorProbe = CppGuideAnchorProbes[i];
+            if (!TrySampleGuideWalkablePoint(anchorProbe, out Vector3 sampledAnchor, out string sampleReason))
+            {
+                GuideWarn("C++ anchor sample failed index=" + i +
+                          " probe=" + FormatGuideVector(anchorProbe) +
+                          " reason=" + sampleReason +
+                          "; using configured anchor height.");
+                sampledAnchor = anchorProbe + Vector3.up * guideHoverAboveGround;
+            }
+
+            sampledAnchors.Add(sampledAnchor);
+            float distance = HorizontalDistance(start, sampledAnchor);
+            if (distance < nearestAnchorDistance)
+            {
+                nearestAnchorDistance = distance;
+                nearestAnchorIndex = i;
+            }
+        }
+
+        if (nearestAnchorIndex < 0)
+        {
+            routeReason = "cpp anchors unavailable";
+            return false;
+        }
+
+        for (int i = nearestAnchorIndex; i < CppGuideAnchorProbes.Length; i++)
+        {
+            selectedAnchorProbes.Add(CppGuideAnchorProbes[i]);
+        }
+
+        if (TryBuildGuidePathThroughAnchors(
+                start,
+                destination,
+                output,
+                out string strictRouteReason,
+                selectedAnchorProbes.ToArray()))
+        {
+            routeReason = "cppStrict " + strictRouteReason + " startAnchor=" + nearestAnchorIndex;
+            return true;
+        }
+
+        output.Clear();
+        for (int i = nearestAnchorIndex; i < sampledAnchors.Count; i++)
+        {
+            Vector3 anchor = sampledAnchors[i];
+            if (output.Count == 0 ||
+                HorizontalDistance(output[output.Count - 1], anchor) > guideWaypointReachDistance)
+            {
+                output.Add(anchor);
+            }
+        }
+
+        if (output.Count == 0 ||
+            HorizontalDistance(output[output.Count - 1], destination) > guideWaypointReachDistance)
+        {
+            output.Add(destination);
+        }
+
+        routeReason = "cppLoose strictFailed=(" + strictRouteReason + ") startAnchor=" + nearestAnchorIndex +
+                      " anchors=" + (sampledAnchors.Count - nearestAnchorIndex) +
+                      " corners=" + output.Count;
+        return output.Count > 0;
     }
 
     private bool TryBuildGuidePathThroughAnchors(
@@ -2564,6 +2666,12 @@ public class RobotCompanion : MonoBehaviour
             return false;
         }
 
+        if (IsGuideWaterSurface(hit.collider.transform))
+        {
+            rejectReason = "water surface";
+            return false;
+        }
+
         if (hit.normal.y < 0.35f)
         {
             rejectReason = "normal too steep " + hit.normal.y.ToString("0.00");
@@ -2624,6 +2732,11 @@ public class RobotCompanion : MonoBehaviour
                 return false;
             }
 
+            if (IsGuideWaterSurface(collider.transform))
+            {
+                continue;
+            }
+
             if (IsGuideThinDecorativeObstacle(collider))
             {
                 continue;
@@ -2650,7 +2763,7 @@ public class RobotCompanion : MonoBehaviour
 
     private bool IsGuideGroundLikeCollider(Collider collider, float hoverY)
     {
-        if (collider == null || IsTreeOrFoliage(collider.transform))
+        if (collider == null || IsGuideWaterSurface(collider.transform) || IsTreeOrFoliage(collider.transform))
         {
             return false;
         }
@@ -2695,7 +2808,7 @@ public class RobotCompanion : MonoBehaviour
 
     private bool IsGuidePreferredPathSurface(Collider collider)
     {
-        if (collider == null || IsTreeOrFoliage(collider.transform))
+        if (collider == null || IsGuideWaterSurface(collider.transform) || IsTreeOrFoliage(collider.transform))
         {
             return false;
         }
@@ -3048,6 +3161,11 @@ public class RobotCompanion : MonoBehaviour
             return true;
         }
 
+        if (IsGuideTerrainSurface(hitTransform))
+        {
+            return false;
+        }
+
         while (hitTransform != null)
         {
             string name = hitTransform.name.ToLowerInvariant();
@@ -3057,6 +3175,66 @@ public class RobotCompanion : MonoBehaviour
                 name.Contains("foliage") ||
                 name.Contains("branch") ||
                 name.Contains("trunk"))
+            {
+                return true;
+            }
+
+            hitTransform = hitTransform.parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsGuideTerrainSurface(Transform hitTransform)
+    {
+        if (hitTransform == null)
+        {
+            return false;
+        }
+
+        string leafName = hitTransform.name.ToLowerInvariant();
+        if (leafName == "grnd" ||
+            leafName == "ground" ||
+            leafName == "terrain" ||
+            leafName == "floor" ||
+            leafName == "path" ||
+            leafName == "road" ||
+            leafName == "slope" ||
+            leafName == "island")
+        {
+            return true;
+        }
+
+        if (leafName == "all")
+        {
+            Transform parent = hitTransform.parent;
+            while (parent != null)
+            {
+                string parentName = parent.name.ToLowerInvariant();
+                if (parentName.Contains("low_poly_trees") ||
+                    parentName.Contains("terrain") ||
+                    parentName.Contains("island"))
+                {
+                    return true;
+                }
+
+                parent = parent.parent;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsGuideWaterSurface(Transform hitTransform)
+    {
+        while (hitTransform != null)
+        {
+            string name = hitTransform.name.ToLowerInvariant();
+            if (name.Contains("water") ||
+                name.Contains("lake") ||
+                name.Contains("river") ||
+                name.Contains("ocean") ||
+                name.Contains("sea"))
             {
                 return true;
             }
