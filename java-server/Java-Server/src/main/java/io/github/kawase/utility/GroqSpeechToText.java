@@ -8,7 +8,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 public class GroqSpeechToText {
     private static final String TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -16,41 +18,82 @@ public class GroqSpeechToText {
     private static final String PROMPT = "Mentora game voice. Important words: Rudolf, Python Island, C++ Island, C plus plus Island, Logic Island, Community Island, code, run, execute, debug.";
     private static final int MIN_SAMPLE_RATE = 8000;
     private static final int MAX_SAMPLE_RATE = 48000;
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(8))
+            .build();
 
     public String transcribePcm16(final byte[] pcm16, final int sampleRate) {
         if (pcm16 == null || pcm16.length < 2) {
             return "";
         }
 
-        final String apiKey = GroqAI.getConfiguredApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
+        if (!GroqApiKeys.hasConfiguredKeys()) {
             System.out.println("[GroqSTT] No Groq API key configured.");
             return "";
         }
 
         final int resolvedSampleRate = Math.max(MIN_SAMPLE_RATE, Math.min(MAX_SAMPLE_RATE, sampleRate));
         final byte[] wavBytes = buildWavBytes(pcm16, resolvedSampleRate);
+
+        for (int attempt = 0; attempt < GroqApiKeys.configuredKeyCount(); attempt++) {
+            final GroqApiKeys.ConfiguredKey apiKey = GroqApiKeys.acquireAvailableKey(GroqApiKeys.Purpose.STT);
+            if (apiKey == null) {
+                System.out.println("[GroqSTT] All Groq STT API keys are cooling down.");
+                return "";
+            }
+
+            final String transcript = transcribeWavWithKey(wavBytes, apiKey);
+            if (transcript != null) {
+                return transcript;
+            }
+        }
+
+        System.out.println("[GroqSTT] Failed after trying configured STT API keys.");
+        return "";
+    }
+
+    private String transcribeWavWithKey(final byte[] wavBytes, final GroqApiKeys.ConfiguredKey apiKey) {
         try {
             final String boundary = "MentoraGroqBoundary" + System.nanoTime();
             final byte[] body = buildMultipartBody(boundary, wavBytes);
             final HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(TRANSCRIPTION_URL))
-                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(35))
+                    .header("Authorization", "Bearer " + apiKey.value())
                     .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                     .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                     .build();
 
-            final HttpResponse<String> response = HttpClient.newHttpClient()
-                    .send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
+                if (GroqApiKeys.shouldRotateForStatus(response.statusCode())) {
+                    GroqApiKeys.markFailure(
+                            apiKey,
+                            GroqApiKeys.cooldownForStatus(response.statusCode(), response.headers()),
+                            "STT HTTP " + response.statusCode()
+                    );
+                    return null;
+                }
+
                 System.out.println("[GroqSTT] Error " + response.statusCode() + ": " + response.body());
                 return "";
             }
 
             final JSONObject json = new JSONObject(response.body());
             final String text = json.optString("text", "");
-            System.out.println("[GroqSTT] Transcript=" + text);
+            GroqApiKeys.markSuccess(apiKey);
+            System.out.println("[GroqSTT] Transcript=" + text + " using key " + apiKey.label() + ".");
             return text == null ? "" : text.trim();
+        } catch (HttpTimeoutException e) {
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), "STT request timeout");
+            return null;
+        } catch (IOException e) {
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), "STT " + e.getClass().getSimpleName());
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), "STT interrupted request");
+            return null;
         } catch (Exception e) {
             System.out.println("[GroqSTT] Exception: " + e.getClass().getName());
             e.printStackTrace();

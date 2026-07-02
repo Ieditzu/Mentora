@@ -21,7 +21,7 @@ cd java-server/Java-Server
 ./gradlew bootRun    # dev server; HTTP :8085, WebSocket :49154
 ./gradlew build      # produces JAR in build/libs/
 ```
-Requires `api-keys.json` (Groq key) and `src/main/resources/application.properties` (DB credentials) — neither is in the repo.
+Requires `api-keys.json` (Groq key config) and `src/main/resources/application.properties` (DB credentials). Use `groq_api_keys` for multiple keys, e.g. `{ "groq_api_keys": ["gsk_first", "gsk_second"] }`; chat and STT rotate independently on rate limits/timeouts.
 
 ### Web Creator
 ```bash
