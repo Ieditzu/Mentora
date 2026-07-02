@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Mentora.Network;
 using UnityEngine;
@@ -67,6 +68,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool aiNetworkSubscribed;
     private bool editorHintDismissed;
     private const int MaxAiChatLines = 16;
+    private const int MaxLoopIterations = 256;
 
     private sealed class RemoteCursorVisual
     {
@@ -535,10 +537,15 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
-        string[] lines = script.Replace(";", "\n").Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        if (!TryCompileScriptCommands(script, out List<string> lines, out string compileFeedback))
+        {
+            SetStatus(compileFeedback);
+            return;
+        }
+
         int successCount = 0;
 
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < lines.Count; i++)
         {
             string line = NormalizeCommand(lines[i]);
             if (string.IsNullOrWhiteSpace(line))
@@ -644,7 +651,7 @@ public class CodeWorldRuntime : MonoBehaviour
         switch (command)
         {
             case "help":
-                feedback = "Commands: cube name x y z | move name x y z | rotate name x y z | scale name x y z | color name red/#ff0/255 0 0 | delete name | clear | list";
+                feedback = "Commands: cube/move/rotate/scale/color/delete/clear/list plus simple for/while loops.";
                 return true;
 
             case "list":
@@ -697,6 +704,724 @@ public class CodeWorldRuntime : MonoBehaviour
                 feedback = "Unknown command: " + tokens[0];
                 return false;
         }
+    }
+
+    private bool TryCompileScriptCommands(string script, out List<string> commands, out string feedback)
+    {
+        commands = new List<string>();
+        List<string> statements = TokenizeScript(script);
+        Dictionary<string, float> variables = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        int index = 0;
+        return TryCompileStatements(statements, ref index, variables, commands, out feedback);
+    }
+
+    private bool TryCompileStatements(List<string> statements, ref int index, Dictionary<string, float> variables, List<string> commands, out string feedback)
+    {
+        while (index < statements.Count)
+        {
+            string statement = statements[index];
+            if (string.IsNullOrWhiteSpace(statement))
+            {
+                index++;
+                continue;
+            }
+
+            if (statement == "}")
+            {
+                index++;
+                feedback = string.Empty;
+                return true;
+            }
+
+            if (statement == "{")
+            {
+                index++;
+                continue;
+            }
+
+            if (IsIgnorableScriptStatement(statement))
+            {
+                index++;
+                continue;
+            }
+
+            if (TryParseLoopHeader(statement, "for", out string loopHeader))
+            {
+                index++;
+                if (!TryExtractLoopBody(statements, ref index, out List<string> bodyStatements, out feedback))
+                {
+                    return false;
+                }
+
+                if (!TryCompileForLoop(loopHeader, bodyStatements, variables, commands, out feedback))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (TryParseLoopHeader(statement, "while", out loopHeader))
+            {
+                index++;
+                if (!TryExtractLoopBody(statements, ref index, out List<string> bodyStatements, out feedback))
+                {
+                    return false;
+                }
+
+                if (!TryCompileWhileLoop(loopHeader, bodyStatements, variables, commands, out feedback))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (!TryExecuteVariableStatement(statement, variables, out bool handledVariable, out feedback))
+            {
+                return false;
+            }
+
+            if (handledVariable)
+            {
+                index++;
+                continue;
+            }
+
+            if (TryCompileCommandStatement(statement, variables, out string compiledCommand, out feedback))
+            {
+                if (!string.IsNullOrWhiteSpace(compiledCommand))
+                {
+                    commands.Add(compiledCommand);
+                }
+
+                index++;
+                continue;
+            }
+
+            return false;
+        }
+
+        feedback = string.Empty;
+        return true;
+    }
+
+    private bool TryCompileForLoop(string header, List<string> bodyStatements, Dictionary<string, float> variables, List<string> commands, out string feedback)
+    {
+        string[] sections = SplitTopLevelSemicolons(header);
+        if (sections.Length != 3)
+        {
+            feedback = "For syntax: for (int i = 0; i < 5; i++)";
+            return false;
+        }
+
+        if (!TryExecuteVariableStatement(sections[0], variables, out _, out feedback))
+        {
+            return false;
+        }
+
+        int guard = 0;
+        while (true)
+        {
+            if (++guard > MaxLoopIterations)
+            {
+                feedback = "Loop stopped after too many iterations.";
+                return false;
+            }
+
+            if (!EvaluateConditionExpression(sections[1], variables, out bool condition, out feedback))
+            {
+                return false;
+            }
+
+            if (!condition)
+            {
+                break;
+            }
+
+            if (!TryCompileBodyStatements(bodyStatements, variables, commands, out feedback))
+            {
+                return false;
+            }
+
+            if (!TryExecuteVariableStatement(sections[2], variables, out _, out feedback))
+            {
+                return false;
+            }
+        }
+
+        feedback = string.Empty;
+        return true;
+    }
+
+    private bool TryCompileWhileLoop(string header, List<string> bodyStatements, Dictionary<string, float> variables, List<string> commands, out string feedback)
+    {
+        int guard = 0;
+        while (true)
+        {
+            if (++guard > MaxLoopIterations)
+            {
+                feedback = "Loop stopped after too many iterations.";
+                return false;
+            }
+
+            if (!EvaluateConditionExpression(header, variables, out bool condition, out feedback))
+            {
+                return false;
+            }
+
+            if (!condition)
+            {
+                break;
+            }
+
+            if (!TryCompileBodyStatements(bodyStatements, variables, commands, out feedback))
+            {
+                return false;
+            }
+        }
+
+        feedback = string.Empty;
+        return true;
+    }
+
+    private bool TryCompileBodyStatements(List<string> bodyStatements, Dictionary<string, float> variables, List<string> commands, out string feedback)
+    {
+        int bodyIndex = 0;
+        return TryCompileStatements(bodyStatements, ref bodyIndex, variables, commands, out feedback);
+    }
+
+    private static List<string> TokenizeScript(string script)
+    {
+        List<string> statements = new List<string>();
+        if (string.IsNullOrWhiteSpace(script))
+        {
+            return statements;
+        }
+
+        StringBuilder current = new StringBuilder();
+        int parenDepth = 0;
+        bool inString = false;
+        string normalized = script.Replace("\r\n", "\n").Replace('\r', '\n');
+
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            char ch = normalized[i];
+            if (ch == '"' && (i == 0 || normalized[i - 1] != '\\'))
+            {
+                inString = !inString;
+                current.Append(ch);
+                continue;
+            }
+
+            if (!inString)
+            {
+                if (ch == '(')
+                {
+                    parenDepth++;
+                }
+                else if (ch == ')')
+                {
+                    parenDepth = Mathf.Max(0, parenDepth - 1);
+                }
+
+                if (parenDepth == 0 && (ch == '{' || ch == '}'))
+                {
+                    AddScriptStatement(statements, current.ToString());
+                    current.Length = 0;
+                    statements.Add(ch.ToString());
+                    continue;
+                }
+
+                if (parenDepth == 0 && (ch == ';' || ch == '\n'))
+                {
+                    AddScriptStatement(statements, current.ToString());
+                    current.Length = 0;
+                    continue;
+                }
+            }
+
+            current.Append(ch);
+        }
+
+        AddScriptStatement(statements, current.ToString());
+        return statements;
+    }
+
+    private static void AddScriptStatement(List<string> statements, string value)
+    {
+        if (statements == null)
+        {
+            return;
+        }
+
+        string trimmed = value != null ? value.Trim() : string.Empty;
+        if (!string.IsNullOrWhiteSpace(trimmed))
+        {
+            statements.Add(trimmed);
+        }
+    }
+
+    private static bool IsIgnorableScriptStatement(string statement)
+    {
+        if (string.IsNullOrWhiteSpace(statement))
+        {
+            return true;
+        }
+
+        string line = statement.Trim();
+        return line == "{" ||
+            line == "}" ||
+            line == "};" ||
+            line == "using UnityEngine;" ||
+            line == "using UnityEngine" ||
+            line.StartsWith("public ", StringComparison.Ordinal) ||
+            line.StartsWith("private ", StringComparison.Ordinal) ||
+            line.StartsWith("protected ", StringComparison.Ordinal) ||
+            line.StartsWith("static ", StringComparison.Ordinal);
+    }
+
+    private static bool TryParseLoopHeader(string statement, string keyword, out string header)
+    {
+        header = string.Empty;
+        string trimmed = statement != null ? statement.Trim() : string.Empty;
+        if (!trimmed.StartsWith(keyword + "(", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith(keyword + " (", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        int openParen = trimmed.IndexOf('(');
+        int closeParen = trimmed.LastIndexOf(')');
+        if (openParen < 0 || closeParen <= openParen)
+        {
+            return false;
+        }
+
+        header = trimmed.Substring(openParen + 1, closeParen - openParen - 1).Trim();
+        return true;
+    }
+
+    private static bool TryExtractLoopBody(List<string> statements, ref int index, out List<string> bodyStatements, out string feedback)
+    {
+        bodyStatements = new List<string>();
+        feedback = string.Empty;
+        if (index >= statements.Count)
+        {
+            feedback = "Loop body is missing.";
+            return false;
+        }
+
+        if (statements[index] != "{")
+        {
+            bodyStatements.Add(statements[index]);
+            index++;
+            return true;
+        }
+
+        index++;
+        int depth = 1;
+        while (index < statements.Count)
+        {
+            string current = statements[index];
+            index++;
+
+            if (current == "{")
+            {
+                depth++;
+                bodyStatements.Add(current);
+                continue;
+            }
+
+            if (current == "}")
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return true;
+                }
+
+                bodyStatements.Add(current);
+                continue;
+            }
+
+            bodyStatements.Add(current);
+        }
+
+        feedback = "Missing } for loop body.";
+        return false;
+    }
+
+    private bool TryExecuteVariableStatement(string statement, Dictionary<string, float> variables, out bool handledVariable, out string feedback)
+    {
+        handledVariable = false;
+        feedback = string.Empty;
+        if (variables == null || string.IsNullOrWhiteSpace(statement))
+        {
+            return true;
+        }
+
+        string line = statement.Trim();
+        if (line.EndsWith("++", StringComparison.Ordinal) || line.EndsWith("--", StringComparison.Ordinal))
+        {
+            string variableName = line.Substring(0, line.Length - 2).Trim();
+            if (!IsIdentifier(variableName))
+            {
+                feedback = "Invalid variable name: " + variableName;
+                return false;
+            }
+
+            handledVariable = true;
+            variables.TryGetValue(variableName, out float currentValue);
+            variables[variableName] = currentValue + (line.EndsWith("++", StringComparison.Ordinal) ? 1f : -1f);
+            return true;
+        }
+
+        Match compoundMatch = Regex.Match(line, @"^(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?<op>\+=|-=)\s*(?<expr>.+)$");
+        if (compoundMatch.Success)
+        {
+            handledVariable = true;
+            string variableName = compoundMatch.Groups["name"].Value;
+            string operation = compoundMatch.Groups["op"].Value;
+            string expression = compoundMatch.Groups["expr"].Value;
+            if (!TryEvaluateNumericExpression(expression, variables, out float delta, out feedback))
+            {
+                return false;
+            }
+
+            variables.TryGetValue(variableName, out float currentValue);
+            variables[variableName] = currentValue + (operation == "+=" ? delta : -delta);
+            return true;
+        }
+
+        Match assignmentMatch = Regex.Match(line, @"^(?:(?:int|float|var)\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<expr>.+)$");
+        if (assignmentMatch.Success)
+        {
+            handledVariable = true;
+            string variableName = assignmentMatch.Groups["name"].Value;
+            string expression = assignmentMatch.Groups["expr"].Value;
+            if (!TryEvaluateNumericExpression(expression, variables, out float result, out feedback))
+            {
+                return false;
+            }
+
+            variables[variableName] = result;
+            return true;
+        }
+
+        return true;
+    }
+
+    private bool TryCompileCommandStatement(string statement, Dictionary<string, float> variables, out string compiledCommand, out string feedback)
+    {
+        compiledCommand = string.Empty;
+        feedback = "Unsupported line: " + statement;
+        string line = statement != null ? statement.Trim() : string.Empty;
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            feedback = string.Empty;
+            return true;
+        }
+
+        string methodCommand = TryNormalizeMethodCall(line, variables, out feedback);
+        if (!string.IsNullOrWhiteSpace(methodCommand))
+        {
+            compiledCommand = methodCommand;
+            feedback = string.Empty;
+            return true;
+        }
+
+        string substituted = SubstituteVariablesInPlainCommand(line, variables);
+        string normalized = NormalizeCommand(substituted);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            compiledCommand = normalized;
+            feedback = string.Empty;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string[] SplitTopLevelSemicolons(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Array.Empty<string>();
+        }
+
+        List<string> results = new List<string>();
+        StringBuilder current = new StringBuilder();
+        int depth = 0;
+        bool inString = false;
+
+        for (int i = 0; i < value.Length; i++)
+        {
+            char ch = value[i];
+            if (ch == '"' && (i == 0 || value[i - 1] != '\\'))
+            {
+                inString = !inString;
+                current.Append(ch);
+                continue;
+            }
+
+            if (!inString)
+            {
+                if (ch == '(')
+                {
+                    depth++;
+                }
+                else if (ch == ')')
+                {
+                    depth = Mathf.Max(0, depth - 1);
+                }
+                else if (ch == ';' && depth == 0)
+                {
+                    results.Add(current.ToString().Trim());
+                    current.Length = 0;
+                    continue;
+                }
+            }
+
+            current.Append(ch);
+        }
+
+        string tail = current.ToString().Trim();
+        if (tail.Length > 0)
+        {
+            results.Add(tail);
+        }
+
+        return results.ToArray();
+    }
+
+    private static bool EvaluateConditionExpression(string expression, Dictionary<string, float> variables, out bool result, out string feedback)
+    {
+        result = false;
+        feedback = string.Empty;
+        string[] operators = { "<=", ">=", "==", "!=", "<", ">" };
+        for (int i = 0; i < operators.Length; i++)
+        {
+            int opIndex = IndexOfTopLevelOperator(expression, operators[i]);
+            if (opIndex < 0)
+            {
+                continue;
+            }
+
+            string left = expression.Substring(0, opIndex).Trim();
+            string right = expression.Substring(opIndex + operators[i].Length).Trim();
+            if (!TryEvaluateNumericExpression(left, variables, out float leftValue, out feedback) ||
+                !TryEvaluateNumericExpression(right, variables, out float rightValue, out feedback))
+            {
+                return false;
+            }
+
+            switch (operators[i])
+            {
+                case "<=": result = leftValue <= rightValue; return true;
+                case ">=": result = leftValue >= rightValue; return true;
+                case "==": result = Mathf.Approximately(leftValue, rightValue); return true;
+                case "!=": result = !Mathf.Approximately(leftValue, rightValue); return true;
+                case "<": result = leftValue < rightValue; return true;
+                case ">": result = leftValue > rightValue; return true;
+            }
+        }
+
+        if (TryEvaluateNumericExpression(expression, variables, out float numericResult, out feedback))
+        {
+            result = Mathf.Abs(numericResult) > 0.0001f;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static int IndexOfTopLevelOperator(string expression, string op)
+    {
+        if (string.IsNullOrWhiteSpace(expression) || string.IsNullOrEmpty(op))
+        {
+            return -1;
+        }
+
+        int depth = 0;
+        bool inString = false;
+        for (int i = 0; i <= expression.Length - op.Length; i++)
+        {
+            char ch = expression[i];
+            if (ch == '"' && (i == 0 || expression[i - 1] != '\\'))
+            {
+                inString = !inString;
+            }
+
+            if (inString)
+            {
+                continue;
+            }
+
+            if (ch == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (ch == ')')
+            {
+                depth = Mathf.Max(0, depth - 1);
+                continue;
+            }
+
+            if (depth == 0 && string.CompareOrdinal(expression, i, op, 0, op.Length) == 0)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool TryEvaluateNumericExpression(string expression, Dictionary<string, float> variables, out float result, out string feedback)
+    {
+        result = 0f;
+        feedback = string.Empty;
+        try
+        {
+            NumericExpressionParser parser = new NumericExpressionParser(expression, variables);
+            result = parser.Parse();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            feedback = "Bad expression: " + expression + " (" + ex.Message + ")";
+            return false;
+        }
+    }
+
+    private static bool TryEvaluateStringExpression(string expression, Dictionary<string, float> variables, out string result, out string feedback)
+    {
+        result = string.Empty;
+        feedback = string.Empty;
+        string[] pieces = SplitTopLevelPlus(expression);
+        if (pieces.Length == 0)
+        {
+            return true;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < pieces.Length; i++)
+        {
+            string piece = pieces[i].Trim();
+            if (piece.Length == 0)
+            {
+                continue;
+            }
+
+            if (piece.Length >= 2 && piece.StartsWith("\"", StringComparison.Ordinal) && piece.EndsWith("\"", StringComparison.Ordinal))
+            {
+                builder.Append(piece.Substring(1, piece.Length - 2));
+                continue;
+            }
+
+            if (variables != null && variables.TryGetValue(piece, out float variableValue))
+            {
+                builder.Append(FormatNumericLiteral(variableValue));
+                continue;
+            }
+
+            if (!TryEvaluateNumericExpression(piece, variables, out float numericValue, out feedback))
+            {
+                return false;
+            }
+
+            builder.Append(FormatNumericLiteral(numericValue));
+        }
+
+        result = builder.ToString();
+        return true;
+    }
+
+    private static string[] SplitTopLevelPlus(string expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return Array.Empty<string>();
+        }
+
+        List<string> pieces = new List<string>();
+        StringBuilder current = new StringBuilder();
+        int depth = 0;
+        bool inString = false;
+
+        for (int i = 0; i < expression.Length; i++)
+        {
+            char ch = expression[i];
+            if (ch == '"' && (i == 0 || expression[i - 1] != '\\'))
+            {
+                inString = !inString;
+                current.Append(ch);
+                continue;
+            }
+
+            if (!inString)
+            {
+                if (ch == '(')
+                {
+                    depth++;
+                }
+                else if (ch == ')')
+                {
+                    depth = Mathf.Max(0, depth - 1);
+                }
+                else if (ch == '+' && depth == 0)
+                {
+                    pieces.Add(current.ToString());
+                    current.Length = 0;
+                    continue;
+                }
+            }
+
+            current.Append(ch);
+        }
+
+        if (current.Length > 0)
+        {
+            pieces.Add(current.ToString());
+        }
+
+        return pieces.ToArray();
+    }
+
+    private static string FormatNumericLiteral(float value)
+    {
+        float rounded = Mathf.Round(value);
+        if (Mathf.Abs(value - rounded) <= 0.0001f)
+        {
+            return ((int)rounded).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        if (!(char.IsLetter(value[0]) || value[0] == '_'))
+        {
+            return false;
+        }
+
+        for (int i = 1; i < value.Length; i++)
+        {
+            if (!(char.IsLetterOrDigit(value[i]) || value[i] == '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string NormalizeCommand(string value)
@@ -794,6 +1519,105 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         return line;
+    }
+
+    private static string TryNormalizeMethodCall(string line, Dictionary<string, float> variables, out string feedback)
+    {
+        feedback = string.Empty;
+        int openParen = line.IndexOf('(');
+        int closeParen = line.LastIndexOf(')');
+        if (openParen <= 0 || closeParen <= openParen)
+        {
+            return string.Empty;
+        }
+
+        string methodName = line.Substring(0, openParen).Trim();
+        int lastDot = methodName.LastIndexOf('.');
+        if (lastDot >= 0)
+        {
+            methodName = methodName.Substring(lastDot + 1);
+        }
+
+        string args = line.Substring(openParen + 1, closeParen - openParen - 1);
+        string[] splitArgs = SplitTopLevelArguments(args);
+        switch (methodName.ToLowerInvariant())
+        {
+            case "cube":
+            case "box":
+            case "sphere":
+            case "capsule":
+            case "cylinder":
+                if (splitArgs.Length == 1 && TryEvaluateStringExpression(splitArgs[0], variables, out string spawnNameOnly, out feedback))
+                {
+                    return methodName.ToLowerInvariant() + " " + spawnNameOnly;
+                }
+
+                if (splitArgs.Length == 2 &&
+                    TryEvaluateStringExpression(splitArgs[0], variables, out string spawnName, out feedback) &&
+                    TryParseVectorExpression(splitArgs[1], variables, out Vector3 spawnPos, out feedback))
+                {
+                    return methodName.ToLowerInvariant() + " " + spawnName + " " + FormatVector(spawnPos);
+                }
+                break;
+
+            case "move":
+            case "setpos":
+            case "position":
+            case "rotate":
+            case "setrot":
+            case "scale":
+            case "resize":
+            case "translate":
+            case "turn":
+                if (splitArgs.Length == 2 &&
+                    TryEvaluateStringExpression(splitArgs[0], variables, out string targetName, out feedback) &&
+                    TryParseVectorExpression(splitArgs[1], variables, out Vector3 transformValue, out feedback))
+                {
+                    return methodName.ToLowerInvariant() + " " + targetName + " " + FormatVector(transformValue);
+                }
+                break;
+
+            case "color":
+                if (splitArgs.Length == 2 &&
+                    TryEvaluateStringExpression(splitArgs[0], variables, out string colorTargetName, out feedback) &&
+                    TryEvaluateStringExpression(splitArgs[1], variables, out string colorValue, out feedback))
+                {
+                    return "color " + colorTargetName + " " + colorValue;
+                }
+                break;
+
+            case "delete":
+            case "destroy":
+                if (splitArgs.Length == 1 && TryEvaluateStringExpression(splitArgs[0], variables, out string deleteName, out feedback))
+                {
+                    return "delete " + deleteName;
+                }
+                break;
+
+            case "clear":
+            case "list":
+            case "help":
+                return methodName.ToLowerInvariant();
+        }
+
+        feedback = "Unsupported command call: " + line;
+        return string.Empty;
+    }
+
+    private static string SubstituteVariablesInPlainCommand(string line, Dictionary<string, float> variables)
+    {
+        if (string.IsNullOrWhiteSpace(line) || variables == null || variables.Count == 0)
+        {
+            return line;
+        }
+
+        string output = line;
+        foreach (KeyValuePair<string, float> pair in variables)
+        {
+            output = Regex.Replace(output, $@"\b{Regex.Escape(pair.Key)}\b", FormatNumericLiteral(pair.Value));
+        }
+
+        return output;
     }
 
     private static string[] SplitTopLevelArguments(string args)
@@ -901,6 +1725,44 @@ public class CodeWorldRuntime : MonoBehaviour
         if (!TryParseFloat(parts[0].Replace("f", string.Empty).Trim(), out float x) ||
             !TryParseFloat(parts[1].Replace("f", string.Empty).Trim(), out float y) ||
             !TryParseFloat(parts[2].Replace("f", string.Empty).Trim(), out float z))
+        {
+            return false;
+        }
+
+        vector = new Vector3(x, y, z);
+        return true;
+    }
+
+    private static bool TryParseVectorExpression(string value, Dictionary<string, float> variables, out Vector3 vector, out string feedback)
+    {
+        vector = Vector3.zero;
+        feedback = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            feedback = "Vector is empty.";
+            return false;
+        }
+
+        string text = value.Trim();
+        int openParen = text.IndexOf('(');
+        int closeParen = text.LastIndexOf(')');
+        if (openParen < 0 || closeParen <= openParen)
+        {
+            feedback = "Vector syntax should look like new Vector3(x, y, z).";
+            return false;
+        }
+
+        string inside = text.Substring(openParen + 1, closeParen - openParen - 1);
+        string[] parts = SplitTopLevelArguments(inside);
+        if (parts.Length != 3)
+        {
+            feedback = "Vector needs x, y, z values.";
+            return false;
+        }
+
+        if (!TryEvaluateNumericExpression(parts[0], variables, out float x, out feedback) ||
+            !TryEvaluateNumericExpression(parts[1], variables, out float y, out feedback) ||
+            !TryEvaluateNumericExpression(parts[2], variables, out float z, out feedback))
         {
             return false;
         }
@@ -1563,6 +2425,10 @@ public class CodeWorldRuntime : MonoBehaviour
         aiInput.lineType = InputField.LineType.MultiLineSubmit;
         aiInput.onEndEdit.AddListener(HandleAiInputEndEdit);
 
+        AttachScrollWheelForwarder(aiPanel, aiHistoryScrollRect);
+        AttachScrollWheelForwarder(historyViewport, aiHistoryScrollRect);
+        AttachScrollWheelForwarder(aiInput.gameObject, aiHistoryScrollRect);
+
         AppendChatLine("AI: I can help with Code Island syntax. Ask me how to spawn, move, rotate, scale, color, delete, or write C#-style commands.");
         UpdateAiVisibility(false);
     }
@@ -1704,6 +2570,22 @@ public class CodeWorldRuntime : MonoBehaviour
         Text text = CreateText(name + "Label", obj.transform, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 1f), size);
         text.raycastTarget = false;
         return button;
+    }
+
+    private static void AttachScrollWheelForwarder(GameObject target, ScrollRect scrollRect)
+    {
+        if (target == null || scrollRect == null)
+        {
+            return;
+        }
+
+        ScrollWheelForwarder forwarder = target.GetComponent<ScrollWheelForwarder>();
+        if (forwarder == null)
+        {
+            forwarder = target.AddComponent<ScrollWheelForwarder>();
+        }
+
+        forwarder.Configure(scrollRect);
     }
 
     private void TrackEditorUndoState()
@@ -2072,7 +2954,7 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private static string BuildAiQuestion(string message)
     {
-        return "Help the player use the Code Island syntax. Keep answers short, concrete, and example-driven. Player question: " + message;
+        return "You are the Code Island scripting assistant only. Answer only questions about Code Island code syntax, commands, loops, vectors, colors, object naming, and how to write scripts for this mode. If the player asks anything else, refuse briefly and redirect them to Code Island scripting only. Keep answers short, concrete, and example-driven. Player question: " + message;
     }
 
     private string BuildAiChatContext()
@@ -2080,7 +2962,11 @@ public class CodeWorldRuntime : MonoBehaviour
         StringBuilder builder = new StringBuilder();
         builder.Append("code_world_syntax_helper\n");
         builder.Append("The player is on Code Island in Unity.\n");
+        builder.Append("This assistant is restricted to Code Island scripting help only.\n");
+        builder.Append("Do not answer general knowledge, Unity questions outside this mode, life advice, math tutoring, or unrelated chat.\n");
+        builder.Append("If a question is outside Code Island scripting, answer with a short refusal and say you only help with Code Island code.\n");
         builder.Append("Supported commands: cube/box/sphere/capsule/cylinder name [x y z], move, rotate, scale, translate, turn, color, delete, clear, list, help.\n");
+        builder.Append("Supported control flow: simple for loops, while loops, int/float/var assignments, ++, --, +=, -=, numeric expressions, and string concatenation for names.\n");
         builder.Append("The editor accepts C#-style lines like Cube(\"name\", new Vector3(...)); and normal command lines.\n");
         builder.Append("Ignore using UnityEngine and class wrappers if the player includes them.\n");
         builder.Append("Object names should use letters, numbers, _ or -.\n");
@@ -2349,6 +3235,217 @@ public class CodeWorldRuntime : MonoBehaviour
             {
                 target.anchoredPosition = localPoint + dragOffset;
             }
+        }
+    }
+
+    private sealed class ScrollWheelForwarder : MonoBehaviour, IScrollHandler
+    {
+        private ScrollRect target;
+
+        public void Configure(ScrollRect scrollRect)
+        {
+            target = scrollRect;
+        }
+
+        public void OnScroll(PointerEventData eventData)
+        {
+            if (target == null || eventData == null)
+            {
+                return;
+            }
+
+            float delta = eventData.scrollDelta.y * target.scrollSensitivity * 0.0025f;
+            float next = Mathf.Clamp01(target.verticalNormalizedPosition + delta);
+            target.verticalNormalizedPosition = next;
+            eventData.Use();
+        }
+    }
+
+    private sealed class NumericExpressionParser
+    {
+        private readonly string expression;
+        private readonly Dictionary<string, float> variables;
+        private int index;
+
+        public NumericExpressionParser(string expression, Dictionary<string, float> variables)
+        {
+            this.expression = expression ?? string.Empty;
+            this.variables = variables;
+        }
+
+        public float Parse()
+        {
+            index = 0;
+            float result = ParseExpression();
+            SkipWhitespace();
+            if (index < expression.Length)
+            {
+                throw new InvalidOperationException("Unexpected token.");
+            }
+
+            return result;
+        }
+
+        private float ParseExpression()
+        {
+            float value = ParseTerm();
+            while (true)
+            {
+                SkipWhitespace();
+                if (Match('+'))
+                {
+                    value += ParseTerm();
+                }
+                else if (Match('-'))
+                {
+                    value -= ParseTerm();
+                }
+                else
+                {
+                    return value;
+                }
+            }
+        }
+
+        private float ParseTerm()
+        {
+            float value = ParseFactor();
+            while (true)
+            {
+                SkipWhitespace();
+                if (Match('*'))
+                {
+                    value *= ParseFactor();
+                }
+                else if (Match('/'))
+                {
+                    value /= ParseFactor();
+                }
+                else
+                {
+                    return value;
+                }
+            }
+        }
+
+        private float ParseFactor()
+        {
+            SkipWhitespace();
+            if (Match('+'))
+            {
+                return ParseFactor();
+            }
+
+            if (Match('-'))
+            {
+                return -ParseFactor();
+            }
+
+            if (Match('('))
+            {
+                float nested = ParseExpression();
+                SkipWhitespace();
+                if (!Match(')'))
+                {
+                    throw new InvalidOperationException("Missing )");
+                }
+
+                return nested;
+            }
+
+            if (IsIdentifierStart(Peek()))
+            {
+                string identifier = ParseIdentifier();
+                if (variables != null && variables.TryGetValue(identifier, out float variableValue))
+                {
+                    return variableValue;
+                }
+
+                throw new InvalidOperationException("Unknown variable " + identifier);
+            }
+
+            return ParseNumber();
+        }
+
+        private float ParseNumber()
+        {
+            SkipWhitespace();
+            int start = index;
+            while (index < expression.Length)
+            {
+                char ch = expression[index];
+                if (char.IsDigit(ch) || ch == '.' || ch == 'f' || ch == 'F')
+                {
+                    index++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (start == index)
+            {
+                throw new InvalidOperationException("Expected a number.");
+            }
+
+            string token = expression.Substring(start, index - start).Replace("f", string.Empty).Replace("F", string.Empty);
+            if (!float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out float number))
+            {
+                throw new InvalidOperationException("Invalid number " + token);
+            }
+
+            return number;
+        }
+
+        private string ParseIdentifier()
+        {
+            int start = index;
+            index++;
+            while (index < expression.Length)
+            {
+                char ch = expression[index];
+                if (char.IsLetterOrDigit(ch) || ch == '_')
+                {
+                    index++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return expression.Substring(start, index - start);
+        }
+
+        private void SkipWhitespace()
+        {
+            while (index < expression.Length && char.IsWhiteSpace(expression[index]))
+            {
+                index++;
+            }
+        }
+
+        private bool Match(char expected)
+        {
+            if (Peek() != expected)
+            {
+                return false;
+            }
+
+            index++;
+            return true;
+        }
+
+        private char Peek()
+        {
+            SkipWhitespace();
+            return index < expression.Length ? expression[index] : '\0';
+        }
+
+        private static bool IsIdentifierStart(char ch)
+        {
+            return char.IsLetter(ch) || ch == '_';
         }
     }
 
