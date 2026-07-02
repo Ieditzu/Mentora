@@ -14,6 +14,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private const string CodeWorldModeValue = "codeworld";
     private const string CodeWorldActivePrefKey = "MP_CodeWorldActive";
     private const float EditorSyncInterval = 0.12f;
+    private const float CursorSyncInterval = 0.08f;
+    private const float CursorLeftPadding = 12f;
+    private const float CursorTopPadding = 10f;
 
     private static readonly Vector3 BuildSpawn = new Vector3(220f, 32f, 520f);
     private static readonly Quaternion BuildRotation = Quaternion.Euler(0f, 180f, 0f);
@@ -22,6 +25,7 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private readonly Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> commandHistory = new List<string>();
+    private readonly Dictionary<string, RemoteCursorVisual> remoteCursorVisuals = new Dictionary<string, RemoteCursorVisual>(StringComparer.OrdinalIgnoreCase);
 
     private MultiplayerSessionManager sessionManager;
     private GameObject worldRoot;
@@ -44,6 +48,21 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool suppressEditorSync;
     private bool editorSyncDirty;
     private float nextEditorSyncTime;
+    private bool cursorSyncDirty;
+    private float nextCursorSyncTime;
+    private int lastLocalCaretIndex = -1;
+
+    private sealed class RemoteCursorVisual
+    {
+        public string ClientId;
+        public int CaretIndex;
+        public string PlayerName;
+        public Color Color;
+        public GameObject Root;
+        public RectTransform RootRect;
+        public Image CaretImage;
+        public Text NameText;
+    }
 
     public static bool ConsumesPauseInput => instance != null && instance.editorVisible;
     public static Vector3 SpawnPosition => BuildSpawn;
@@ -177,7 +196,9 @@ public class CodeWorldRuntime : MonoBehaviour
             ExecuteLocalScript(editorInput != null ? editorInput.text : string.Empty);
         }
 
+        TrackLocalCursorState();
         FlushPendingEditorSync();
+        FlushPendingCursorSync();
     }
 
     private void OnGUI()
@@ -242,6 +263,12 @@ public class CodeWorldRuntime : MonoBehaviour
         if (packet is CodeWorldEditorSyncPacket editorSyncPacket)
         {
             ApplyRemoteEditorText(editorSyncPacket);
+            return;
+        }
+
+        if (packet is CodeWorldCursorPacket cursorPacket)
+        {
+            ApplyRemoteCursor(cursorPacket);
             return;
         }
 
@@ -315,6 +342,8 @@ public class CodeWorldRuntime : MonoBehaviour
             RefreshHistoryText();
         }
 
+        ClearRemoteCursorVisuals();
+
         if (worldRoot != null)
         {
             worldRoot.SetActive(false);
@@ -337,6 +366,7 @@ public class CodeWorldRuntime : MonoBehaviour
         ActivateLocal(true, false);
         ClearSpawnedObjects();
         commandHistory.Clear();
+        ClearRemoteCursorVisuals();
         SetEditorText(packet.EditorText);
 
         if (!string.IsNullOrWhiteSpace(packet.HistoryText))
@@ -376,6 +406,29 @@ public class CodeWorldRuntime : MonoBehaviour
 
         SetEditorText(incomingText);
         SetStatus("Shared code updated.");
+    }
+
+    private void ApplyRemoteCursor(CodeWorldCursorPacket packet)
+    {
+        if (packet == null || string.IsNullOrWhiteSpace(packet.AuthorClientId))
+        {
+            return;
+        }
+
+        if (sessionManager != null && packet.AuthorClientId == sessionManager.LocalClientId)
+        {
+            return;
+        }
+
+        RemoteCursorVisual visual = GetOrCreateRemoteCursorVisual(packet.AuthorClientId, packet.PlayerName);
+        visual.CaretIndex = Mathf.Max(0, packet.CaretIndex);
+        visual.PlayerName = string.IsNullOrWhiteSpace(packet.PlayerName) ? "Player" : packet.PlayerName.Trim();
+        if (visual.NameText != null)
+        {
+            visual.NameText.text = visual.PlayerName;
+        }
+
+        RefreshRemoteCursorVisual(visual);
     }
 
     private void EnsureWorld()
@@ -1353,6 +1406,8 @@ public class CodeWorldRuntime : MonoBehaviour
             RefreshEditorLayout();
             ScrollEditorToTop();
         }
+
+        UpdateRemoteCursorVisibility();
     }
 
     private void SetStatus(string message)
@@ -1524,6 +1579,8 @@ public class CodeWorldRuntime : MonoBehaviour
 
         editorSyncDirty = true;
         nextEditorSyncTime = Time.unscaledTime + EditorSyncInterval;
+        cursorSyncDirty = true;
+        nextCursorSyncTime = Time.unscaledTime + CursorSyncInterval;
     }
 
     private void FlushPendingEditorSync()
@@ -1552,6 +1609,51 @@ public class CodeWorldRuntime : MonoBehaviour
         editorSyncDirty = false;
     }
 
+    private void TrackLocalCursorState()
+    {
+        if (editorInput == null || !editorVisible || !editorInput.isFocused)
+        {
+            return;
+        }
+
+        int caretIndex = Mathf.Max(0, editorInput.caretPosition);
+        if (caretIndex == lastLocalCaretIndex)
+        {
+            return;
+        }
+
+        lastLocalCaretIndex = caretIndex;
+        cursorSyncDirty = true;
+        nextCursorSyncTime = Time.unscaledTime + CursorSyncInterval;
+    }
+
+    private void FlushPendingCursorSync()
+    {
+        if (!cursorSyncDirty || editorInput == null || sessionManager == null || !sessionManager.IsConnectedToSession)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime < nextCursorSyncTime)
+        {
+            return;
+        }
+
+        int caretIndex = Mathf.Max(0, editorInput.caretPosition);
+        string playerName = !string.IsNullOrWhiteSpace(sessionManager.LocalPlayerName) ? sessionManager.LocalPlayerName : "Player";
+        CodeWorldCursorPacket packet = new CodeWorldCursorPacket(caretIndex, playerName, sessionManager.LocalClientId);
+        if (sessionManager.IsHosting)
+        {
+            sessionManager.BroadcastQuizPacketToRemotes(packet);
+        }
+        else
+        {
+            sessionManager.SendQuizPacketToHost(packet);
+        }
+
+        cursorSyncDirty = false;
+    }
+
     private void SetEditorText(string value)
     {
         if (editorInput == null)
@@ -1566,6 +1668,8 @@ public class CodeWorldRuntime : MonoBehaviour
         suppressEditorTracking = false;
         suppressEditorSync = false;
         editorSyncDirty = false;
+        cursorSyncDirty = true;
+        nextCursorSyncTime = Time.unscaledTime + CursorSyncInterval;
         RefreshEditorLayout();
     }
 
@@ -1609,6 +1713,8 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             textComponent.text = currentText;
         }
+
+        RefreshAllRemoteCursorVisuals();
     }
 
     private void ScrollEditorToTop()
@@ -1637,6 +1743,151 @@ public class CodeWorldRuntime : MonoBehaviour
     private string GetEditorText()
     {
         return editorInput != null ? editorInput.text ?? string.Empty : BuildStarterScript();
+    }
+
+    private RemoteCursorVisual GetOrCreateRemoteCursorVisual(string clientId, string playerName)
+    {
+        if (remoteCursorVisuals.TryGetValue(clientId, out RemoteCursorVisual existing) && existing != null)
+        {
+            return existing;
+        }
+
+        RemoteCursorVisual visual = new RemoteCursorVisual();
+        visual.ClientId = clientId;
+        visual.PlayerName = string.IsNullOrWhiteSpace(playerName) ? "Player" : playerName.Trim();
+        visual.Color = GetCursorColor(clientId);
+
+        GameObject root = new GameObject("RemoteCursor_" + clientId, typeof(RectTransform));
+        root.transform.SetParent(editorContentRect, false);
+        RectTransform rootRect = root.GetComponent<RectTransform>();
+        rootRect.anchorMin = new Vector2(0f, 1f);
+        rootRect.anchorMax = new Vector2(0f, 1f);
+        rootRect.pivot = new Vector2(0f, 1f);
+        rootRect.sizeDelta = new Vector2(160f, 28f);
+
+        GameObject caretObject = new GameObject("Caret", typeof(RectTransform));
+        caretObject.transform.SetParent(root.transform, false);
+        RectTransform caretRect = caretObject.GetComponent<RectTransform>();
+        caretRect.anchorMin = new Vector2(0f, 1f);
+        caretRect.anchorMax = new Vector2(0f, 1f);
+        caretRect.pivot = new Vector2(0f, 1f);
+        caretRect.sizeDelta = new Vector2(3f, GetEditorLineHeight());
+        Image caretImage = caretObject.AddComponent<Image>();
+        caretImage.color = visual.Color;
+        caretImage.raycastTarget = false;
+
+        Text nameText = CreateText("Name", root.transform, visual.PlayerName, 12, FontStyle.Bold, TextAnchor.UpperLeft, visual.Color, new Vector2(8f, -1f), new Vector2(152f, 20f));
+        nameText.raycastTarget = false;
+
+        visual.Root = root;
+        visual.RootRect = rootRect;
+        visual.CaretImage = caretImage;
+        visual.NameText = nameText;
+        remoteCursorVisuals[clientId] = visual;
+        UpdateRemoteCursorVisibility();
+        return visual;
+    }
+
+    private void RefreshRemoteCursorVisual(RemoteCursorVisual visual)
+    {
+        if (visual == null || visual.RootRect == null)
+        {
+            return;
+        }
+
+        visual.RootRect.anchoredPosition = GetCaretUiPosition(visual.CaretIndex);
+        if (visual.CaretImage != null)
+        {
+            visual.CaretImage.rectTransform.sizeDelta = new Vector2(3f, GetEditorLineHeight());
+            visual.CaretImage.color = visual.Color;
+        }
+
+        if (visual.NameText != null)
+        {
+            visual.NameText.color = visual.Color;
+            visual.NameText.text = visual.PlayerName;
+        }
+    }
+
+    private void RefreshAllRemoteCursorVisuals()
+    {
+        foreach (RemoteCursorVisual visual in remoteCursorVisuals.Values)
+        {
+            RefreshRemoteCursorVisual(visual);
+        }
+    }
+
+    private void UpdateRemoteCursorVisibility()
+    {
+        bool shouldShow = editorVisible && modeActive;
+        foreach (RemoteCursorVisual visual in remoteCursorVisuals.Values)
+        {
+            if (visual != null && visual.Root != null)
+            {
+                visual.Root.SetActive(shouldShow);
+            }
+        }
+    }
+
+    private void ClearRemoteCursorVisuals()
+    {
+        foreach (RemoteCursorVisual visual in remoteCursorVisuals.Values)
+        {
+            if (visual != null && visual.Root != null)
+            {
+                Destroy(visual.Root);
+            }
+        }
+
+        remoteCursorVisuals.Clear();
+    }
+
+    private Vector2 GetCaretUiPosition(int caretIndex)
+    {
+        string currentText = editorInput != null ? editorInput.text ?? string.Empty : string.Empty;
+        int safeIndex = Mathf.Clamp(caretIndex, 0, currentText.Length);
+        int lineIndex = 0;
+        int lineStartIndex = 0;
+
+        for (int i = 0; i < safeIndex; i++)
+        {
+            if (currentText[i] == '\n')
+            {
+                lineIndex++;
+                lineStartIndex = i + 1;
+            }
+        }
+
+        int segmentLength = Mathf.Max(0, safeIndex - lineStartIndex);
+        string segment = segmentLength > 0 ? currentText.Substring(lineStartIndex, segmentLength) : string.Empty;
+        float x = CursorLeftPadding + MeasureEditorTextWidth(segment);
+        float y = -CursorTopPadding - (lineIndex * GetEditorLineHeight());
+        return new Vector2(x, y);
+    }
+
+    private float MeasureEditorTextWidth(string value)
+    {
+        Text textComponent = editorInput != null ? editorInput.textComponent : null;
+        if (textComponent == null || string.IsNullOrEmpty(value))
+        {
+            return 0f;
+        }
+
+        TextGenerationSettings settings = textComponent.GetGenerationSettings(new Vector2(10000f, GetEditorLineHeight()));
+        return textComponent.cachedTextGeneratorForLayout.GetPreferredWidth(value, settings) / Mathf.Max(0.0001f, textComponent.pixelsPerUnit);
+    }
+
+    private float GetEditorLineHeight()
+    {
+        Text textComponent = editorInput != null ? editorInput.textComponent : null;
+        return textComponent != null ? Mathf.Max(20f, textComponent.fontSize * 1.25f) : 20f;
+    }
+
+    private static Color GetCursorColor(string clientId)
+    {
+        int hash = string.IsNullOrEmpty(clientId) ? 0 : clientId.GetHashCode();
+        float hue = Mathf.Abs(hash % 1000) / 1000f;
+        return Color.HSVToRGB(hue, 0.68f, 0.95f);
     }
 
     private sealed class DraggableWindowHandle : MonoBehaviour, IPointerDownHandler, IDragHandler

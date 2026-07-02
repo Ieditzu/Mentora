@@ -81,6 +81,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     public event Action FriendSessionsChanged;
 
     public string LocalClientId => localClientId;
+    public string LocalPlayerName => localPlayerName;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
     public bool IsHosting => mode == SessionMode.Hosting;
     public bool IsConnectedToSession => !string.IsNullOrEmpty(localClientId);
@@ -1416,6 +1417,15 @@ public class MultiplayerSessionManager : MonoBehaviour
                         BroadcastServerPacket(codeWorldEditorSync);
                         break;
 
+                    case CodeWorldCursorPacket codeWorldCursor:
+                        codeWorldCursor.AuthorClientId = peer.ClientId ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(codeWorldCursor.PlayerName))
+                        {
+                            codeWorldCursor.PlayerName = peer.PlayerName;
+                        }
+                        BroadcastServerPacket(codeWorldCursor);
+                        break;
+
                     case MultiplayerVoicePacket voicePacket:
                         if (string.IsNullOrEmpty(peer.ClientId))
                         {
@@ -1544,6 +1554,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             case CodeWorldCommandPacket _:
             case CodeWorldStatePacket _:
             case CodeWorldEditorSyncPacket _:
+            case CodeWorldCursorPacket _:
                 EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
                 break;
 

@@ -63,6 +63,7 @@ namespace Mentora.Network
                 60 => new CodeWorldCommandPacket(),
                 61 => new CodeWorldStatePacket(),
                 62 => new CodeWorldEditorSyncPacket(),
+                63 => new CodeWorldCursorPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -1040,6 +1041,36 @@ namespace Mentora.Network
         protected override void Read(BinaryReader reader)
         {
             EditorText = ReadString(reader);
+            AuthorClientId = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldCursorPacket : Packet
+    {
+        public int CaretIndex;
+        public string PlayerName;
+        public string AuthorClientId;
+
+        public CodeWorldCursorPacket(int caretIndex, string playerName, string authorClientId = "") : base(63)
+        {
+            CaretIndex = caretIndex;
+            PlayerName = playerName;
+            AuthorClientId = authorClientId;
+        }
+
+        public CodeWorldCursorPacket() : base(63) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            WriteInt32BigEndian(writer, CaretIndex);
+            PutString(writer, PlayerName ?? string.Empty);
+            PutString(writer, AuthorClientId ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            CaretIndex = ReadInt32BigEndian(reader);
+            PlayerName = ReadString(reader);
             AuthorClientId = ReadString(reader);
         }
     }
