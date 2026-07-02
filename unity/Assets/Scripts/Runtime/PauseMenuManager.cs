@@ -2665,27 +2665,40 @@ public class PauseMenuManager : MonoBehaviour
     private static Sprite GetRoundedSprite()
     {
         if (_roundedSprite != null) return _roundedSprite;
-        // Build a small rounded-rect texture and slice it
-        int w = 64, h = 64, r = 20;
-        var tex = new Texture2D(w, h, TextureFormat.ARGB32, false);
-        var pixels = new Color32[w * h];
-        for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
+        const int size = 128;
+        const float radius = 40f;
+        const float edgeFeather = 1.75f;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+
+        var pixels = new Color32[size * size];
+        Vector2 halfSize = Vector2.one * (size * 0.5f);
+        Vector2 roundedBox = new Vector2(halfSize.x - radius, halfSize.y - radius);
+        for (int y = 0; y < size; y++)
         {
-            int cx = Mathf.Min(x < r ? r - x : x >= w - r ? x - (w - r - 1) : 0,
-                               y < r ? r - y : y >= h - r ? y - (h - r - 1) : 0);
-            int cy = Mathf.Min(x < r ? r - x : x >= w - r ? x - (w - r - 1) : 0,
-                               y < r ? r - y : y >= h - r ? y - (h - r - 1) : 0);
-            // distance from corner circle center
-            int dx = x < r ? r - x : (x >= w - r ? x - (w - r - 1) : 0);
-            int dy = y < r ? r - y : (y >= h - r ? y - (h - r - 1) : 0);
-            bool inside = (dx * dx + dy * dy) <= (r * r);
-            pixels[y * w + x] = (dx == 0 || dy == 0) ? new Color32(255,255,255,255)
-                : inside ? new Color32(255,255,255,255) : new Color32(0,0,0,0);
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - halfSize;
+                Vector2 q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - roundedBox;
+                float outside = new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude;
+                float inside = Mathf.Min(Mathf.Max(q.x, q.y), 0f);
+                float signedDistance = outside + inside - radius;
+                byte alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01(0.5f - signedDistance / edgeFeather) * 255f);
+                pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+            }
         }
+
         tex.SetPixels32(pixels);
-        tex.Apply();
-        _roundedSprite = Sprite.Create(tex, new Rect(0,0,w,h), new Vector2(0.5f,0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(r,r,r,r));
+        tex.Apply(false, true);
+        _roundedSprite = Sprite.Create(
+            tex,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            Vector4.one * radius);
         return _roundedSprite;
     }
 
