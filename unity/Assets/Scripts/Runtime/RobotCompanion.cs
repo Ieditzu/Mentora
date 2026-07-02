@@ -84,9 +84,9 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float conversationTimeout = 18f;
 
     [Header("Guide")]
-    [SerializeField] private float guideSpeed = 4.8f;
-    [SerializeField] private float guideWaitSpeed = 1.2f;
-    [SerializeField] private float guideWaitForPlayerDistance = 16f;
+    [SerializeField] private float guideSpeed = 8.0f;
+    [SerializeField] private float guideWaitSpeed = 3.5f;
+    [SerializeField] private float guideWaitForPlayerDistance = 22f;
     [SerializeField] private float guidePlayerArrivalDistance = 10f;
     [SerializeField] private float guideHoverAboveGround = 0.65f;
     [SerializeField] private float guideWaypointReachDistance = 1.35f;
@@ -96,6 +96,22 @@ public class RobotCompanion : MonoBehaviour
     [SerializeField] private float guideStuckRepathSeconds = 1.25f;
     [SerializeField] private float guideOutlineWidth = 0.045f;
     [SerializeField] private float guideAgentHeight = 1.4f;
+    [SerializeField] private float guideFallbackGroundProbeHeight = 36f;
+    [SerializeField] private float guideFallbackGroundProbeDistance = 90f;
+    [SerializeField] private float guideAStarCellSize = 4f;
+    [SerializeField] private float guideAStarSearchMargin = 28f;
+    [SerializeField] private int guideAStarMaxGridAxis = 96;
+    [SerializeField] private float guideAStarClearanceRadius = 1.35f;
+    [SerializeField] private float guideAStarBodyHeight = 2.2f;
+    [SerializeField] private float guideAStarMaxStepHeight = 5.75f;
+    [SerializeField] private bool guideIgnoreFoliageClearance = true;
+    [SerializeField] private float guideThinObstacleMaxFootprint = 0.35f;
+    [SerializeField] private float guideSimplifyMaxDistance = 10f;
+    [SerializeField] private float guideSimplifyMaxHeightDelta = 1.1f;
+    [SerializeField] private float guideSampleMaxHeightAboveProbe = 4.25f;
+    [SerializeField] private bool guideDebugEnabled = true;
+    [SerializeField] private bool guideDebugDrawLines = true;
+    [SerializeField] private float guideDebugLineHeight = 0.08f;
 
     // ── Internal ─────────────────────────────────────────────────────────────
 
@@ -103,6 +119,7 @@ public class RobotCompanion : MonoBehaviour
     private bool       snappedToPlayer;
     private float      orbitAngle;
     private Rigidbody  rb;
+    private Vector3    baseLocalScale = Vector3.one * 0.2f;
     private Vector3    bounceVelocity;   // extra velocity from collision impacts
     private GameObject bubble;
     private RectTransform bubbleRect;
@@ -135,6 +152,16 @@ public class RobotCompanion : MonoBehaviour
     private float      guideStuckTimer;
     private GameObject guideAgentProxy;
     private NavMeshAgent guideAgent;
+    private bool       guideFallbackActive;
+    private int        guideFallbackIndex;
+    private readonly List<Vector3> guideFallbackCorners = new List<Vector3>(6);
+    private GameObject guideDebugRoot;
+    private LineRenderer guideDebugPathLine;
+    private LineRenderer guideDebugTargetLine;
+    private Material   guideDebugLineMaterial;
+    private readonly List<Vector3> guideDebugPathPoints = new List<Vector3>(128);
+    private string     guideLastFailureReason = "";
+    private float      lastGuideDebugLogAt = -999f;
     private GameObject guideGlowRoot;
     private GameObject boosterRoot;
     private Material   guideOutlineMaterial;
@@ -143,6 +170,20 @@ public class RobotCompanion : MonoBehaviour
     private readonly List<Renderer> guideShellRenderers = new List<Renderer>(16);
     private readonly List<LineRenderer> boosterRings = new List<LineRenderer>(3);
     private static readonly Color GuideAqua = new Color(0.0f, 0.95f, 1f, 1f);
+    private static readonly Vector3 GuideHubPosition = new Vector3(55f, 3f, 218.4f);
+    private static readonly Vector3 CommunityBridgeEastAnchor = new Vector3(23.5f, 1.0f, 210.4f);
+    private static readonly Vector3 CommunityBridgeCrownAnchor = new Vector3(19.5f, 5.6f, 214.4f);
+    private static readonly Vector2Int[] GuideAStarDirections =
+    {
+        new Vector2Int(1, 0),
+        new Vector2Int(-1, 0),
+        new Vector2Int(0, 1),
+        new Vector2Int(0, -1),
+        new Vector2Int(1, 1),
+        new Vector2Int(1, -1),
+        new Vector2Int(-1, 1),
+        new Vector2Int(-1, -1)
+    };
     private const float PostSpeechListenDelay = 1.25f;
     private readonly List<string> conversationHistory = new List<string>(8);
 
@@ -153,6 +194,7 @@ public class RobotCompanion : MonoBehaviour
         if (_instance != null && _instance != this) { Destroy(gameObject); return; }
         _instance = this;
         DontDestroyOnLoad(gameObject);
+        baseLocalScale = transform.localScale;
     }
 
     private void Start()
@@ -166,6 +208,7 @@ public class RobotCompanion : MonoBehaviour
         SetupGuideHighlight();
         SetupGuideGlowVisuals();
         SetupBoosterRings();
+        SetupGuideDebugVisuals();
         SetupVoiceBridge();
         EnsureGameClientExists();
 
@@ -194,6 +237,16 @@ public class RobotCompanion : MonoBehaviour
             Destroy(guideAgentProxy);
             guideAgentProxy = null;
             guideAgent = null;
+        }
+        if (guideDebugRoot != null)
+        {
+            Destroy(guideDebugRoot);
+            guideDebugRoot = null;
+        }
+        if (guideDebugLineMaterial != null)
+        {
+            Destroy(guideDebugLineMaterial);
+            guideDebugLineMaterial = null;
         }
         if (_instance == this) _instance = null;
     }
@@ -312,6 +365,7 @@ public class RobotCompanion : MonoBehaviour
 
         UpdateGuideState();
         UpdateBoosterRings(guiding);
+        MaintainRootScale();
         RefreshIgnoredSakuraCollisions(false);
         UpdateVoiceListening(fpsCamForBubble);
     }
@@ -1225,6 +1279,234 @@ public class RobotCompanion : MonoBehaviour
         }
     }
 
+    private void SetupGuideDebugVisuals()
+    {
+        if (!guideDebugDrawLines || guideDebugRoot != null)
+        {
+            return;
+        }
+
+        guideDebugRoot = new GameObject("RudolfGuideDebugLines");
+        guideDebugRoot.hideFlags = HideFlags.DontSave;
+        DontDestroyOnLoad(guideDebugRoot);
+
+        Shader lineShader = Shader.Find("Sprites/Default");
+        if (lineShader == null)
+        {
+            lineShader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+
+        guideDebugLineMaterial = lineShader != null ? new Material(lineShader) : null;
+        if (guideDebugLineMaterial != null)
+        {
+            guideDebugLineMaterial.name = "RudolfGuideDebugLineRuntime";
+            guideDebugLineMaterial.color = GuideAqua;
+        }
+
+        guideDebugPathLine = CreateGuideDebugLine("Path", GuideAqua, 0.11f);
+        guideDebugTargetLine = CreateGuideDebugLine("Target", new Color(1f, 0.78f, 0.12f, 1f), 0.065f);
+        SetGuideDebugLinesActive(false);
+    }
+
+    private LineRenderer CreateGuideDebugLine(string lineName, Color color, float width)
+    {
+        GameObject lineObject = new GameObject("RudolfGuideDebug_" + lineName);
+        lineObject.hideFlags = HideFlags.DontSave;
+        lineObject.transform.SetParent(guideDebugRoot.transform, false);
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.loop = false;
+        line.positionCount = 0;
+        line.sharedMaterial = guideDebugLineMaterial;
+        line.textureMode = LineTextureMode.Stretch;
+        line.alignment = LineAlignment.View;
+        line.numCapVertices = 4;
+        line.numCornerVertices = 4;
+        line.widthMultiplier = width;
+        line.startColor = color;
+        line.endColor = color;
+        line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        line.receiveShadows = false;
+        line.enabled = false;
+        return line;
+    }
+
+    private void SetGuideDebugLinesActive(bool active)
+    {
+        if (!guideDebugDrawLines)
+        {
+            return;
+        }
+
+        if (guideDebugRoot == null)
+        {
+            SetupGuideDebugVisuals();
+        }
+
+        if (guideDebugPathLine != null)
+        {
+            guideDebugPathLine.enabled = active && guideDebugPathLine.positionCount > 1;
+        }
+
+        if (guideDebugTargetLine != null)
+        {
+            guideDebugTargetLine.enabled = active && guideDebugTargetLine.positionCount > 1;
+        }
+    }
+
+    private void ClearGuideDebugLines()
+    {
+        if (guideDebugPathLine != null)
+        {
+            guideDebugPathLine.positionCount = 0;
+            guideDebugPathLine.enabled = false;
+        }
+
+        if (guideDebugTargetLine != null)
+        {
+            guideDebugTargetLine.positionCount = 0;
+            guideDebugTargetLine.enabled = false;
+        }
+    }
+
+    private void UpdateGuideDebugPathLine(IList<Vector3> points, Color color)
+    {
+        if (!guideDebugEnabled || points == null || points.Count < 2)
+        {
+            return;
+        }
+
+        if (guideDebugDrawLines)
+        {
+            if (guideDebugPathLine == null)
+            {
+                SetupGuideDebugVisuals();
+            }
+
+            if (guideDebugPathLine != null)
+            {
+                guideDebugPathLine.positionCount = points.Count;
+                guideDebugPathLine.startColor = color;
+                guideDebugPathLine.endColor = color;
+                for (int i = 0; i < points.Count; i++)
+                {
+                    guideDebugPathLine.SetPosition(i, points[i] + Vector3.up * guideDebugLineHeight);
+                }
+
+                guideDebugPathLine.enabled = true;
+            }
+        }
+
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            Debug.DrawLine(points[i] + Vector3.up * guideDebugLineHeight, points[i + 1] + Vector3.up * guideDebugLineHeight, color, 8f, false);
+        }
+    }
+
+    private void UpdateGuideDebugPathLine(Vector3 start, List<Vector3> corners, Color color)
+    {
+        guideDebugPathPoints.Clear();
+        guideDebugPathPoints.Add(start);
+        if (corners != null)
+        {
+            guideDebugPathPoints.AddRange(corners);
+        }
+
+        UpdateGuideDebugPathLine(guideDebugPathPoints, color);
+    }
+
+    private void UpdateGuideDebugPathLine(Vector3 start, Vector3 end, Color color)
+    {
+        guideDebugPathPoints.Clear();
+        guideDebugPathPoints.Add(start);
+        guideDebugPathPoints.Add(end);
+        UpdateGuideDebugPathLine(guideDebugPathPoints, color);
+    }
+
+    private void UpdateGuideDebugTargetLine(Vector3 target, Color color)
+    {
+        if (!guideDebugEnabled)
+        {
+            return;
+        }
+
+        Vector3 start = transform.position + Vector3.up * guideDebugLineHeight;
+        Vector3 end = target + Vector3.up * guideDebugLineHeight;
+        Debug.DrawLine(start, end, color, 0f, false);
+
+        if (!guideDebugDrawLines)
+        {
+            return;
+        }
+
+        if (guideDebugTargetLine == null)
+        {
+            SetupGuideDebugVisuals();
+        }
+
+        if (guideDebugTargetLine == null)
+        {
+            return;
+        }
+
+        guideDebugTargetLine.positionCount = 2;
+        guideDebugTargetLine.SetPosition(0, start);
+        guideDebugTargetLine.SetPosition(1, end);
+        guideDebugTargetLine.startColor = color;
+        guideDebugTargetLine.endColor = color;
+        guideDebugTargetLine.enabled = true;
+    }
+
+    private void GuideLog(string message)
+    {
+        if (guideDebugEnabled)
+        {
+            Debug.Log("[RudolfGuide] " + message);
+        }
+    }
+
+    private void GuideWarn(string message)
+    {
+        if (guideDebugEnabled)
+        {
+            Debug.LogWarning("[RudolfGuide] " + message);
+        }
+    }
+
+    private static string FormatGuideVector(Vector3 value)
+    {
+        return "(" + value.x.ToString("0.0") + ", " + value.y.ToString("0.0") + ", " + value.z.ToString("0.0") + ")";
+    }
+
+    private static string FormatGuideBounds(Bounds bounds)
+    {
+        return "center=" + FormatGuideVector(bounds.center) + " size=" + FormatGuideVector(bounds.size);
+    }
+
+    private static string GetGuideColliderPath(Collider collider)
+    {
+        return collider != null ? GetGuideTransformPath(collider.transform) : "<null>";
+    }
+
+    private static string GetGuideTransformPath(Transform source)
+    {
+        if (source == null)
+        {
+            return "<null>";
+        }
+
+        StringBuilder builder = new StringBuilder(source.name);
+        Transform current = source.parent;
+        while (current != null)
+        {
+            builder.Insert(0, current.name + "/");
+            current = current.parent;
+        }
+
+        return builder.ToString();
+    }
+
     private Vector3 GetInverseParentScale()
     {
         Vector3 parentScale = transform.lossyScale;
@@ -1234,6 +1516,14 @@ public class RobotCompanion : MonoBehaviour
     private static float SafeInverseScale(float value)
     {
         return Mathf.Abs(value) > 0.0001f ? 1f / value : 1f;
+    }
+
+    private void MaintainRootScale()
+    {
+        if ((transform.localScale - baseLocalScale).sqrMagnitude > 0.0001f)
+        {
+            transform.localScale = baseLocalScale;
+        }
     }
 
     private bool TryHandleGuideCommand(string command)
@@ -1280,11 +1570,23 @@ public class RobotCompanion : MonoBehaviour
         lastGuideWaitLine = -999f;
         guideStuckTimer = 0f;
         lastGuideProgressPosition = transform.position;
+        guideLastFailureReason = "";
+        ClearGuideDebugLines();
+        GuideLog("Start target=" + target.DisplayName +
+                 " robot=" + FormatGuideVector(transform.position) +
+                 " target=" + FormatGuideVector(target.transform.position) +
+                 " player=" + (player != null ? FormatGuideVector(player.position) : "<none>"));
         if (!BuildGuidePath(target))
         {
             guideActive = false;
             StopGuideAgent();
+            StopFallbackGuide();
             SetGuideHighlight(false);
+            UpdateGuideDebugPathLine(transform.position, target.transform.position, Color.red);
+            GuideWarn("Path failed target=" + target.DisplayName +
+                      " robot=" + FormatGuideVector(transform.position) +
+                      " target=" + FormatGuideVector(target.transform.position) +
+                      " reason=" + guideLastFailureReason);
             string noPathLine = "I can't find a safe ground path to " + target.DisplayName + " yet.";
             ShowLine(noPathLine, 4f);
             if (voiceBridge != null)
@@ -1314,7 +1616,9 @@ public class RobotCompanion : MonoBehaviour
         guideWaitingForPlayer = false;
         guideStuckTimer = 0f;
         StopGuideAgent();
+        StopFallbackGuide();
         SetGuideHighlight(false);
+        ClearGuideDebugLines();
 
         if (!string.IsNullOrWhiteSpace(line))
         {
@@ -1358,7 +1662,17 @@ public class RobotCompanion : MonoBehaviour
         if (IsGuideAgentRunning())
         {
             ConfigureGuideAgentSpeed(speed);
-            return GetGuideGroundTarget();
+            Vector3 navTarget = GetGuideGroundTarget();
+            UpdateGuideDebugTargetLine(navTarget, guideWaitingForPlayer ? Color.yellow : GuideAqua);
+            return navTarget;
+        }
+
+        if (guideFallbackActive)
+        {
+            Vector3 fallbackTarget = GetGuideGroundTarget();
+            UpdateGuideDebugTargetLine(fallbackTarget, guideWaitingForPlayer ? Color.yellow : GuideAqua);
+            Vector3 next = Vector3.MoveTowards(transform.position, fallbackTarget, speed * Time.deltaTime);
+            return SnapFallbackGuidePosition(next, fallbackTarget.y - guideHoverAboveGround);
         }
 
         return transform.position;
@@ -1377,6 +1691,18 @@ public class RobotCompanion : MonoBehaviour
             guideLight.range = 7.5f + Mathf.Sin(Time.time * 3f) * 0.8f;
         }
         UpdateGuideGlowMaterials();
+        UpdateGuideDebugTargetLine(PeekGuideGroundTarget(), guideWaitingForPlayer ? Color.yellow : GuideAqua);
+
+        if (guideDebugEnabled && Time.time - lastGuideDebugLogAt >= 2f)
+        {
+            lastGuideDebugLogAt = Time.time;
+            GuideLog("Progress mode=" + GetGuideModeLabel() +
+                     " waiting=" + guideWaitingForPlayer +
+                     " robot=" + FormatGuideVector(transform.position) +
+                     " target=" + FormatGuideVector(PeekGuideGroundTarget()) +
+                     " remaining=" + GetGuideRemainingDistance().ToString("0.0") +
+                     " fallbackIndex=" + guideFallbackIndex + "/" + guideFallbackCorners.Count);
+        }
 
         if (guideWaitingForPlayer && Time.time - lastGuideWaitLine > 8f)
         {
@@ -1399,6 +1725,12 @@ public class RobotCompanion : MonoBehaviour
             if (guideStuckTimer >= guideStuckRepathSeconds)
             {
                 guideStuckTimer = 0f;
+                GuideWarn("Stuck; rebuilding path. mode=" + GetGuideModeLabel() +
+                          " robot=" + FormatGuideVector(transform.position) +
+                          " target=" + FormatGuideVector(PeekGuideGroundTarget()) +
+                          " remaining=" + GetGuideRemainingDistance().ToString("0.0") +
+                          " fallbackIndex=" + guideFallbackIndex + "/" + guideFallbackCorners.Count +
+                          " lastFailure=" + guideLastFailureReason);
                 BuildGuidePath(guideTarget);
             }
         }
@@ -1422,46 +1754,70 @@ public class RobotCompanion : MonoBehaviour
 
     private void SetGuideHighlight(bool active)
     {
-        if (guideLight == null)
+        if (guideLight != null)
         {
-            return;
-        }
-
-        guideLight.enabled = active;
-        if (!active)
-        {
-            guideLight.intensity = 0f;
+            guideLight.enabled = active;
+            if (!active)
+            {
+                guideLight.intensity = 0f;
+            }
         }
 
         SetGuideShellsActive(active);
+        if (!active)
+        {
+            if (guideOutlineMaterial != null)
+            {
+                guideOutlineMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, 0f));
+            }
+
+            if (guideChamsMaterial != null)
+            {
+                guideChamsMaterial.SetColor("_Color", new Color(GuideAqua.r, GuideAqua.g, GuideAqua.b, 0f));
+            }
+        }
     }
 
     private bool BuildGuidePath(RudolfIslandGuideTarget target)
     {
         if (target == null)
         {
+            guideLastFailureReason = "target was null";
             StopGuideAgent();
+            StopFallbackGuide();
             return false;
         }
 
+        guideLastFailureReason = "";
         guideDestinationPosition = target.transform.position;
         Vector3 startSource = transform.position;
         NavMeshHit startHit;
         NavMeshHit targetHit;
-        if (!NavMesh.SamplePosition(startSource, out startHit, guideNavMeshSampleDistance, NavMesh.AllAreas) ||
-            !NavMesh.SamplePosition(target.transform.position, out targetHit, guideNavMeshSampleDistance, NavMesh.AllAreas))
+        bool startSampled = NavMesh.SamplePosition(startSource, out startHit, guideNavMeshSampleDistance, NavMesh.AllAreas);
+        bool targetSampled = NavMesh.SamplePosition(target.transform.position, out targetHit, guideNavMeshSampleDistance, NavMesh.AllAreas);
+        if (!startSampled || !targetSampled)
         {
-            StopGuideAgent();
-            return false;
+            GuideLog("NavMesh sample failed startSampled=" + startSampled +
+                     " targetSampled=" + targetSampled +
+                     " start=" + FormatGuideVector(startSource) +
+                     " target=" + FormatGuideVector(target.transform.position) +
+                     " sampleDistance=" + guideNavMeshSampleDistance.ToString("0.0") +
+                     "; using fallback A*.");
+            return BuildFallbackGuidePath(target);
         }
 
         guideDestinationPosition = targetHit.position;
         NavMeshPath path = new NavMeshPath();
-        if (!NavMesh.CalculatePath(startHit.position, targetHit.position, NavMesh.AllAreas, path) ||
-            path.status != NavMeshPathStatus.PathComplete)
+        bool navPathCalculated = NavMesh.CalculatePath(startHit.position, targetHit.position, NavMesh.AllAreas, path);
+        if (!navPathCalculated || path.status != NavMeshPathStatus.PathComplete)
         {
-            StopGuideAgent();
-            return false;
+            GuideLog("NavMesh path incomplete calculated=" + navPathCalculated +
+                     " status=" + path.status +
+                     " startHit=" + FormatGuideVector(startHit.position) +
+                     " targetHit=" + FormatGuideVector(targetHit.position) +
+                     " corners=" + (path.corners != null ? path.corners.Length : 0) +
+                     "; using fallback A*.");
+            return BuildFallbackGuidePath(target);
         }
 
         if (guideAgent == null)
@@ -1474,18 +1830,912 @@ public class RobotCompanion : MonoBehaviour
         guideAgent.enabled = true;
         if (!guideAgent.Warp(startHit.position))
         {
-            StopGuideAgent();
-            return false;
+            GuideLog("NavMesh agent warp failed at " + FormatGuideVector(startHit.position) + "; using fallback A*.");
+            return BuildFallbackGuidePath(target);
         }
 
         ConfigureGuideAgentSpeed(guideSpeed);
         if (!guideAgent.SetDestination(guideDestinationPosition))
         {
-            StopGuideAgent();
+            GuideLog("NavMesh SetDestination failed destination=" + FormatGuideVector(guideDestinationPosition) + "; using fallback A*.");
+            return BuildFallbackGuidePath(target);
+        }
+
+        StopFallbackGuide();
+        UpdateGuideDebugPathLine(path.corners, GuideAqua);
+        GuideLog("NavMesh path OK target=" + target.DisplayName +
+                 " start=" + FormatGuideVector(startHit.position) +
+                 " destination=" + FormatGuideVector(guideDestinationPosition) +
+                 " corners=" + (path.corners != null ? path.corners.Length : 0));
+        return true;
+    }
+
+    private bool BuildFallbackGuidePath(RudolfIslandGuideTarget target)
+    {
+        StopGuideAgent();
+        guideFallbackCorners.Clear();
+        guideFallbackIndex = 0;
+        guideFallbackActive = false;
+
+        if (target == null)
+        {
+            guideLastFailureReason = "fallback target was null";
+            return false;
+        }
+
+        Vector3 destinationProbe = target.transform.position;
+        if (!TrySampleGuideWalkablePoint(destinationProbe, out Vector3 destination, out string destinationSampleReason))
+        {
+            GuideWarn("Destination ground sample failed target=" + target.DisplayName +
+                      " probe=" + FormatGuideVector(destinationProbe) +
+                      " reason=" + destinationSampleReason +
+                      "; snapping as emergency fallback.");
+            destination = SnapFallbackGuidePosition(destinationProbe, destinationProbe.y);
+        }
+
+        Vector3 startProbe = transform.position - Vector3.up * guideHoverAboveGround;
+        if (!TrySampleGuideWalkablePoint(startProbe, out Vector3 start, out string startSampleReason))
+        {
+            GuideWarn("Start ground sample failed probe=" + FormatGuideVector(startProbe) +
+                      " reason=" + startSampleReason +
+                      "; snapping as emergency fallback.");
+            start = SnapFallbackGuidePosition(startProbe, startProbe.y);
+        }
+
+        guideDestinationPosition = destination - Vector3.up * guideHoverAboveGround;
+        GuideLog("Fallback A* build target=" + target.DisplayName +
+                 " start=" + FormatGuideVector(start) +
+                 " destination=" + FormatGuideVector(destination) +
+                 " cell=" + GetGuideEffectiveAStarCellSize().ToString("0.0") +
+                 " margin=" + guideAStarSearchMargin.ToString("0.0") +
+                 " clearance=" + guideAStarClearanceRadius.ToString("0.0"));
+
+        if (!TryBuildAStarGuidePath(start, destination, guideFallbackCorners, out string directFailureReason))
+        {
+            GuideWarn("Direct fallback A* failed target=" + target.DisplayName + " reason=" + directFailureReason);
+            List<Vector3> firstLeg = new List<Vector3>(64);
+            List<Vector3> secondLeg = new List<Vector3>(64);
+            Vector3 hub = GuideHubPosition;
+            if (!TrySampleGuideWalkablePoint(hub, out hub, out string hubSampleReason))
+            {
+                GuideWarn("Hub ground sample failed hubProbe=" + FormatGuideVector(GuideHubPosition) +
+                          " reason=" + hubSampleReason +
+                          "; snapping hub.");
+                hub = SnapFallbackGuidePosition(hub, hub.y);
+            }
+
+            bool firstLegOk = TryBuildAStarGuidePath(start, hub, firstLeg, out string firstLegFailureReason);
+            bool secondLegOk = TryBuildAStarGuidePath(hub, destination, secondLeg, out string secondLegFailureReason);
+            if (!firstLegOk || !secondLegOk)
+            {
+                guideFallbackCorners.Clear();
+                string hubFailureReason = "direct=(" + directFailureReason + ") viaHub firstOk=" + firstLegOk +
+                                          " first=(" + firstLegFailureReason + ") secondOk=" + secondLegOk +
+                                          " second=(" + secondLegFailureReason + ")";
+                if (TryBuildIslandAnchorFallbackPath(target, start, destination, guideFallbackCorners, out string anchorRouteReason))
+                {
+                    GuideLog("Fallback A* using island anchors target=" + target.DisplayName + " " + anchorRouteReason);
+                }
+                else
+                {
+                    guideLastFailureReason = hubFailureReason + " anchors=(" + anchorRouteReason + ")";
+                    UpdateGuideDebugPathLine(start, destination, Color.red);
+                    GuideWarn("Fallback A* failed target=" + target.DisplayName + " reason=" + guideLastFailureReason);
+                    return false;
+                }
+            }
+            else
+            {
+                GuideLog("Fallback A* using hub " + FormatGuideVector(hub) +
+                         " firstLegCorners=" + firstLeg.Count +
+                         " secondLegCorners=" + secondLeg.Count);
+                guideFallbackCorners.AddRange(firstLeg);
+                for (int i = 0; i < secondLeg.Count; i++)
+                {
+                    if (guideFallbackCorners.Count == 0 ||
+                        HorizontalDistance(guideFallbackCorners[guideFallbackCorners.Count - 1], secondLeg[i]) > guideWaypointReachDistance)
+                    {
+                        guideFallbackCorners.Add(secondLeg[i]);
+                    }
+                }
+            }
+        }
+
+        SimplifyGuideFallbackCorners(start);
+        guideFallbackActive = guideFallbackCorners.Count > 0;
+        if (!guideFallbackActive)
+        {
+            guideLastFailureReason = "fallback path contained no corners after simplification";
+            GuideWarn("Fallback A* failed target=" + target.DisplayName + " reason=" + guideLastFailureReason);
+            UpdateGuideDebugPathLine(start, destination, Color.red);
+            return false;
+        }
+
+        UpdateGuideDebugPathLine(start, guideFallbackCorners, GuideAqua);
+        GuideLog("Fallback A* path OK target=" + target.DisplayName +
+                 " corners=" + guideFallbackCorners.Count +
+                 " firstCorner=" + FormatGuideVector(guideFallbackCorners[0]) +
+                 " finalCorner=" + FormatGuideVector(guideFallbackCorners[guideFallbackCorners.Count - 1]) +
+                 " remaining=" + GetFallbackRemainingDistance().ToString("0.0"));
+        return guideFallbackActive;
+    }
+
+    private bool TryBuildIslandAnchorFallbackPath(
+        RudolfIslandGuideTarget target,
+        Vector3 start,
+        Vector3 destination,
+        List<Vector3> output,
+        out string routeReason)
+    {
+        output.Clear();
+        routeReason = "";
+        if (target == null || target.Island != RudolfIslandGuideTarget.IslandId.Community)
+        {
+            routeReason = "no configured anchors for target";
+            return false;
+        }
+
+        return TryBuildGuidePathThroughAnchors(
+            start,
+            destination,
+            output,
+            out routeReason,
+            GuideHubPosition,
+            CommunityBridgeEastAnchor,
+            CommunityBridgeCrownAnchor);
+    }
+
+    private bool TryBuildGuidePathThroughAnchors(
+        Vector3 start,
+        Vector3 destination,
+        List<Vector3> output,
+        out string routeReason,
+        params Vector3[] anchorProbes)
+    {
+        output.Clear();
+        routeReason = "";
+        List<Vector3> routePoints = new List<Vector3>(anchorProbes.Length + 2);
+        routePoints.Add(start);
+        for (int i = 0; i < anchorProbes.Length; i++)
+        {
+            Vector3 anchorProbe = anchorProbes[i];
+            if (!TrySampleGuideWalkablePoint(anchorProbe, out Vector3 anchor, out string sampleReason))
+            {
+                routeReason = "anchorSampleFailed index=" + i +
+                              " probe=" + FormatGuideVector(anchorProbe) +
+                              " reason=" + sampleReason;
+                return false;
+            }
+
+            if (HorizontalDistance(routePoints[routePoints.Count - 1], anchor) > guideWaypointReachDistance)
+            {
+                routePoints.Add(anchor);
+            }
+        }
+
+        routePoints.Add(destination);
+
+        for (int i = 0; i < routePoints.Count - 1; i++)
+        {
+            List<Vector3> leg = new List<Vector3>(64);
+            if (!TryBuildAStarGuidePath(routePoints[i], routePoints[i + 1], leg, out string legFailureReason))
+            {
+                routeReason = "legFailed index=" + i +
+                              " from=" + FormatGuideVector(routePoints[i]) +
+                              " to=" + FormatGuideVector(routePoints[i + 1]) +
+                              " reason=" + legFailureReason;
+                output.Clear();
+                return false;
+            }
+
+            for (int corner = 0; corner < leg.Count; corner++)
+            {
+                if (output.Count == 0 ||
+                    HorizontalDistance(output[output.Count - 1], leg[corner]) > guideWaypointReachDistance)
+                {
+                    output.Add(leg[corner]);
+                }
+            }
+        }
+
+        routeReason = "anchors=" + anchorProbes.Length + " corners=" + output.Count;
+        return output.Count > 0;
+    }
+
+    private bool TryBuildAStarGuidePath(Vector3 start, Vector3 destination, List<Vector3> output, out string failureReason)
+    {
+        output.Clear();
+        failureReason = "";
+
+        float cellSize = GetGuideEffectiveAStarCellSize();
+        float minX = Mathf.Min(start.x, destination.x) - guideAStarSearchMargin;
+        float maxX = Mathf.Max(start.x, destination.x) + guideAStarSearchMargin;
+        float minZ = Mathf.Min(start.z, destination.z) - guideAStarSearchMargin;
+        float maxZ = Mathf.Max(start.z, destination.z) + guideAStarSearchMargin;
+        float spanX = Mathf.Max(cellSize, maxX - minX);
+        float spanZ = Mathf.Max(cellSize, maxZ - minZ);
+        int maxAxis = Mathf.Clamp(guideAStarMaxGridAxis, 24, 160);
+        float requiredCell = Mathf.Max(spanX, spanZ) / Mathf.Max(1, maxAxis - 1);
+        cellSize = Mathf.Max(cellSize, requiredCell);
+
+        int width = Mathf.Clamp(Mathf.CeilToInt(spanX / cellSize) + 1, 2, maxAxis);
+        int height = Mathf.Clamp(Mathf.CeilToInt(spanZ / cellSize) + 1, 2, maxAxis);
+
+        bool[,] walkable = new bool[width, height];
+        Vector3[,] points = new Vector3[width, height];
+        float[,] gScore = new float[width, height];
+        float[,] fScore = new float[width, height];
+        bool[,] closed = new bool[width, height];
+        bool[,] inOpen = new bool[width, height];
+        Vector2Int[,] parent = new Vector2Int[width, height];
+        int walkableCount = 0;
+        int noHitCount = 0;
+        int noWalkableGroundCount = 0;
+        int clearanceBlockedCount = 0;
+        string lastSampleFailure = "";
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int z = 0; z < height; z++)
+            {
+                gScore[x, z] = float.PositiveInfinity;
+                fScore[x, z] = float.PositiveInfinity;
+                parent[x, z] = new Vector2Int(-1, -1);
+
+                Vector3 probe = new Vector3(minX + x * cellSize, Mathf.Max(start.y, destination.y), minZ + z * cellSize);
+                if (TrySampleGuideWalkablePoint(probe, out Vector3 snapped, out string sampleFailure))
+                {
+                    walkable[x, z] = true;
+                    points[x, z] = snapped;
+                    walkableCount++;
+                }
+                else
+                {
+                    lastSampleFailure = sampleFailure;
+                    if (sampleFailure.StartsWith("no ray hits", StringComparison.Ordinal))
+                    {
+                        noHitCount++;
+                    }
+                    else if (sampleFailure.Contains("clearance"))
+                    {
+                        clearanceBlockedCount++;
+                    }
+                    else
+                    {
+                        noWalkableGroundCount++;
+                    }
+                }
+            }
+        }
+
+        bool startNodeFound = TryFindNearestWalkableNode(start, walkable, points, out Vector2Int startNode);
+        bool destinationNodeFound = TryFindNearestWalkableNode(destination, walkable, points, out Vector2Int destinationNode);
+        if (!startNodeFound || !destinationNodeFound)
+        {
+            failureReason = "nearest walkable node failed startFound=" + startNodeFound +
+                            " destinationFound=" + destinationNodeFound +
+                            " grid=" + width + "x" + height +
+                            " cell=" + cellSize.ToString("0.00") +
+                            " walkable=" + walkableCount +
+                            " noHit=" + noHitCount +
+                            " noGround=" + noWalkableGroundCount +
+                            " clearanceBlocked=" + clearanceBlockedCount +
+                            " start=" + FormatGuideVector(start) +
+                            " destination=" + FormatGuideVector(destination) +
+                            " lastSampleFailure=" + lastSampleFailure;
+            return false;
+        }
+
+        List<Vector2Int> open = new List<Vector2Int>(width * height);
+        gScore[startNode.x, startNode.y] = 0f;
+        fScore[startNode.x, startNode.y] = HorizontalDistance(points[startNode.x, startNode.y], points[destinationNode.x, destinationNode.y]);
+        open.Add(startNode);
+        inOpen[startNode.x, startNode.y] = true;
+        int closedCount = 0;
+        int diagonalBlockedCount = 0;
+        int stepBlockedCount = 0;
+        int segmentBlockedCount = 0;
+        string lastSegmentFailure = "";
+        bool hasLastBlockedSegment = false;
+        Vector3 lastBlockedSegmentStart = Vector3.zero;
+        Vector3 lastBlockedSegmentEnd = Vector3.zero;
+
+        while (open.Count > 0)
+        {
+            int bestOpenIndex = 0;
+            Vector2Int current = open[0];
+            float bestScore = fScore[current.x, current.y];
+            for (int i = 1; i < open.Count; i++)
+            {
+                Vector2Int candidate = open[i];
+                float candidateScore = fScore[candidate.x, candidate.y];
+                if (candidateScore < bestScore)
+                {
+                    bestScore = candidateScore;
+                    bestOpenIndex = i;
+                    current = candidate;
+                }
+            }
+
+            open.RemoveAt(bestOpenIndex);
+            inOpen[current.x, current.y] = false;
+            closed[current.x, current.y] = true;
+            closedCount++;
+
+            if (current == destinationNode)
+            {
+                ReconstructGuideAStarPath(current, parent, points, output);
+                GuideLog("A* path OK grid=" + width + "x" + height +
+                         " cell=" + cellSize.ToString("0.00") +
+                         " walkable=" + walkableCount +
+                         " closed=" + closedCount +
+                         " corners=" + output.Count +
+                         " startNode=" + startNode +
+                         " destinationNode=" + destinationNode);
+                return output.Count > 0;
+            }
+
+            for (int i = 0; i < GuideAStarDirections.Length; i++)
+            {
+                Vector2Int direction = GuideAStarDirections[i];
+                int nx = current.x + direction.x;
+                int nz = current.y + direction.y;
+                if (nx < 0 || nz < 0 || nx >= width || nz >= height ||
+                    !walkable[nx, nz] ||
+                    closed[nx, nz])
+                {
+                    continue;
+                }
+
+                if (direction.x != 0 && direction.y != 0 &&
+                    (!walkable[current.x + direction.x, current.y] ||
+                     !walkable[current.x, current.y + direction.y]))
+                {
+                    diagonalBlockedCount++;
+                    continue;
+                }
+
+                Vector3 currentPoint = points[current.x, current.y];
+                Vector3 neighborPoint = points[nx, nz];
+                float maxStepHeight = GetGuideEffectiveMaxStepHeight();
+                if (Mathf.Abs(neighborPoint.y - currentPoint.y) > maxStepHeight)
+                {
+                    stepBlockedCount++;
+                    hasLastBlockedSegment = true;
+                    lastBlockedSegmentStart = currentPoint;
+                    lastBlockedSegmentEnd = neighborPoint;
+                    lastSegmentFailure = "height jump from " + FormatGuideVector(currentPoint) +
+                                         " to " + FormatGuideVector(neighborPoint) +
+                                         " delta=" + Mathf.Abs(neighborPoint.y - currentPoint.y).ToString("0.00") +
+                                         " max=" + maxStepHeight.ToString("0.00");
+                    continue;
+                }
+
+                if (!IsGuideSegmentWalkable(currentPoint, neighborPoint, out string segmentFailure))
+                {
+                    segmentBlockedCount++;
+                    hasLastBlockedSegment = true;
+                    lastBlockedSegmentStart = currentPoint;
+                    lastBlockedSegmentEnd = neighborPoint;
+                    lastSegmentFailure = segmentFailure;
+                    continue;
+                }
+
+                float tentativeScore = gScore[current.x, current.y] + Vector3.Distance(currentPoint, neighborPoint);
+                if (tentativeScore >= gScore[nx, nz])
+                {
+                    continue;
+                }
+
+                parent[nx, nz] = current;
+                gScore[nx, nz] = tentativeScore;
+                fScore[nx, nz] = tentativeScore + HorizontalDistance(neighborPoint, points[destinationNode.x, destinationNode.y]);
+                if (!inOpen[nx, nz])
+                {
+                    open.Add(new Vector2Int(nx, nz));
+                    inOpen[nx, nz] = true;
+                }
+            }
+        }
+
+        failureReason = "open set exhausted grid=" + width + "x" + height +
+                        " cell=" + cellSize.ToString("0.00") +
+                        " walkable=" + walkableCount +
+                        " closed=" + closedCount +
+                        " noHit=" + noHitCount +
+                        " noGround=" + noWalkableGroundCount +
+                        " clearanceBlocked=" + clearanceBlockedCount +
+                        " diagonalBlocked=" + diagonalBlockedCount +
+                        " stepBlocked=" + stepBlockedCount +
+                        " segmentBlocked=" + segmentBlockedCount +
+                        " startNode=" + startNode +
+                        " destinationNode=" + destinationNode +
+                        " lastSampleFailure=" + lastSampleFailure +
+                        " lastSegmentFailure=" + lastSegmentFailure;
+        if (hasLastBlockedSegment)
+        {
+            UpdateGuideDebugPathLine(lastBlockedSegmentStart, lastBlockedSegmentEnd, Color.red);
+        }
+        return false;
+    }
+
+    private bool TryFindNearestWalkableNode(Vector3 worldPoint, bool[,] walkable, Vector3[,] points, out Vector2Int node)
+    {
+        node = new Vector2Int(-1, -1);
+        float bestDistance = float.PositiveInfinity;
+        int width = walkable.GetLength(0);
+        int height = walkable.GetLength(1);
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int z = 0; z < height; z++)
+            {
+                if (!walkable[x, z])
+                {
+                    continue;
+                }
+
+                float distance = HorizontalDistance(worldPoint, points[x, z]);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    node = new Vector2Int(x, z);
+                }
+            }
+        }
+
+        return node.x >= 0;
+    }
+
+    private void ReconstructGuideAStarPath(Vector2Int endNode, Vector2Int[,] parent, Vector3[,] points, List<Vector3> output)
+    {
+        List<Vector3> reversed = new List<Vector3>(64);
+        Vector2Int current = endNode;
+        while (current.x >= 0 && current.y >= 0)
+        {
+            reversed.Add(points[current.x, current.y]);
+            current = parent[current.x, current.y];
+        }
+
+        for (int i = reversed.Count - 2; i >= 0; i--)
+        {
+            output.Add(reversed[i]);
+        }
+    }
+
+    private void SimplifyGuideFallbackCorners(Vector3 start)
+    {
+        if (guideFallbackCorners.Count <= 2)
+        {
+            return;
+        }
+
+        List<Vector3> simplified = new List<Vector3>(guideFallbackCorners.Count);
+        Vector3 anchor = start;
+        int index = 0;
+        while (index < guideFallbackCorners.Count)
+        {
+            int best = index;
+            for (int candidate = guideFallbackCorners.Count - 1; candidate > index; candidate--)
+            {
+                if (CanSimplifyGuideSegment(anchor, guideFallbackCorners[candidate]))
+                {
+                    best = candidate;
+                    break;
+                }
+            }
+
+            simplified.Add(guideFallbackCorners[best]);
+            anchor = guideFallbackCorners[best];
+            index = best + 1;
+        }
+
+        guideFallbackCorners.Clear();
+        guideFallbackCorners.AddRange(simplified);
+    }
+
+    private bool CanSimplifyGuideSegment(Vector3 from, Vector3 to)
+    {
+        if (HorizontalDistance(from, to) > guideSimplifyMaxDistance)
+        {
+            return false;
+        }
+
+        if (Mathf.Abs(to.y - from.y) > guideSimplifyMaxHeightDelta)
+        {
+            return false;
+        }
+
+        return IsGuideSegmentWalkable(from, to);
+    }
+
+    private bool IsGuideSegmentWalkable(Vector3 from, Vector3 to)
+    {
+        return IsGuideSegmentWalkable(from, to, out _);
+    }
+
+    private bool IsGuideSegmentWalkable(Vector3 from, Vector3 to, out string failureReason)
+    {
+        float distance = HorizontalDistance(from, to);
+        int steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(0.75f, GetGuideEffectiveAStarCellSize() * 0.5f)));
+        Vector3 previous = from;
+        failureReason = "";
+        for (int i = 1; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            Vector3 probe = Vector3.Lerp(from, to, t);
+            if (!TrySampleGuideWalkablePoint(probe, out Vector3 sampled, out string sampleFailure))
+            {
+                failureReason = "segment sample failed t=" + t.ToString("0.00") +
+                                " probe=" + FormatGuideVector(probe) +
+                                " from=" + FormatGuideVector(from) +
+                                " to=" + FormatGuideVector(to) +
+                                " reason=" + sampleFailure;
+                return false;
+            }
+
+            float stepHeight = Mathf.Abs(sampled.y - previous.y);
+            float maxStepHeight = GetGuideEffectiveMaxStepHeight();
+            if (stepHeight > maxStepHeight)
+            {
+                failureReason = "segment height jump t=" + t.ToString("0.00") +
+                                " previous=" + FormatGuideVector(previous) +
+                                " sampled=" + FormatGuideVector(sampled) +
+                                " delta=" + stepHeight.ToString("0.00") +
+                                " max=" + maxStepHeight.ToString("0.00");
+                return false;
+            }
+
+            previous = sampled;
+        }
+
+        return true;
+    }
+
+    private bool TrySampleGuideWalkablePoint(Vector3 probe, out Vector3 point)
+    {
+        return TrySampleGuideWalkablePoint(probe, out point, out _);
+    }
+
+    private bool TrySampleGuideWalkablePoint(Vector3 probe, out Vector3 point, out string failureReason)
+    {
+        point = probe;
+        failureReason = "";
+        Vector3 probeOrigin = new Vector3(
+            probe.x,
+            Mathf.Max(Mathf.Max(probe.y, transform.position.y), Mathf.Max(guideDestinationPosition.y, GuideHubPosition.y)) + guideFallbackGroundProbeHeight,
+            probe.z);
+        RaycastHit[] hits = Physics.RaycastAll(
+            probeOrigin,
+            Vector3.down,
+            guideFallbackGroundProbeDistance,
+            GetGuideCollisionMask(),
+            QueryTriggerInteraction.Ignore);
+
+        if (hits == null || hits.Length == 0)
+        {
+            failureReason = "no ray hits origin=" + FormatGuideVector(probeOrigin) +
+                            " distance=" + guideFallbackGroundProbeDistance.ToString("0.0");
+            return false;
+        }
+
+        Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        int groundRejected = 0;
+        int clearanceRejected = 0;
+        int heightRejected = 0;
+        int acceptedCandidates = 0;
+        string lastRejected = "";
+        bool foundPoint = false;
+        Vector3 bestPoint = probe;
+        float bestScore = float.PositiveInfinity;
+        string bestGround = "";
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit hit = hits[i];
+            if (!IsGuideWalkableGroundHit(hit, out string groundRejectReason))
+            {
+                groundRejected++;
+                lastRejected = "ground " + GetGuideColliderPath(hit.collider) + " rejected: " + groundRejectReason;
+                continue;
+            }
+
+            Vector3 candidate = hit.point + Vector3.up * guideHoverAboveGround;
+            float maxHeightAboveProbe = GetGuideEffectiveSampleMaxHeightAboveProbe();
+            float heightAboveProbe = candidate.y - probe.y;
+            if (heightAboveProbe > maxHeightAboveProbe)
+            {
+                heightRejected++;
+                lastRejected = "height rejected at " + FormatGuideVector(candidate) +
+                               " ground=" + GetGuideColliderPath(hit.collider) +
+                               " aboveProbe=" + heightAboveProbe.ToString("0.0") +
+                               " maxAbove=" + maxHeightAboveProbe.ToString("0.0");
+                continue;
+            }
+
+            if (HasGuideClearance(candidate, hit.collider, out string clearanceRejectReason))
+            {
+                acceptedCandidates++;
+                float heightDelta = Mathf.Abs(candidate.y - probe.y);
+                float surfacePenalty = GetGuideSurfacePenalty(hit.collider, candidate.y);
+                float distanceTieBreaker = hit.distance * 0.001f;
+                float score = heightDelta * 5f + surfacePenalty + distanceTieBreaker;
+                if (score < bestScore)
+                {
+                    foundPoint = true;
+                    bestScore = score;
+                    bestPoint = candidate;
+                    bestGround = GetGuideColliderPath(hit.collider);
+                }
+                continue;
+            }
+
+            clearanceRejected++;
+            lastRejected = "clearance rejected at " + FormatGuideVector(candidate) +
+                           " ground=" + GetGuideColliderPath(hit.collider) +
+                           " blocker=" + clearanceRejectReason;
+        }
+
+        if (foundPoint)
+        {
+            point = bestPoint;
+            if (guideDebugEnabled && Mathf.Abs(bestPoint.y - probe.y) > GetGuideEffectiveMaxStepHeight())
+            {
+                GuideWarn("Sample accepted far-height ground probe=" + FormatGuideVector(probe) +
+                          " point=" + FormatGuideVector(bestPoint) +
+                          " ground=" + bestGround +
+                          " acceptedCandidates=" + acceptedCandidates +
+                          " score=" + bestScore.ToString("0.0"));
+            }
+            return true;
+        }
+
+        failureReason = "no accepted ground hits=" + hits.Length +
+                        " groundRejected=" + groundRejected +
+                        " clearanceRejected=" + clearanceRejected +
+                        " heightRejected=" + heightRejected +
+                        " acceptedCandidates=" + acceptedCandidates +
+                        " probe=" + FormatGuideVector(probe) +
+                        " lastRejected=" + lastRejected;
+        return false;
+    }
+
+    private bool IsGuideWalkableGroundHit(RaycastHit hit)
+    {
+        return IsGuideWalkableGroundHit(hit, out _);
+    }
+
+    private bool IsGuideWalkableGroundHit(RaycastHit hit, out string rejectReason)
+    {
+        rejectReason = "";
+        if (hit.collider == null)
+        {
+            rejectReason = "missing collider";
+            return false;
+        }
+
+        if (hit.collider.isTrigger)
+        {
+            rejectReason = "trigger collider";
+            return false;
+        }
+
+        if (hit.collider.transform.IsChildOf(transform))
+        {
+            rejectReason = "Rudolf's own collider";
+            return false;
+        }
+
+        if (hit.normal.y < 0.35f)
+        {
+            rejectReason = "normal too steep " + hit.normal.y.ToString("0.00");
+            return false;
+        }
+
+        if (IsTreeOrFoliage(hit.collider.transform))
+        {
+            rejectReason = "tree or foliage";
             return false;
         }
 
         return true;
+    }
+
+    private bool HasGuideClearance(Vector3 hoverPoint, Collider groundCollider)
+    {
+        return HasGuideClearance(hoverPoint, groundCollider, out _);
+    }
+
+    private bool HasGuideClearance(Vector3 hoverPoint, Collider groundCollider, out string blockerReason)
+    {
+        blockerReason = "";
+        Vector3 center = hoverPoint + Vector3.up * Mathf.Max(0.4f, guideAStarBodyHeight * 0.5f);
+        Collider[] colliders = Physics.OverlapSphere(
+            center,
+            Mathf.Max(0.3f, guideAStarClearanceRadius),
+            GetGuideCollisionMask(),
+            QueryTriggerInteraction.Ignore);
+
+        if (colliders == null || colliders.Length == 0)
+        {
+            return true;
+        }
+
+        float bodyBottom = hoverPoint.y - 0.05f;
+        float bodyTop = hoverPoint.y + Mathf.Max(0.6f, guideAStarBodyHeight);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider collider = colliders[i];
+            if (collider == null ||
+                collider == groundCollider ||
+                collider.isTrigger ||
+                collider.transform.IsChildOf(transform) ||
+                IsGuidePlayerCollider(collider))
+            {
+                continue;
+            }
+
+            if (IsTreeOrFoliage(collider.transform))
+            {
+                if (guideIgnoreFoliageClearance)
+                {
+                    continue;
+                }
+
+                blockerReason = GetGuideColliderPath(collider) + " tree/foliage " + FormatGuideBounds(collider.bounds);
+                return false;
+            }
+
+            if (IsGuideThinDecorativeObstacle(collider))
+            {
+                continue;
+            }
+
+            Bounds bounds = collider.bounds;
+            if (IsGuideGroundLikeCollider(collider, hoverPoint.y))
+            {
+                continue;
+            }
+
+            if (bounds.max.y <= bodyBottom + 0.2f ||
+                bounds.min.y >= bodyTop)
+            {
+                continue;
+            }
+
+            blockerReason = GetGuideColliderPath(collider) + " " + FormatGuideBounds(bounds);
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsGuideGroundLikeCollider(Collider collider, float hoverY)
+    {
+        if (collider == null || IsTreeOrFoliage(collider.transform))
+        {
+            return false;
+        }
+
+        Transform current = collider.transform;
+        while (current != null)
+        {
+            string currentName = current.name.ToLowerInvariant();
+            if (currentName.Contains("ground") ||
+                currentName.Contains("floor") ||
+                currentName.Contains("path") ||
+                currentName.Contains("road") ||
+                currentName.Contains("bridge") ||
+                currentName.Contains("bruecke") ||
+                currentName.Contains("brücke") ||
+                currentName.Contains("brucke") ||
+                currentName.Contains("stair") ||
+                currentName.Contains("step") ||
+                currentName.Contains("platform") ||
+                currentName.Contains("island"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        Bounds bounds = collider.bounds;
+        return bounds.max.y <= hoverY + 0.35f ||
+               (bounds.size.y <= 0.75f && bounds.center.y <= hoverY);
+    }
+
+    private float GetGuideSurfacePenalty(Collider collider, float hoverY)
+    {
+        if (IsGuidePreferredPathSurface(collider))
+        {
+            return -18f;
+        }
+
+        return IsGuideGroundLikeCollider(collider, hoverY) ? 0f : 12f;
+    }
+
+    private bool IsGuidePreferredPathSurface(Collider collider)
+    {
+        if (collider == null || IsTreeOrFoliage(collider.transform))
+        {
+            return false;
+        }
+
+        Transform current = collider.transform;
+        while (current != null)
+        {
+            string currentName = current.name.ToLowerInvariant();
+            if (currentName.Contains("bridge") ||
+                currentName.Contains("bruecke") ||
+                currentName.Contains("brücke") ||
+                currentName.Contains("brucke") ||
+                currentName.Contains("stair") ||
+                currentName.Contains("step") ||
+                currentName.Contains("path") ||
+                currentName.Contains("road"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private bool IsGuidePlayerCollider(Collider collider)
+    {
+        if (collider == null)
+        {
+            return false;
+        }
+
+        if (player != null && collider.transform.IsChildOf(player))
+        {
+            return true;
+        }
+
+        Transform current = collider.transform;
+        while (current != null)
+        {
+            string currentName = current.name.ToLowerInvariant();
+            if (currentName.Contains("fps_player") ||
+                currentName.Contains("player"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
+    private bool IsGuideThinDecorativeObstacle(Collider collider)
+    {
+        if (collider == null)
+        {
+            return false;
+        }
+
+        Bounds bounds = collider.bounds;
+        float maxFootprint = Mathf.Max(0.05f, guideThinObstacleMaxFootprint);
+        return bounds.size.x <= maxFootprint && bounds.size.z <= maxFootprint;
+    }
+
+    private float GetGuideEffectiveMaxStepHeight()
+    {
+        return Mathf.Max(6.25f, guideAStarMaxStepHeight);
+    }
+
+    private float GetGuideEffectiveSampleMaxHeightAboveProbe()
+    {
+        return Mathf.Max(0.5f, guideSampleMaxHeightAboveProbe);
+    }
+
+    private float GetGuideEffectiveAStarCellSize()
+    {
+        return Mathf.Clamp(Mathf.Min(guideAStarCellSize, 2f), 1.25f, 2f);
     }
 
     private void ConfigureGuideAgentSpeed(float speed)
@@ -1517,6 +2767,13 @@ public class RobotCompanion : MonoBehaviour
         }
     }
 
+    private void StopFallbackGuide()
+    {
+        guideFallbackActive = false;
+        guideFallbackIndex = 0;
+        guideFallbackCorners.Clear();
+    }
+
     private bool IsGuideAgentRunning()
     {
         return guideAgent != null &&
@@ -1535,7 +2792,65 @@ public class RobotCompanion : MonoBehaviour
             return guideAgent.remainingDistance;
         }
 
+        if (guideFallbackActive)
+        {
+            return GetFallbackRemainingDistance();
+        }
+
         return Vector3.Distance(transform.position, guideDestinationPosition + Vector3.up * guideHoverAboveGround);
+    }
+
+    private float GetFallbackRemainingDistance()
+    {
+        if (!guideFallbackActive || guideFallbackCorners.Count == 0)
+        {
+            return Vector3.Distance(transform.position, guideDestinationPosition + Vector3.up * guideHoverAboveGround);
+        }
+
+        int index = Mathf.Clamp(guideFallbackIndex, 0, guideFallbackCorners.Count - 1);
+        float distance = Vector3.Distance(transform.position, guideFallbackCorners[index]);
+        for (int i = index; i < guideFallbackCorners.Count - 1; i++)
+        {
+            distance += Vector3.Distance(guideFallbackCorners[i], guideFallbackCorners[i + 1]);
+        }
+
+        return distance;
+    }
+
+    private string GetGuideModeLabel()
+    {
+        if (IsGuideAgentRunning())
+        {
+            return "NavMesh";
+        }
+
+        if (guideFallbackActive)
+        {
+            return "FallbackAStar";
+        }
+
+        return "Idle";
+    }
+
+    private Vector3 PeekGuideGroundTarget()
+    {
+        if (guideTarget == null)
+        {
+            return transform.position;
+        }
+
+        if (IsGuideAgentRunning())
+        {
+            return guideAgentProxy.transform.position + Vector3.up * guideHoverAboveGround;
+        }
+
+        if (guideFallbackActive && guideFallbackCorners.Count > 0)
+        {
+            int index = Mathf.Clamp(guideFallbackIndex, 0, guideFallbackCorners.Count - 1);
+            return guideFallbackCorners[index];
+        }
+
+        return guideDestinationPosition + Vector3.up * guideHoverAboveGround;
     }
 
     private Vector3 GetGuideGroundTarget()
@@ -1550,7 +2865,45 @@ public class RobotCompanion : MonoBehaviour
             return guideAgentProxy.transform.position + Vector3.up * guideHoverAboveGround;
         }
 
+        if (guideFallbackActive)
+        {
+            return GetFallbackGuideTarget();
+        }
+
         return transform.position;
+    }
+
+    private Vector3 GetFallbackGuideTarget()
+    {
+        if (!guideFallbackActive || guideFallbackCorners.Count == 0)
+        {
+            return transform.position;
+        }
+
+        while (guideFallbackIndex < guideFallbackCorners.Count - 1 &&
+               HorizontalDistance(transform.position, guideFallbackCorners[guideFallbackIndex]) <= guideWaypointReachDistance)
+        {
+            guideFallbackIndex++;
+        }
+
+        return guideFallbackCorners[Mathf.Clamp(guideFallbackIndex, 0, guideFallbackCorners.Count - 1)];
+    }
+
+    private Vector3 SnapFallbackGuidePosition(Vector3 position, float fallbackGroundY)
+    {
+        if (TrySampleGuideWalkablePoint(position, out Vector3 snapped))
+        {
+            return snapped;
+        }
+
+        float targetY = fallbackGroundY + guideHoverAboveGround;
+        if (Application.isPlaying)
+        {
+            targetY = Mathf.MoveTowards(transform.position.y, targetY, 2.5f * Time.deltaTime);
+        }
+
+        position.y = targetY;
+        return position;
     }
 
     private Vector3 GetGuideLookDirection(Vector3 targetPos, Vector3 next)
@@ -1651,6 +3004,11 @@ public class RobotCompanion : MonoBehaviour
 
     private static bool IsTreeOrFoliage(Transform hitTransform)
     {
+        if (IsSakuraNoClipTransform(hitTransform))
+        {
+            return true;
+        }
+
         while (hitTransform != null)
         {
             string name = hitTransform.name.ToLowerInvariant();
@@ -1684,6 +3042,23 @@ public class RobotCompanion : MonoBehaviour
             if (guideShellRenderers[i] != null)
             {
                 guideShellRenderers[i].enabled = active;
+            }
+        }
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            string rendererName = renderer.name;
+            if (rendererName.EndsWith("_GuideOutline", StringComparison.Ordinal) ||
+                rendererName.EndsWith("_GuideChams", StringComparison.Ordinal))
+            {
+                renderer.enabled = active;
             }
         }
     }
