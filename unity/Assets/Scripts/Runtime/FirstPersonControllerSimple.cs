@@ -422,16 +422,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
         {
             vertical += 1f;
         }
-        if (GetKeyCompat(KeyCode.LeftControl) || GetKeyCompat(KeyCode.RightControl))
+        if (GetKeyCompat(sprintKey))
         {
             vertical -= 1f;
         }
 
         float speed = noclipMoveSpeed;
-        if (GetKeyCompat(sprintKey))
-        {
-            speed *= noclipSprintMultiplier;
-        }
 
         Vector3 motion = planar * speed + Vector3.up * (vertical * noclipVerticalSpeed);
         transform.position += motion * Time.deltaTime;

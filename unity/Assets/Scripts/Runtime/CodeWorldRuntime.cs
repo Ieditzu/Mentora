@@ -32,8 +32,11 @@ public class CodeWorldRuntime : MonoBehaviour
     private InputField editorInput;
     private Text statusText;
     private Text historyText;
+    private readonly Stack<string> editorUndoStack = new Stack<string>();
     private bool modeActive;
     private bool editorVisible;
+    private string lastEditorTrackedText = string.Empty;
+    private bool suppressEditorTracking;
 
     public static bool ConsumesPauseInput => instance != null && instance.editorVisible;
     public static Vector3 SpawnPosition => BuildSpawn;
@@ -149,6 +152,8 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
+        TrackEditorUndoState();
+
         if (keyboard.escapeKey.wasPressedThisFrame)
         {
             UpdateEditorVisibility(false);
@@ -156,6 +161,12 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         bool ctrlHeld = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
+        if (ctrlHeld && keyboard.zKey.wasPressedThisFrame)
+        {
+            UndoEditorText();
+            return;
+        }
+
         bool runPressed = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame;
         if (ctrlHeld && runPressed)
         {
@@ -236,6 +247,7 @@ public class CodeWorldRuntime : MonoBehaviour
         commandHistory.Clear();
         ClearSpawnedObjects();
         RefreshHistoryText();
+        UpdateEditorVisibility(true);
         SetStatus("Code World is live. Press ` to open the editor.");
         BroadcastStateToRemotes();
     }
@@ -343,20 +355,6 @@ public class CodeWorldRuntime : MonoBehaviour
         platform.transform.position = BuildSpawn + new Vector3(0f, -2f, 0f);
         platform.transform.localScale = new Vector3(80f, 2f, 80f);
         ApplyMaterial(platform, new Color(0.08f, 0.11f, 0.16f));
-
-        CreateAxisMarker(parent, "AxisX", BuildSpawn + new Vector3(10f, 0.35f, 0f), new Vector3(20f, 0.5f, 0.5f), new Color(0.92f, 0.28f, 0.28f));
-        CreateAxisMarker(parent, "AxisY", BuildSpawn + new Vector3(0f, 10f, 0f), new Vector3(0.5f, 20f, 0.5f), new Color(0.2f, 0.82f, 0.34f));
-        CreateAxisMarker(parent, "AxisZ", BuildSpawn + new Vector3(0f, 0.35f, 10f), new Vector3(0.5f, 0.5f, 20f), new Color(0.25f, 0.56f, 0.95f));
-    }
-
-    private void CreateAxisMarker(Transform parent, string name, Vector3 position, Vector3 scale, Color color)
-    {
-        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        marker.name = name;
-        marker.transform.SetParent(parent, false);
-        marker.transform.position = position;
-        marker.transform.localScale = scale;
-        ApplyMaterial(marker, color);
     }
 
     private void ExecuteLocalScript(string script)
@@ -424,6 +422,7 @@ public class CodeWorldRuntime : MonoBehaviour
         RefreshHistoryText();
         if (successCount > 0 && editorInput != null)
         {
+            lastEditorTrackedText = editorInput.text;
             editorInput.ActivateInputField();
         }
     }
@@ -1203,6 +1202,8 @@ public class CodeWorldRuntime : MonoBehaviour
         editorInput = CreateInputField(editorPanel.transform, "CodeInput", BuildStarterScript(), new Vector2(0f, 10f), new Vector2(590f, 300f));
         editorInput.lineType = InputField.LineType.MultiLineNewline;
         editorInput.text = BuildStarterScript();
+        lastEditorTrackedText = editorInput.text;
+        editorUndoStack.Clear();
 
         statusText = CreateText("Status", editorPanel.transform, "Press ` to open the editor.", 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
         historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
@@ -1230,7 +1231,10 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             if (string.IsNullOrWhiteSpace(editorInput.text))
             {
+                suppressEditorTracking = true;
                 editorInput.text = BuildStarterScript();
+                suppressEditorTracking = false;
+                lastEditorTrackedText = editorInput.text;
             }
 
             editorInput.ActivateInputField();
@@ -1334,6 +1338,68 @@ public class CodeWorldRuntime : MonoBehaviour
         return input;
     }
 
+    private void TrackEditorUndoState()
+    {
+        if (suppressEditorTracking || editorInput == null || !editorInput.isFocused)
+        {
+            return;
+        }
+
+        string currentText = editorInput.text ?? string.Empty;
+        if (currentText == lastEditorTrackedText)
+        {
+            return;
+        }
+
+        if (editorUndoStack.Count == 0 || editorUndoStack.Peek() != lastEditorTrackedText)
+        {
+            editorUndoStack.Push(lastEditorTrackedText);
+            while (editorUndoStack.Count > 32)
+            {
+                Stack<string> trimmed = new Stack<string>();
+                while (editorUndoStack.Count > 1)
+                {
+                    trimmed.Push(editorUndoStack.Pop());
+                }
+
+                if (editorUndoStack.Count > 0)
+                {
+                    editorUndoStack.Pop();
+                }
+
+                while (trimmed.Count > 0)
+                {
+                    editorUndoStack.Push(trimmed.Pop());
+                }
+            }
+        }
+
+        lastEditorTrackedText = currentText;
+    }
+
+    private void UndoEditorText()
+    {
+        if (editorInput == null)
+        {
+            return;
+        }
+
+        if (editorUndoStack.Count == 0)
+        {
+            SetStatus("Nothing to undo.");
+            return;
+        }
+
+        suppressEditorTracking = true;
+        string previousText = editorUndoStack.Pop();
+        editorInput.text = previousText ?? string.Empty;
+        editorInput.ActivateInputField();
+        editorInput.Select();
+        lastEditorTrackedText = editorInput.text;
+        suppressEditorTracking = false;
+        SetStatus("Undid last edit.");
+    }
+
     private static string BuildStarterScript()
     {
         return
@@ -1342,8 +1408,8 @@ public class CodeWorldRuntime : MonoBehaviour
             "{\n" +
             "    public static void Run()\n" +
             "    {\n" +
-            "        Cube(\"box1\", new Vector3(0f, 1f, 0f));\n" +
-            "        Move(\"box1\", new Vector3(0f, 3f, 0f));\n" +
+            "        Cube(\"box1\", new Vector3(220f, 33f, 520f));\n" +
+            "        Move(\"box1\", new Vector3(220f, 35f, 520f));\n" +
             "        Rotate(\"box1\", new Vector3(0f, 45f, 0f));\n" +
             "        Color(\"box1\", \"cyan\");\n" +
             "    }\n" +
