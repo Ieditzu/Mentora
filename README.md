@@ -548,7 +548,7 @@ See [Core Concepts → Real-Time Binary WebSocket Protocol](#real-time-binary-we
 
 - **Java 21** and Gradle
 - **PostgreSQL** running locally (or update `application.properties`)
-- A **Groq API key** placed in `java-server/Java-Server/api-keys.json`
+- One or more **Groq API keys** placed in `java-server/Java-Server/api-keys.json`
 - **Node.js 18+** for the web creator
 - **Android Studio** for the Kotlin app
 - **Unity 2022+** (HDRP) for the game client
@@ -558,9 +558,12 @@ See [Core Concepts → Real-Time Binary WebSocket Protocol](#real-time-binary-we
 ```bash
 cd java-server/Java-Server
 # Configure database in src/main/resources/application.properties
-# Add your Groq key to api-keys.json
+# Add your Groq key(s) to api-keys.json:
+# { "groq_api_keys": ["gsk_first_key", "gsk_second_key"] }
 ./gradlew bootRun
 ```
+
+`groq_api_key` is still accepted for a single key. `groq_api_keys` can be a JSON array or comma-separated string; chat and speech-to-text rotate keys independently when a key is rate-limited or times out.
 
 The server starts HTTP on **:8085** and WebSocket on **:49154**.
 

@@ -3,26 +3,21 @@ package io.github.kawase.utility;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 
 public class GroqAI {
-    private static final Path[] SERVER_KEY_FILES = new Path[] {
-            Path.of("api-keys.json"),
-            Path.of("java-server", "Java-Server", "api-keys.json")
-    };
-    private static final String groqApiKey = loadApiKey();
     private static final long CACHE_TTL_MS = 5 * 60 * 1000;
     private static final int CACHE_MAX = 200;
-    private static final long COOLDOWN_MS = 60 * 1000;
     private static final String GROQ_MODEL = "llama-3.3-70b-versatile";
-
-    private static volatile long groqCooldownUntilMs = 0L;
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(8))
+            .build();
 
     private static final java.util.Map<String, CachedResponse> RESPONSE_CACHE =
             java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>(CACHE_MAX, 0.75f, true) {
@@ -42,33 +37,8 @@ public class GroqAI {
         }
     }
 
-    private static String loadApiKey() {
-        String groq = "";
-
-        try {
-            for (Path keyFile : SERVER_KEY_FILES) {
-                if (!Files.exists(keyFile)) {
-                    continue;
-                }
-
-                String content = Files.readString(keyFile, StandardCharsets.UTF_8);
-                JSONObject json = new JSONObject(content);
-                groq = json.optString("groq_api_key", "");
-                System.out.println("[AI] Loaded Groq API key from " + keyFile.toAbsolutePath());
-                if (!groq.isBlank()) {
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("[AI] Could not load Groq API key file: " + e.getClass().getName());
-            e.printStackTrace();
-        }
-
-        return groq;
-    }
-
     public static String getConfiguredApiKey() {
-        return groqApiKey;
+        return GroqApiKeys.firstAvailableKeyValue(GroqApiKeys.Purpose.CHAT);
     }
 
     private String getCached(final String prompt) {
@@ -118,13 +88,8 @@ public class GroqAI {
             return cached;
         }
 
-        if (groqApiKey == null || groqApiKey.isBlank()) {
+        if (!GroqApiKeys.hasConfiguredKeys()) {
             return "AI Error: No Groq API key configured in api-keys.json.";
-        }
-
-        long now = System.currentTimeMillis();
-        if (now < groqCooldownUntilMs) {
-            return "AI Error: Groq is temporarily rate limited. Please try again in a moment.";
         }
 
         String result = callGroq(prompt);
@@ -137,6 +102,31 @@ public class GroqAI {
     }
 
     private String callGroq(final String prompt) {
+        if (!GroqApiKeys.hasConfiguredKeys()) {
+            return null;
+        }
+
+        String lastRetryableError = "";
+        for (int attempt = 0; attempt < GroqApiKeys.configuredKeyCount(); attempt++) {
+            GroqApiKeys.ConfiguredKey apiKey = GroqApiKeys.acquireAvailableKey(GroqApiKeys.Purpose.CHAT);
+            if (apiKey == null) {
+                System.out.println("[AI] All Groq API keys are cooling down.");
+                return null;
+            }
+
+            String result = callGroqWithKey(prompt, apiKey);
+            if (result != null) {
+                return result;
+            }
+
+            lastRetryableError = "key " + apiKey.label();
+        }
+
+        System.out.println("[AI] Groq failed after trying configured API keys. Last retryable source: " + lastRetryableError);
+        return null;
+    }
+
+    private String callGroqWithKey(final String prompt, final GroqApiKeys.ConfiguredKey apiKey) {
         try {
             JSONObject requestBody = new JSONObject();
             requestBody.put("model", GROQ_MODEL);
@@ -148,15 +138,15 @@ public class GroqAI {
             requestBody.put("messages", messages);
             requestBody.put("max_tokens", 512);
 
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.groq.com/openai/v1/chat/completions"))
+                    .timeout(Duration.ofSeconds(35))
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + groqApiKey)
+                    .header("Authorization", "Bearer " + apiKey.value())
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody.toString()))
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
                 JSONObject jsonResponse = new JSONObject(response.body());
@@ -164,17 +154,31 @@ public class GroqAI {
                         .getJSONObject(0)
                         .getJSONObject("message")
                         .getString("content");
-                System.out.println("[AI] Groq success.");
+                GroqApiKeys.markSuccess(apiKey);
+                System.out.println("[AI] Groq success using key " + apiKey.label() + ".");
                 return text;
             }
 
-            if (response.statusCode() == 429) {
-                groqCooldownUntilMs = System.currentTimeMillis() + COOLDOWN_MS;
-                System.out.println("[AI] Groq rate limited (429).");
+            if (GroqApiKeys.shouldRotateForStatus(response.statusCode())) {
+                GroqApiKeys.markFailure(
+                        apiKey,
+                        GroqApiKeys.cooldownForStatus(response.statusCode(), response.headers()),
+                        "HTTP " + response.statusCode()
+                );
                 return null;
             }
 
             System.out.println("[AI] Groq error " + response.statusCode() + ": " + response.body());
+            return null;
+        } catch (HttpTimeoutException e) {
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), "request timeout");
+            return null;
+        } catch (IOException e) {
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), e.getClass().getSimpleName());
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            GroqApiKeys.markFailure(apiKey, GroqApiKeys.defaultCooldownMs(), "interrupted request");
             return null;
         } catch (Exception e) {
             System.out.println("[AI] Groq exception: " + e.getClass().getName());
