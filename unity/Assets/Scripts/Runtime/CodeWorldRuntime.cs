@@ -39,6 +39,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private RectTransform editorViewportRect;
     private Text statusText;
     private Text historyText;
+    private Text editorHintText;
     private GameObject aiPanel;
     private RectTransform aiPanelRect;
     private InputField aiInput;
@@ -64,6 +65,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool awaitingAiResponse;
     private string pendingAiResponse = string.Empty;
     private bool aiNetworkSubscribed;
+    private bool editorHintDismissed;
     private const int MaxAiChatLines = 16;
 
     private sealed class RemoteCursorVisual
@@ -145,9 +147,11 @@ public class CodeWorldRuntime : MonoBehaviour
 
         instance = this;
         DontDestroyOnLoad(gameObject);
+        editorHintDismissed = false;
         AcquireSessionManager();
         BuildEditorUi();
         UpdateEditorVisibility(false);
+        UpdateEditorHintVisibility();
 
         // Do not auto-enable code-world from saved prefs.
         // It should only activate when the host explicitly chooses the code-world option.
@@ -359,8 +363,7 @@ public class CodeWorldRuntime : MonoBehaviour
         commandHistory.Clear();
         ClearSpawnedObjects();
         RefreshHistoryText();
-        UpdateEditorVisibility(true);
-        SetStatus("Code World is live. Press ` to open the editor.");
+        UpdateEditorVisibility(false);
         BroadcastStateToRemotes();
     }
 
@@ -382,6 +385,8 @@ public class CodeWorldRuntime : MonoBehaviour
             PlayerPrefs.SetString(HostModePrefKey, CodeWorldModeValue);
             PlayerPrefs.Save();
         }
+
+        ShowEditorHintIfNeeded();
     }
 
     private void DisableMode(bool clearWorld)
@@ -389,6 +394,7 @@ public class CodeWorldRuntime : MonoBehaviour
         modeActive = false;
         UpdateEditorVisibility(false);
         UpdateAiVisibility(false);
+        UpdateEditorHintVisibility();
         EnableNoclip(false);
         RobotCompanion.SetCompanionVisible(true);
 
@@ -1427,10 +1433,13 @@ public class CodeWorldRuntime : MonoBehaviour
         editorInput.onValueChanged.AddListener(HandleEditorInputChanged);
         RefreshEditorLayout();
 
-        statusText = CreateText("Status", editorPanel.transform, "Press ` to open the editor.", 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
+        statusText = CreateText("Status", editorPanel.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
         statusText.raycastTarget = false;
         historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
         historyText.raycastTarget = false;
+        editorHintText = CreateScreenCornerText("EditorHint", editorCanvas.transform, "Press ` to show the code window.", 19, FontStyle.Bold, TextAnchor.LowerLeft, new Color(0.98f, 0.9f, 0.42f, 0.98f), new Vector2(34f, 28f), new Vector2(520f, 40f));
+        editorHintText.raycastTarget = false;
+        editorHintText.gameObject.SetActive(false);
 
         BuildAiUi();
     }
@@ -1455,6 +1464,12 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (editorVisible && editorInput != null)
         {
+            if (!editorHintDismissed)
+            {
+                editorHintDismissed = true;
+                UpdateEditorHintVisibility();
+            }
+
             if (string.IsNullOrWhiteSpace(editorInput.text))
             {
                 suppressEditorTracking = true;
@@ -1471,6 +1486,19 @@ public class CodeWorldRuntime : MonoBehaviour
 
         UpdateAiVisibility(aiVisible);
         UpdateRemoteCursorVisibility();
+    }
+
+    private void ShowEditorHintIfNeeded()
+    {
+        UpdateEditorHintVisibility();
+    }
+
+    private void UpdateEditorHintVisibility()
+    {
+        if (editorHintText != null)
+        {
+            editorHintText.gameObject.SetActive(modeActive && !editorHintDismissed);
+        }
     }
 
     private void BuildAiUi()
@@ -1586,6 +1614,30 @@ public class CodeWorldRuntime : MonoBehaviour
     private static Text CreateText(string name, Transform parent, string value, int fontSize, FontStyle fontStyle, TextAnchor anchor, Color color, Vector2 position, Vector2 size)
     {
         GameObject obj = CreateUiObject(name, parent, size, position);
+        Text text = obj.AddComponent<Text>();
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.fontSize = fontSize;
+        text.fontStyle = fontStyle;
+        text.alignment = anchor;
+        text.color = color;
+        text.text = value;
+        text.supportRichText = false;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        return text;
+    }
+
+    private static Text CreateScreenCornerText(string name, Transform parent, string value, int fontSize, FontStyle fontStyle, TextAnchor anchor, Color color, Vector2 anchoredPosition, Vector2 size)
+    {
+        GameObject obj = new GameObject(name, typeof(RectTransform));
+        obj.transform.SetParent(parent, false);
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 0f);
+        rect.anchorMax = new Vector2(0f, 0f);
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+
         Text text = obj.AddComponent<Text>();
         text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         text.fontSize = fontSize;
