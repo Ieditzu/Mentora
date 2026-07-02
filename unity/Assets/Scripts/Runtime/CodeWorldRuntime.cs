@@ -15,9 +15,6 @@ public class CodeWorldRuntime : MonoBehaviour
     private const string CodeWorldActivePrefKey = "MP_CodeWorldActive";
     private const float EditorSyncInterval = 0.12f;
     private const float CursorSyncInterval = 0.08f;
-    private const float CursorLeftPadding = 12f;
-    private const float CursorTopPadding = 10f;
-
     private static readonly Vector3 BuildSpawn = new Vector3(220f, 32f, 520f);
     private static readonly Quaternion BuildRotation = Quaternion.Euler(0f, 180f, 0f);
 
@@ -1758,7 +1755,7 @@ public class CodeWorldRuntime : MonoBehaviour
         visual.Color = GetCursorColor(clientId);
 
         GameObject root = new GameObject("RemoteCursor_" + clientId, typeof(RectTransform));
-        root.transform.SetParent(editorContentRect, false);
+        root.transform.SetParent(editorInput.textComponent.rectTransform, false);
         RectTransform rootRect = root.GetComponent<RectTransform>();
         rootRect.anchorMin = new Vector2(0f, 1f);
         rootRect.anchorMax = new Vector2(0f, 1f);
@@ -1860,8 +1857,8 @@ public class CodeWorldRuntime : MonoBehaviour
 
         int segmentLength = Mathf.Max(0, safeIndex - lineStartIndex);
         string segment = segmentLength > 0 ? currentText.Substring(lineStartIndex, segmentLength) : string.Empty;
-        float x = CursorLeftPadding + MeasureEditorTextWidth(segment);
-        float y = -CursorTopPadding - (lineIndex * GetEditorLineHeight());
+        float x = MeasureEditorTextWidth(segment);
+        float y = -(lineIndex * GetEditorLineHeight());
         return new Vector2(x, y);
     }
 
