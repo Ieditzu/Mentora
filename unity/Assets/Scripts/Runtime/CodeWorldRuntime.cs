@@ -174,6 +174,26 @@ public class CodeWorldRuntime : MonoBehaviour
         }
     }
 
+    private void OnGUI()
+    {
+        if (!editorVisible || editorInput == null || !editorInput.isFocused)
+        {
+            return;
+        }
+
+        Event currentEvent = Event.current;
+        if (currentEvent == null || currentEvent.type != EventType.KeyDown)
+        {
+            return;
+        }
+
+        if ((currentEvent.control || currentEvent.command) && currentEvent.keyCode == KeyCode.C)
+        {
+            CopySelectedEditorText();
+            currentEvent.Use();
+        }
+    }
+
     private void AcquireSessionManager()
     {
         MultiplayerSessionManager current = MultiplayerSessionManager.Instance;
@@ -1448,6 +1468,27 @@ public class CodeWorldRuntime : MonoBehaviour
         lastEditorTrackedText = editorInput.text;
         suppressEditorTracking = false;
         SetStatus("Undid last edit.");
+    }
+
+    private void CopySelectedEditorText()
+    {
+        if (editorInput == null)
+        {
+            return;
+        }
+
+        string currentText = editorInput.text ?? string.Empty;
+        int anchor = Mathf.Clamp(editorInput.selectionAnchorPosition, 0, currentText.Length);
+        int focus = Mathf.Clamp(editorInput.selectionFocusPosition, 0, currentText.Length);
+        int start = Mathf.Min(anchor, focus);
+        int length = Mathf.Abs(anchor - focus);
+        if (length <= 0)
+        {
+            return;
+        }
+
+        GUIUtility.systemCopyBuffer = currentText.Substring(start, length);
+        SetStatus("Copied selection.");
     }
 
     private void RefreshEditorLayout()
