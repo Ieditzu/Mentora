@@ -1210,13 +1210,17 @@ public class CodeWorldRuntime : MonoBehaviour
         outline.effectDistance = new Vector2(2f, -2f);
 
         GameObject titleBar = CreateUiObject("TitleBar", editorPanel.transform, new Vector2(640f, 64f), new Vector2(0f, 248f));
-        titleBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.24f, 1f);
+        Image titleBarImage = titleBar.AddComponent<Image>();
+        titleBarImage.color = new Color(0.08f, 0.12f, 0.24f, 1f);
+        titleBarImage.raycastTarget = true;
         titleBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
-        CreateText("Title", titleBar.transform, "YOUR CODE CONTROLS THE WORLD", 26, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(560f, 34f));
+        Text titleText = CreateText("Title", titleBar.transform, "YOUR CODE CONTROLS THE WORLD", 26, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(560f, 34f));
+        titleText.raycastTarget = false;
         DraggableWindowHandle dragHandle = titleBar.AddComponent<DraggableWindowHandle>();
         dragHandle.Configure(editorPanelRect);
 
-        CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
+        Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
+        helpText.raycastTarget = false;
 
         GameObject codeViewport = CreateUiObject("CodeViewport", editorPanel.transform, new Vector2(590f, 300f), new Vector2(0f, 10f));
         editorViewportRect = codeViewport.GetComponent<RectTransform>();
@@ -1250,6 +1254,7 @@ public class CodeWorldRuntime : MonoBehaviour
         editorUndoStack.Clear();
 
         Text codeText = CreateText("CodeInputText", codeContent.transform, string.Empty, 16, FontStyle.Normal, TextAnchor.UpperLeft, Color.white, Vector2.zero, new Vector2(530f, 320f));
+        codeText.raycastTarget = false;
         RectTransform codeTextRect = codeText.rectTransform;
         codeTextRect.anchorMin = Vector2.zero;
         codeTextRect.anchorMax = Vector2.one;
@@ -1258,6 +1263,7 @@ public class CodeWorldRuntime : MonoBehaviour
         codeText.fontSize = 18;
 
         Text codeHint = CreateText("CodePlaceholder", codeContent.transform, "Type C#-style code here...", 16, FontStyle.Italic, TextAnchor.UpperLeft, new Color(1f, 1f, 1f, 0.35f), Vector2.zero, new Vector2(530f, 320f));
+        codeHint.raycastTarget = false;
         RectTransform codeHintRect = codeHint.rectTransform;
         codeHintRect.anchorMin = Vector2.zero;
         codeHintRect.anchorMax = Vector2.one;
@@ -1274,7 +1280,9 @@ public class CodeWorldRuntime : MonoBehaviour
         RefreshEditorLayout();
 
         statusText = CreateText("Status", editorPanel.transform, "Press ` to open the editor.", 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
+        statusText.raycastTarget = false;
         historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
+        historyText.raycastTarget = false;
     }
 
     private void UpdateEditorVisibility(bool visible)
