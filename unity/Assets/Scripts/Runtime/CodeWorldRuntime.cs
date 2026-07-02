@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Threading.Tasks;
 using Mentora.Network;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -37,9 +39,20 @@ public class CodeWorldRuntime : MonoBehaviour
     private RectTransform editorViewportRect;
     private Text statusText;
     private Text historyText;
+    private GameObject aiPanel;
+    private RectTransform aiPanelRect;
+    private InputField aiInput;
+    private Text aiHistoryText;
+    private ScrollRect aiHistoryScrollRect;
+    private RectTransform aiHistoryContentRect;
+    private RectTransform aiHistoryViewportRect;
+    private Button aiOpenButton;
+    private Button aiCloseButton;
     private readonly Stack<string> editorUndoStack = new Stack<string>();
+    private readonly List<string> aiChatLines = new List<string>();
     private bool modeActive;
     private bool editorVisible;
+    private bool aiVisible;
     private string lastEditorTrackedText = string.Empty;
     private bool suppressEditorTracking;
     private bool suppressEditorSync;
@@ -48,6 +61,10 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool cursorSyncDirty;
     private float nextCursorSyncTime;
     private int lastLocalCaretIndex = -1;
+    private bool awaitingAiResponse;
+    private string pendingAiResponse = string.Empty;
+    private bool aiNetworkSubscribed;
+    private const int MaxAiChatLines = 16;
 
     private sealed class RemoteCursorVisual
     {
@@ -140,11 +157,13 @@ public class CodeWorldRuntime : MonoBehaviour
     {
         AcquireSessionManager();
         SubscribePackets(true);
+        RegisterAiNetworkHandlers();
     }
 
     private void OnDisable()
     {
         SubscribePackets(false);
+        UnregisterAiNetworkHandlers();
     }
 
     private void Update()
@@ -200,7 +219,7 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private void OnGUI()
     {
-        if (!editorVisible || editorInput == null || !editorInput.isFocused)
+        if (!editorVisible)
         {
             return;
         }
@@ -211,7 +230,7 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
-        if ((currentEvent.control || currentEvent.command) && currentEvent.keyCode == KeyCode.C)
+        if ((currentEvent.control || currentEvent.command) && currentEvent.keyCode == KeyCode.C && editorInput != null && editorInput.isFocused)
         {
             CopySelectedEditorText();
             currentEvent.Use();
@@ -247,6 +266,43 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             sessionManager.OnQuizPacket -= HandleNetworkPacket;
         }
+    }
+
+    private void RegisterAiNetworkHandlers()
+    {
+        if (aiNetworkSubscribed || GameClient.Instance == null)
+        {
+            return;
+        }
+
+        GameClient.Instance.OnPacketReceived += HandleAiNetworkPacket;
+        aiNetworkSubscribed = true;
+    }
+
+    private void UnregisterAiNetworkHandlers()
+    {
+        if (!aiNetworkSubscribed || GameClient.Instance == null)
+        {
+            return;
+        }
+
+        GameClient.Instance.OnPacketReceived -= HandleAiNetworkPacket;
+        aiNetworkSubscribed = false;
+    }
+
+    private void HandleAiNetworkPacket(Packet packet)
+    {
+        if (!(packet is AiResponsePacket aiResponse))
+        {
+            return;
+        }
+
+        if (!UnityMainThreadDispatcher.IsInitialized)
+        {
+            UnityMainThreadDispatcher.Initialize();
+        }
+
+        UnityMainThreadDispatcher.Instance().Enqueue(() => HandleAiResponse(aiResponse));
     }
 
     private void HandleNetworkPacket(Packet packet)
@@ -314,6 +370,7 @@ public class CodeWorldRuntime : MonoBehaviour
         EnsureWorld();
         EnableNoclip(true);
         RobotCompanion.SetCompanionVisible(false);
+        RegisterAiNetworkHandlers();
 
         if (teleportPlayer)
         {
@@ -331,6 +388,7 @@ public class CodeWorldRuntime : MonoBehaviour
     {
         modeActive = false;
         UpdateEditorVisibility(false);
+        UpdateAiVisibility(false);
         EnableNoclip(false);
         RobotCompanion.SetCompanionVisible(true);
 
@@ -1306,6 +1364,9 @@ public class CodeWorldRuntime : MonoBehaviour
         DraggableWindowHandle dragHandle = titleBar.AddComponent<DraggableWindowHandle>();
         dragHandle.Configure(editorPanelRect);
 
+        aiOpenButton = CreateButton("AiOpenButton", editorPanel.transform, "AI", new Vector2(252f, -245f), new Vector2(88f, 38f), new Color(0.16f, 0.52f, 0.82f, 1f), 13);
+        aiOpenButton.onClick.AddListener(() => UpdateAiVisibility(true));
+
         Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
         helpText.raycastTarget = false;
 
@@ -1370,6 +1431,8 @@ public class CodeWorldRuntime : MonoBehaviour
         statusText.raycastTarget = false;
         historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
         historyText.raycastTarget = false;
+
+        BuildAiUi();
     }
 
     private void UpdateEditorVisibility(bool visible)
@@ -1406,7 +1469,74 @@ public class CodeWorldRuntime : MonoBehaviour
             ScrollEditorToTop();
         }
 
+        UpdateAiVisibility(aiVisible);
         UpdateRemoteCursorVisibility();
+    }
+
+    private void BuildAiUi()
+    {
+        aiPanel = CreateUiObject("AiPanel", editorCanvas.transform, new Vector2(520f, 420f), new Vector2(470f, 34f));
+        aiPanelRect = aiPanel.GetComponent<RectTransform>();
+        aiPanel.AddComponent<Image>().color = new Color(0.06f, 0.09f, 0.15f, 0.96f);
+        Outline outline = aiPanel.AddComponent<Outline>();
+        outline.effectColor = new Color(0.22f, 0.72f, 0.95f, 0.6f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        GameObject titleBar = CreateUiObject("AiTitleBar", aiPanel.transform, new Vector2(520f, 56f), new Vector2(0f, 182f));
+        Image titleBarImage = titleBar.AddComponent<Image>();
+        titleBarImage.color = new Color(0.08f, 0.16f, 0.28f, 1f);
+        DraggableWindowHandle dragHandle = titleBar.AddComponent<DraggableWindowHandle>();
+        dragHandle.Configure(aiPanelRect);
+
+        aiCloseButton = CreateButton("AiCloseButton", titleBar.transform, "X", new Vector2(-220f, 0f), new Vector2(44f, 34f), new Color(0.82f, 0.22f, 0.24f, 1f), 16);
+        aiCloseButton.onClick.AddListener(() => UpdateAiVisibility(false));
+
+        Text titleText = CreateText("AiTitle", titleBar.transform, "CODE ISLAND AI", 22, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(280f, 30f));
+        titleText.raycastTarget = false;
+
+        Text introText = CreateText("AiIntro", aiPanel.transform, "Ask about this syntax, object commands, vectors, colors, or how to write C#-style lines for the island.", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.78f, 0.88f, 1f), new Vector2(0f, 132f), new Vector2(456f, 42f));
+        introText.raycastTarget = false;
+
+        GameObject historyViewport = CreateUiObject("AiHistoryViewport", aiPanel.transform, new Vector2(456f, 210f), new Vector2(0f, 12f));
+        aiHistoryViewportRect = historyViewport.GetComponent<RectTransform>();
+        historyViewport.AddComponent<Image>().color = new Color(0.1f, 0.14f, 0.22f, 0.98f);
+        historyViewport.AddComponent<Outline>().effectColor = new Color(0.3f, 0.68f, 0.95f, 0.5f);
+        Mask historyMask = historyViewport.AddComponent<Mask>();
+        historyMask.showMaskGraphic = false;
+
+        aiHistoryScrollRect = historyViewport.AddComponent<ScrollRect>();
+        aiHistoryScrollRect.horizontal = false;
+        aiHistoryScrollRect.vertical = true;
+        aiHistoryScrollRect.scrollSensitivity = 24f;
+        aiHistoryScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        aiHistoryScrollRect.inertia = false;
+
+        GameObject historyContent = CreateUiObject("AiHistoryContent", historyViewport.transform, new Vector2(420f, 240f), Vector2.zero);
+        aiHistoryContentRect = historyContent.GetComponent<RectTransform>();
+        aiHistoryContentRect.anchorMin = new Vector2(0f, 1f);
+        aiHistoryContentRect.anchorMax = new Vector2(1f, 1f);
+        aiHistoryContentRect.pivot = new Vector2(0.5f, 1f);
+        aiHistoryContentRect.anchoredPosition = new Vector2(0f, -10f);
+        aiHistoryContentRect.sizeDelta = new Vector2(-20f, 240f);
+
+        aiHistoryText = CreateText("AiHistoryText", historyContent.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.95f, 0.97f, 1f), Vector2.zero, new Vector2(408f, 220f));
+        aiHistoryText.raycastTarget = false;
+        RectTransform historyTextRect = aiHistoryText.rectTransform;
+        historyTextRect.anchorMin = Vector2.zero;
+        historyTextRect.anchorMax = Vector2.one;
+        historyTextRect.offsetMin = new Vector2(10f, 10f);
+        historyTextRect.offsetMax = new Vector2(-10f, -10f);
+        aiHistoryText.supportRichText = false;
+
+        aiHistoryScrollRect.viewport = aiHistoryViewportRect;
+        aiHistoryScrollRect.content = aiHistoryContentRect;
+
+        aiInput = CreateInputField(aiPanel.transform, "AiInput", "Ask about Code Island syntax... Press Enter to send.", new Vector2(0f, -148f), new Vector2(456f, 130f));
+        aiInput.lineType = InputField.LineType.MultiLineSubmit;
+        aiInput.onEndEdit.AddListener(HandleAiInputEndEdit);
+
+        AppendChatLine("AI: I can help with Code Island syntax. Ask me how to spawn, move, rotate, scale, color, delete, or write C#-style commands.");
+        UpdateAiVisibility(false);
     }
 
     private void SetStatus(string message)
@@ -1503,6 +1633,25 @@ public class CodeWorldRuntime : MonoBehaviour
         input.contentType = InputField.ContentType.Standard;
         input.lineType = InputField.LineType.MultiLineNewline;
         return input;
+    }
+
+    private static Button CreateButton(string name, Transform parent, string label, Vector2 position, Vector2 size, Color color, int fontSize = 18)
+    {
+        GameObject obj = CreateUiObject(name, parent, size, position);
+        Image image = obj.AddComponent<Image>();
+        image.color = color;
+
+        Button button = obj.AddComponent<Button>();
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+        colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+        colors.selectedColor = Color.white;
+        button.colors = colors;
+
+        Text text = CreateText(name + "Label", obj.transform, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 1f), size);
+        text.raycastTarget = false;
+        return button;
     }
 
     private void TrackEditorUndoState()
@@ -1670,6 +1819,223 @@ public class CodeWorldRuntime : MonoBehaviour
         cursorSyncDirty = true;
         nextCursorSyncTime = Time.unscaledTime + CursorSyncInterval;
         RefreshEditorLayout();
+    }
+
+    private void UpdateAiVisibility(bool visible)
+    {
+        aiVisible = visible && editorVisible && modeActive;
+        if (aiPanel != null)
+        {
+            aiPanel.SetActive(aiVisible);
+        }
+
+        if (aiOpenButton != null)
+        {
+            aiOpenButton.gameObject.SetActive(editorVisible && modeActive);
+        }
+
+        if (aiVisible && aiInput != null)
+        {
+            aiInput.ActivateInputField();
+            aiInput.Select();
+            RefreshAiHistoryLayout();
+            ScrollAiHistoryToBottom();
+        }
+    }
+
+    private void OnAiSendClicked()
+    {
+        if (!modeActive || aiInput == null)
+        {
+            return;
+        }
+
+        string message = (aiInput.text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            SetStatus("Type an AI question first.");
+            return;
+        }
+
+        aiInput.text = string.Empty;
+        StartCoroutine(SendAiChatMessage(message));
+    }
+
+    private void HandleAiInputEndEdit(string _)
+    {
+        if (!aiVisible || aiInput == null)
+        {
+            return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || (!keyboard.enterKey.wasPressedThisFrame && !keyboard.numpadEnterKey.wasPressedThisFrame))
+        {
+            return;
+        }
+
+        OnAiSendClicked();
+        aiInput.ActivateInputField();
+    }
+
+    private IEnumerator SendAiChatMessage(string message)
+    {
+        if (awaitingAiResponse)
+        {
+            AppendChatLine("AI: I am already answering. Wait for the current reply.");
+            yield break;
+        }
+
+        AppendChatLine("You: " + message);
+        awaitingAiResponse = true;
+        pendingAiResponse = string.Empty;
+        bool sent = false;
+        yield return SendPacketWithConnect(new AskAiPacket(BuildAiQuestion(message), BuildAiChatContext()), success => sent = success);
+        if (!sent)
+        {
+            awaitingAiResponse = false;
+            AppendChatLine("AI: I can't reach the AI server right now.");
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (awaitingAiResponse && elapsed < 15f)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (awaitingAiResponse)
+        {
+            awaitingAiResponse = false;
+            AppendChatLine("AI: I did not get a reply in time.");
+        }
+    }
+
+    private void HandleAiResponse(AiResponsePacket response)
+    {
+        if (!awaitingAiResponse)
+        {
+            return;
+        }
+
+        awaitingAiResponse = false;
+        pendingAiResponse = response != null ? response.Response ?? string.Empty : string.Empty;
+        AppendChatLine("AI: " + (string.IsNullOrWhiteSpace(pendingAiResponse) ? "No answer came back." : pendingAiResponse.Trim()));
+    }
+
+    private async Task<bool> SendPacketWithConnectAsync(Packet packet)
+    {
+        if (GameClient.Instance == null)
+        {
+            return false;
+        }
+
+        if (!GameClient.Instance.IsConnected)
+        {
+            await GameClient.Instance.Connect();
+        }
+
+        if (!GameClient.Instance.IsConnected)
+        {
+            return false;
+        }
+
+        await GameClient.Instance.SendPacket(packet);
+        return true;
+    }
+
+    private IEnumerator SendPacketWithConnect(Packet packet, Action<bool> onDone)
+    {
+        Task<bool> task = SendPacketWithConnectAsync(packet);
+        while (!task.IsCompleted)
+        {
+            yield return null;
+        }
+
+        onDone?.Invoke(task.Result);
+    }
+
+    private void AppendChatLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        aiChatLines.Add(line.Trim());
+        if (aiChatLines.Count > MaxAiChatLines)
+        {
+            aiChatLines.RemoveAt(0);
+        }
+
+        RefreshAiHistoryText();
+    }
+
+    private void RefreshAiHistoryText()
+    {
+        if (aiHistoryText == null)
+        {
+            return;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < aiChatLines.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append('\n');
+            }
+
+            builder.Append(aiChatLines[i]);
+        }
+
+        aiHistoryText.text = builder.ToString();
+        RefreshAiHistoryLayout();
+        ScrollAiHistoryToBottom();
+    }
+
+    private void RefreshAiHistoryLayout()
+    {
+        if (aiHistoryText == null || aiHistoryContentRect == null || aiHistoryViewportRect == null)
+        {
+            return;
+        }
+
+        float lineHeight = Mathf.Max(18f, aiHistoryText.fontSize * 1.28f);
+        int lineCount = Mathf.Max(1, (aiHistoryText.text ?? string.Empty).Split('\n').Length);
+        float preferredHeight = lineCount * lineHeight + 24f;
+        float viewportHeight = aiHistoryViewportRect.rect.height;
+        aiHistoryContentRect.sizeDelta = new Vector2(aiHistoryContentRect.sizeDelta.x, Mathf.Max(viewportHeight, preferredHeight));
+    }
+
+    private void ScrollAiHistoryToBottom()
+    {
+        if (aiHistoryScrollRect != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            aiHistoryScrollRect.verticalNormalizedPosition = 0f;
+        }
+    }
+
+    private static string BuildAiQuestion(string message)
+    {
+        return "Help the player use the Code Island syntax. Keep answers short, concrete, and example-driven. Player question: " + message;
+    }
+
+    private string BuildAiChatContext()
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.Append("code_world_syntax_helper\n");
+        builder.Append("The player is on Code Island in Unity.\n");
+        builder.Append("Supported commands: cube/box/sphere/capsule/cylinder name [x y z], move, rotate, scale, translate, turn, color, delete, clear, list, help.\n");
+        builder.Append("The editor accepts C#-style lines like Cube(\"name\", new Vector3(...)); and normal command lines.\n");
+        builder.Append("Ignore using UnityEngine and class wrappers if the player includes them.\n");
+        builder.Append("Object names should use letters, numbers, _ or -.\n");
+        builder.Append("Colors can be names, hex, or RGB values.\n");
+        builder.Append("Current editor code:\n");
+        builder.Append(GetEditorText());
+        return builder.ToString();
     }
 
     private void CopySelectedEditorText()
