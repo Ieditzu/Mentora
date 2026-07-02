@@ -46,6 +46,14 @@ public class RobotCompanion : MonoBehaviour
         }
     }
 
+    public static void SetCompanionVisible(bool visible)
+    {
+        if (_instance != null)
+        {
+            _instance.gameObject.SetActive(visible);
+        }
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoSpawn()
     {

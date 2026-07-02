@@ -313,6 +313,7 @@ public class CodeWorldRuntime : MonoBehaviour
         modeActive = true;
         EnsureWorld();
         EnableNoclip(true);
+        RobotCompanion.SetCompanionVisible(false);
 
         if (teleportPlayer)
         {
@@ -331,6 +332,7 @@ public class CodeWorldRuntime : MonoBehaviour
         modeActive = false;
         UpdateEditorVisibility(false);
         EnableNoclip(false);
+        RobotCompanion.SetCompanionVisible(true);
 
         if (clearWorld)
         {
