@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Mentora.Network;
@@ -26,19 +27,26 @@ public class MultiplayerSessionManager : MonoBehaviour
     private const string FemaleModelResourcePath = "Characters/SM_Bean_Female_01";
     private const string MaleModelResourcePath = "Characters/SM_Bean_Cowboy_01";
     private const int DefaultPort = 7777;
+    private const int DiscoveryPort = 7776;
+    private const string DiscoveryPrefix = "MENTORA_MP_DISCOVERY_V1";
+    private const float DiscoveryBeaconIntervalSeconds = 1f;
+    private const float DiscoveryCleanupIntervalSeconds = 1f;
+    private const float DiscoveryTimeoutSeconds = 5f;
     private const float SendIntervalSeconds = 0.015f;
     private const float ForcedStateIntervalSeconds = 0.1f;
     private const float MovementSendEpsilonSqr = 0.000025f;
     private const float YawSendEpsilon = 0.15f;
     private const float RemoteSnapDistance = 4f;
-    private const float VoiceSilenceThreshold = 0.012f;
     private const float VoiceLevelDecayPerSecond = 3f;
     private const int VoiceSampleRate = 16000;
     private const int VoiceFrameSamples = 320;
-    private const int MaxVoiceFramesPerUpdate = 3;
+    private const int MaxVoiceFramesPerUpdate = 6;
     private const int VoiceMeterBars = 5;
     private const int HudVoiceMeterBars = 12;
-    private const float MaxVoiceQueuedSeconds = 0.18f;
+    private const float MaxVoiceQueuedSeconds = 0.5f;
+    private const float VoicePlaybackStartBufferSeconds = 0.08f;
+    private const float RemoteInterpolationLeadSeconds = 0.055f;
+    private const float RemoteMaxExtrapolationMeters = 0.45f;
 
     private static MultiplayerSessionManager instance;
 
@@ -69,6 +77,8 @@ public class MultiplayerSessionManager : MonoBehaviour
     public event Action<Packet> OnQuizPacket;
 
     public event Action<byte[], int, float> LocalVoiceFrameCaptured;
+
+    public event Action FriendSessionsChanged;
 
     public string LocalClientId => localClientId;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
@@ -123,6 +133,26 @@ public class MultiplayerSessionManager : MonoBehaviour
         public float LastVoiceTime;
         public int LastStateSequence = -1;
         public bool HasFirstPacket;
+    }
+
+    public struct FriendSession
+    {
+        public string PlayerName;
+        public string Address;
+        public int Port;
+        public float AgeSeconds;
+
+        public string DisplayName => string.IsNullOrWhiteSpace(PlayerName) ? "LAN Friend" : PlayerName;
+        public string Endpoint => Address + ":" + Port;
+    }
+
+    private sealed class FriendSessionRecord
+    {
+        public string InstanceId;
+        public string PlayerName;
+        public string Address;
+        public int Port;
+        public DateTime LastSeenUtc;
     }
 
     private sealed class BillboardToCamera : MonoBehaviour
@@ -205,7 +235,8 @@ public class MultiplayerSessionManager : MonoBehaviour
                 }
             }
 
-            if (!playbackStarted && queuedSamples.Count >= sampleRate * 0.04f)
+            int startBufferSamples = Mathf.RoundToInt(sampleRate * VoicePlaybackStartBufferSeconds);
+            if (!playbackStarted && queuedSamples.Count >= startBufferSamples)
             {
                 audioSource.Play();
                 playbackStarted = true;
@@ -227,12 +258,19 @@ public class MultiplayerSessionManager : MonoBehaviour
     private readonly ConcurrentQueue<Action> mainThreadQueue = new ConcurrentQueue<Action>();
     private readonly ConcurrentDictionary<string, RemoteAvatar> remoteAvatars = new ConcurrentDictionary<string, RemoteAvatar>();
     private readonly ConcurrentDictionary<string, NetworkPeer> serverPeers = new ConcurrentDictionary<string, NetworkPeer>();
+    private readonly ConcurrentDictionary<string, FriendSessionRecord> discoveredFriendSessions = new ConcurrentDictionary<string, FriendSessionRecord>();
+    private readonly string discoveryInstanceId = Guid.NewGuid().ToString("N");
 
     private SessionMode mode = SessionMode.Idle;
     private TcpListener serverListener;
     private CancellationTokenSource serverCts;
     private UdpClient serverUdp;
     private Task serverUdpTask;
+    private UdpClient discoveryUdp;
+    private UdpClient discoverySender;
+    private CancellationTokenSource discoveryCts;
+    private float lastDiscoveryBeaconTime = -999f;
+    private float lastDiscoveryCleanupTime = -999f;
 
     private TcpClient clientSocket;
     private NetworkStream clientStream;
@@ -328,6 +366,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         preferredMicrophoneDevice = PlayerPrefs.GetString(MicrophoneDevicePrefKey, string.Empty);
         SetStatus(currentStatus);
         ApplyLocalPlayerModel();
+        StartDiscoveryTransport();
     }
 
     private void OnDestroy()
@@ -336,6 +375,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
             StopAllNetworking();
+            StopDiscoveryTransport();
             instance = null;
         }
     }
@@ -364,6 +404,7 @@ public class MultiplayerSessionManager : MonoBehaviour
         CaptureAndSendVoice();
         InterpolateRemoteAvatars();
         UpdateVoiceMeters();
+        TickLanDiscovery();
         RefreshLocalNameLabel();
         ApplyLocalPlayerModelIfNeeded();
     }
@@ -382,6 +423,14 @@ public class MultiplayerSessionManager : MonoBehaviour
             }
 
             Vector3 displayTarget = avatar.TargetPosition;
+            float receiveAge = Mathf.Clamp(Time.unscaledTime - avatar.LastReceiveTime, 0f, RemoteInterpolationLeadSeconds);
+            Vector3 predictedOffset = avatar.Velocity * receiveAge;
+            if (predictedOffset.sqrMagnitude > RemoteMaxExtrapolationMeters * RemoteMaxExtrapolationMeters)
+            {
+                predictedOffset = predictedOffset.normalized * RemoteMaxExtrapolationMeters;
+            }
+
+            displayTarget += predictedOffset;
             float dist = Vector3.Distance(avatar.Root.transform.position, displayTarget);
 
             if (dist > RemoteSnapDistance)
@@ -555,6 +604,43 @@ public class MultiplayerSessionManager : MonoBehaviour
             VoiceChatMode.PushToTalk => IsPushToTalkPressed(),
             _ => false,
         };
+    }
+
+    public List<FriendSession> GetDiscoveredFriendSessions()
+    {
+        CleanupDiscoverySessions(false);
+        DateTime now = DateTime.UtcNow;
+        List<FriendSession> sessions = new List<FriendSession>();
+        foreach (FriendSessionRecord record in discoveredFriendSessions.Values)
+        {
+            if (record == null || string.IsNullOrWhiteSpace(record.Address) || record.Port <= 0)
+            {
+                continue;
+            }
+
+            sessions.Add(new FriendSession
+            {
+                PlayerName = record.PlayerName,
+                Address = record.Address,
+                Port = record.Port,
+                AgeSeconds = Mathf.Max(0f, (float)(now - record.LastSeenUtc).TotalSeconds)
+            });
+        }
+
+        sessions.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+        return sessions;
+    }
+
+    public void RefreshFriendSessions()
+    {
+        StartDiscoveryTransport();
+        CleanupDiscoverySessions(true);
+        if (mode == SessionMode.Hosting)
+        {
+            SendDiscoveryBeacon();
+        }
+
+        FriendSessionsChanged?.Invoke();
     }
 
     public void SetHostAddress(string address)
@@ -834,6 +920,211 @@ public class MultiplayerSessionManager : MonoBehaviour
     }
 
     private bool IsClientConnected => IsTcpClientUsable(clientSocket) && clientStream != null;
+
+    private void StartDiscoveryTransport()
+    {
+        if (discoveryCts != null)
+        {
+            return;
+        }
+
+        discoveryCts = new CancellationTokenSource();
+
+        try
+        {
+            discoveryUdp = new UdpClient();
+            discoveryUdp.EnableBroadcast = true;
+            discoveryUdp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            discoveryUdp.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
+            _ = Task.Run(() => RunDiscoveryLoopAsync(discoveryUdp, discoveryCts.Token));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[Multiplayer] LAN friends discovery listen failed: " + ex.Message);
+            try
+            {
+                discoveryUdp?.Close();
+                discoveryUdp?.Dispose();
+            }
+            catch { }
+            discoveryUdp = null;
+        }
+
+        try
+        {
+            discoverySender = new UdpClient();
+            discoverySender.EnableBroadcast = true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[Multiplayer] LAN friends discovery broadcast failed: " + ex.Message);
+            discoverySender = null;
+        }
+    }
+
+    private void StopDiscoveryTransport()
+    {
+        if (discoveryCts != null)
+        {
+            discoveryCts.Cancel();
+            discoveryCts.Dispose();
+            discoveryCts = null;
+        }
+
+        try
+        {
+            discoveryUdp?.Close();
+            discoveryUdp?.Dispose();
+        }
+        catch { }
+        discoveryUdp = null;
+
+        try
+        {
+            discoverySender?.Close();
+            discoverySender?.Dispose();
+        }
+        catch { }
+        discoverySender = null;
+    }
+
+    private async Task RunDiscoveryLoopAsync(UdpClient udp, CancellationToken token)
+    {
+        while (!token.IsCancellationRequested && udp != null)
+        {
+            UdpReceiveResult result;
+            try
+            {
+                result = await udp.ReceiveAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (SocketException)
+            {
+                if (token.IsCancellationRequested) break;
+                continue;
+            }
+            catch
+            {
+                if (token.IsCancellationRequested) break;
+                continue;
+            }
+
+            TryApplyDiscoveryBeacon(result.Buffer, result.RemoteEndPoint);
+        }
+    }
+
+    private void TryApplyDiscoveryBeacon(byte[] payload, IPEndPoint remoteEndPoint)
+    {
+        if (payload == null || payload.Length == 0 || remoteEndPoint == null)
+        {
+            return;
+        }
+
+        string message;
+        try
+        {
+            message = Encoding.UTF8.GetString(payload);
+        }
+        catch
+        {
+            return;
+        }
+
+        string[] parts = message.Split('|');
+        if (parts.Length < 5 || parts[0] != DiscoveryPrefix)
+        {
+            return;
+        }
+
+        string remoteInstanceId = parts[1];
+        if (remoteInstanceId == discoveryInstanceId)
+        {
+            return;
+        }
+
+        if (!int.TryParse(parts[2], out int port) || port <= 0)
+        {
+            return;
+        }
+
+        string playerName = NormalizePlayerName(parts[3]);
+        string address = remoteEndPoint.Address.ToString();
+        string key = remoteInstanceId + "@" + address + ":" + port;
+        discoveredFriendSessions[key] = new FriendSessionRecord
+        {
+            InstanceId = remoteInstanceId,
+            PlayerName = playerName,
+            Address = address,
+            Port = port,
+            LastSeenUtc = DateTime.UtcNow
+        };
+
+        EnqueueMainThread(() => FriendSessionsChanged?.Invoke());
+    }
+
+    private void TickLanDiscovery()
+    {
+        if (mode == SessionMode.Hosting && Time.unscaledTime - lastDiscoveryBeaconTime >= DiscoveryBeaconIntervalSeconds)
+        {
+            lastDiscoveryBeaconTime = Time.unscaledTime;
+            SendDiscoveryBeacon();
+        }
+
+        if (Time.unscaledTime - lastDiscoveryCleanupTime >= DiscoveryCleanupIntervalSeconds)
+        {
+            lastDiscoveryCleanupTime = Time.unscaledTime;
+            CleanupDiscoverySessions(true);
+        }
+    }
+
+    private void SendDiscoveryBeacon()
+    {
+        if (discoverySender == null)
+        {
+            return;
+        }
+
+        string safePlayerName = SanitizeDiscoveryField(localPlayerName);
+        string safeMachine = SanitizeDiscoveryField(Environment.MachineName);
+        string message = DiscoveryPrefix + "|" + discoveryInstanceId + "|" + hostPort + "|" + safePlayerName + "|" + safeMachine;
+        byte[] payload = Encoding.UTF8.GetBytes(message);
+        try
+        {
+            _ = discoverySender.SendAsync(payload, payload.Length, new IPEndPoint(IPAddress.Broadcast, DiscoveryPort));
+        }
+        catch { }
+    }
+
+    private void CleanupDiscoverySessions(bool notifyIfChanged)
+    {
+        DateTime cutoff = DateTime.UtcNow.AddSeconds(-DiscoveryTimeoutSeconds);
+        bool changed = false;
+        foreach (var pair in discoveredFriendSessions)
+        {
+            if (pair.Value == null || pair.Value.LastSeenUtc < cutoff)
+            {
+                changed |= discoveredFriendSessions.TryRemove(pair.Key, out _);
+            }
+        }
+
+        if (changed && notifyIfChanged)
+        {
+            FriendSessionsChanged?.Invoke();
+        }
+    }
+
+    private static string SanitizeDiscoveryField(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "Player";
+        }
+
+        return value.Replace("|", " ").Replace("\n", " ").Replace("\r", " ").Trim();
+    }
 
     private async Task JoinLocalHostAsync()
     {
@@ -1819,7 +2110,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             byte[] pcm16 = EncodePcm16(microphoneFrame);
             LocalVoiceFrameCaptured?.Invoke(pcm16, VoiceSampleRate, frameLevel);
 
-            if (!shouldTransmit || frameLevel < VoiceSilenceThreshold)
+            if (!shouldTransmit)
             {
                 available -= VoiceFrameSamples;
                 framesSent++;

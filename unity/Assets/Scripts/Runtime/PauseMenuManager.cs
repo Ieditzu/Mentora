@@ -73,6 +73,9 @@ public class PauseMenuManager : MonoBehaviour
     private InputField rudolfApiKeyInput;
     private Text voiceHintText;
     private GameObject joinSubPanel;
+    private GameObject friendsSubPanel;
+    private GameObject friendListContainer;
+    private Text friendStatusText;
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
@@ -402,6 +405,7 @@ public class PauseMenuManager : MonoBehaviour
         if (multiplayerSession != null)
         {
             multiplayerSession.StatusChanged -= OnMultiplayerStatusChanged;
+            multiplayerSession.FriendSessionsChanged -= OnFriendSessionsChanged;
             multiplayerSession = null;
         }
     }
@@ -796,6 +800,11 @@ public class PauseMenuManager : MonoBehaviour
             }
         });
 
+        Button friendsBtn = CreateButton(mpLeft.transform, "FriendsBtn", "Friends / LAN", new Vector2(0f, -54f), new Color(0.28f, 0.42f, 0.72f, 1f));
+        friendsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
+        friendsBtn.GetComponentInChildren<Text>().fontSize = 14;
+        friendsBtn.onClick.AddListener(ShowFriendsPanel);
+
         // Join sub-panel — full card overlaid on the canvas, same theme as the rest of the menu
         joinSubPanel = CreateUiObject("JoinSubPanel", canvas.transform);
         RectTransform joinSubRect = joinSubPanel.GetComponent<RectTransform>();
@@ -845,11 +854,57 @@ public class PauseMenuManager : MonoBehaviour
 
         joinSubPanel.SetActive(false);
 
-        Button mpDisconnectBtn = CreateButton(mpLeft.transform, "DisconnectBtn", "Disconnect", new Vector2(0f, -54f), new Color(0.65f, 0.22f, 0.22f, 1f));
+        friendsSubPanel = CreateUiObject("FriendsSubPanel", canvas.transform);
+        RectTransform friendsRect = friendsSubPanel.GetComponent<RectTransform>();
+        friendsRect.sizeDelta = new Vector2(540f, 430f);
+        friendsRect.anchoredPosition = Vector2.zero;
+        friendsSubPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
+        var friendsOutline = friendsSubPanel.AddComponent<Outline>();
+        friendsOutline.effectColor = new Color(0.3f, 0.6f, 1f, 0.7f);
+        friendsOutline.effectDistance = new Vector2(2f, -2f);
+
+        GameObject friendsTopBar = CreateUiObject("FriendsTopBar", friendsSubPanel.transform);
+        RectTransform friendsTopRect = friendsTopBar.GetComponent<RectTransform>();
+        friendsTopRect.sizeDelta = new Vector2(540f, 62f);
+        friendsTopRect.anchoredPosition = new Vector2(0f, 184f);
+        friendsTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
+        friendsTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
+        CreateText("FriendsTitle", friendsTopBar.transform, "FRIENDS ON LAN", 24, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(420f, 38f));
+
+        friendStatusText = CreateText("FriendsStatus", friendsSubPanel.transform, "Looking for hosted games...", 13, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.70f, 0.84f, 1f), new Vector2(0f, 132f), new Vector2(460f, 28f));
+        friendListContainer = CreateScrollableList("FriendsScroll", friendsSubPanel.transform, new Vector2(460f, 230f), new Vector2(0f, 0f));
+
+        Button refreshFriendsBtn = CreateButton(friendsSubPanel.transform, "RefreshFriendsBtn", "Refresh", new Vector2(-140f, -166f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        refreshFriendsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(130f, 38f);
+        refreshFriendsBtn.GetComponentInChildren<Text>().fontSize = 14;
+        refreshFriendsBtn.onClick.AddListener(() => {
+            EnsureMultiplayerSession();
+            if (multiplayerSession != null) multiplayerSession.RefreshFriendSessions();
+            RebuildFriendSessionsList();
+        });
+
+        Button manualJoinBtn = CreateButton(friendsSubPanel.transform, "ManualJoinBtn", "Manual IP", new Vector2(0f, -166f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        manualJoinBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(130f, 38f);
+        manualJoinBtn.GetComponentInChildren<Text>().fontSize = 14;
+        manualJoinBtn.onClick.AddListener(() => {
+            friendsSubPanel.SetActive(false);
+            joinSubPanel.SetActive(true);
+            joinSubPanel.transform.SetAsLastSibling();
+        });
+
+        Button closeFriendsBtn = CreateButton(friendsSubPanel.transform, "CloseFriendsBtn", "Close", new Vector2(140f, -166f), new Color(0.4f, 0.4f, 0.4f));
+        closeFriendsBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(130f, 38f);
+        closeFriendsBtn.GetComponentInChildren<Text>().fontSize = 14;
+        closeFriendsBtn.onClick.AddListener(() => friendsSubPanel.SetActive(false));
+
+        friendsSubPanel.SetActive(false);
+
+        Button mpDisconnectBtn = CreateButton(mpLeft.transform, "DisconnectBtn", "Disconnect", new Vector2(0f, -104f), new Color(0.65f, 0.22f, 0.22f, 1f));
         mpDisconnectBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 40f);
         mpDisconnectBtn.GetComponentInChildren<Text>().fontSize = 14;
         mpDisconnectBtn.onClick.AddListener(() => {
             if (joinSubPanel != null) joinSubPanel.SetActive(false);
+            if (friendsSubPanel != null) friendsSubPanel.SetActive(false);
             if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
             CodeWorldRuntime.DeactivateLocal();
             PlayerPrefs.SetInt("MP_UseCustomSpawn", 0);
@@ -858,7 +913,7 @@ public class PauseMenuManager : MonoBehaviour
             if (multiplayerSession != null) multiplayerSession.StopAllNetworking();
         });
 
-        multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -104f), new Vector2(260f, 34f));
+        multiplayerStatusText = CreateText("MultiplayerStatus", mpLeft.transform, "Offline", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.88f, 1f), new Vector2(0f, -154f), new Vector2(260f, 44f));
         multiplayerStatusText.resizeTextForBestFit = false;
 
         // Right column: player name and multiplayer-only options
@@ -1091,6 +1146,7 @@ public class PauseMenuManager : MonoBehaviour
         if (hostGamePanel != null) hostGamePanel.SetActive(false);
         if (quizOptionsPanel != null) quizOptionsPanel.SetActive(false);
         if (joinSubPanel != null) joinSubPanel.SetActive(false);
+        if (friendsSubPanel != null) friendsSubPanel.SetActive(false);
         if (panel != null) panel.SetActive(true);
 
         // Keep cursor locked so player movement isn't interrupted
@@ -1127,6 +1183,7 @@ public class PauseMenuManager : MonoBehaviour
         if (multiplayerSession != null)
         {
             multiplayerSession.StatusChanged += OnMultiplayerStatusChanged;
+            multiplayerSession.FriendSessionsChanged += OnFriendSessionsChanged;
             OnMultiplayerStatusChanged(multiplayerSession.CurrentStatus);
             RefreshVoiceChatButton();
             RefreshPlayerModelButton();
@@ -1272,6 +1329,14 @@ public class PauseMenuManager : MonoBehaviour
         }
     }
 
+    private void OnFriendSessionsChanged()
+    {
+        if (friendsSubPanel != null && friendsSubPanel.activeSelf)
+        {
+            RebuildFriendSessionsList();
+        }
+    }
+
     private void RefreshRudolfApiKeyInput()
     {
         if (rudolfApiKeyInput == null)
@@ -1330,6 +1395,7 @@ public class PauseMenuManager : MonoBehaviour
 
         RefreshVoiceChatButton();
         RefreshPlayerModelButton();
+        RebuildFriendSessionsList();
     }
 
     private static string GetLocalLanIp()
@@ -1444,10 +1510,104 @@ public class PauseMenuManager : MonoBehaviour
         string address = multiplayerAddressInput != null ? multiplayerAddressInput.text.Trim() : "127.0.0.1";
         if (string.IsNullOrWhiteSpace(address)) address = "127.0.0.1";
 
-        // Always use port 7777; if the session manager reports a connection failure
-        // the player can retry and we will try 7778.
-        int port = 7777;
-        multiplayerSession.JoinGame(playerName, address, port);
+        // Manual joins default to 7777; discovered LAN hosts carry their actual port.
+        JoinMultiplayerGame(address, 7777);
+    }
+
+    private void JoinMultiplayerGame(string address, int port)
+    {
+        EnsureMultiplayerSession();
+        if (multiplayerSession == null) return;
+
+        string playerName = multiplayerNameInput != null ? multiplayerNameInput.text : "Player";
+        string cleanedAddress = string.IsNullOrWhiteSpace(address) ? "127.0.0.1" : address.Trim();
+        int cleanedPort = Mathf.Clamp(port, 1024, 65535);
+        multiplayerSession.JoinGame(playerName, cleanedAddress, cleanedPort);
+        if (multiplayerAddressInput != null)
+        {
+            multiplayerAddressInput.SetTextWithoutNotify(cleanedAddress);
+        }
+    }
+
+    private void ShowFriendsPanel()
+    {
+        EnsureMultiplayerSession();
+        if (joinSubPanel != null) joinSubPanel.SetActive(false);
+        if (friendsSubPanel == null) return;
+
+        friendsSubPanel.SetActive(true);
+        friendsSubPanel.transform.SetAsLastSibling();
+        if (multiplayerSession != null)
+        {
+            multiplayerSession.RefreshFriendSessions();
+        }
+        RebuildFriendSessionsList();
+    }
+
+    private void RebuildFriendSessionsList()
+    {
+        if (friendListContainer == null)
+        {
+            return;
+        }
+
+        foreach (Transform child in friendListContainer.transform)
+        {
+            Destroy(child.gameObject);
+        }
+
+        List<MultiplayerSessionManager.FriendSession> sessions = multiplayerSession != null
+            ? multiplayerSession.GetDiscoveredFriendSessions()
+            : new List<MultiplayerSessionManager.FriendSession>();
+
+        RectTransform contentRect = friendListContainer.GetComponent<RectTransform>();
+        if (sessions.Count == 0)
+        {
+            contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, 80f);
+            if (friendStatusText != null)
+            {
+                friendStatusText.text = "No hosted LAN games found yet.";
+            }
+            CreateText("NoFriends", friendListContainer.transform, "Ask your friend to host a game, then press Refresh.\nManual IP is still available.", 14, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.62f), new Vector2(0f, -34f), new Vector2(410f, 64f));
+            return;
+        }
+
+        if (friendStatusText != null)
+        {
+            friendStatusText.text = "Click a discovered host to join.";
+        }
+
+        float itemHeight = 64f;
+        float spacing = 6f;
+        contentRect.sizeDelta = new Vector2(contentRect.sizeDelta.x, sessions.Count * (itemHeight + spacing));
+        float y = -spacing;
+        for (int i = 0; i < sessions.Count; i++)
+        {
+            MultiplayerSessionManager.FriendSession session = sessions[i];
+            GameObject item = CreateUiObject("FriendSession_" + i, friendListContainer.transform);
+            RectTransform itemRect = item.GetComponent<RectTransform>();
+            itemRect.anchorMin = new Vector2(0f, 1f);
+            itemRect.anchorMax = new Vector2(1f, 1f);
+            itemRect.pivot = new Vector2(0.5f, 1f);
+            itemRect.sizeDelta = new Vector2(-20f, itemHeight);
+            itemRect.anchoredPosition = new Vector2(0f, y);
+            item.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.055f);
+
+            CreateText("FriendName", item.transform, session.DisplayName, 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-104f, 12f), new Vector2(230f, 24f));
+            CreateText("FriendEndpoint", item.transform, session.Endpoint, 12, FontStyle.Italic, TextAnchor.MiddleLeft, new Color(0.66f, 0.82f, 1f), new Vector2(-104f, -12f), new Vector2(230f, 22f));
+
+            Button joinBtn = CreateButton(item.transform, "JoinFriendBtn", "Join", new Vector2(166f, 0f), new Color(0.24f, 0.62f, 0.36f, 1f));
+            joinBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(96f, 36f);
+            joinBtn.GetComponentInChildren<Text>().fontSize = 13;
+            string address = session.Address;
+            int port = session.Port;
+            joinBtn.onClick.AddListener(() => {
+                if (friendsSubPanel != null) friendsSubPanel.SetActive(false);
+                JoinMultiplayerGame(address, port);
+            });
+
+            y -= itemHeight + spacing;
+        }
     }
 
     private void RebuildTaskList()
