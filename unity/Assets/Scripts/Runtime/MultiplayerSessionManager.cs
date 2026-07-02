@@ -72,6 +72,8 @@ public class MultiplayerSessionManager : MonoBehaviour
 
     public string LocalClientId => localClientId;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
+    public bool IsHosting => mode == SessionMode.Hosting;
+    public bool IsConnectedToSession => !string.IsNullOrEmpty(localClientId);
 
     public enum VoiceChatMode
     {
@@ -704,6 +706,11 @@ public class MultiplayerSessionManager : MonoBehaviour
         EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
     }
 
+    public void BroadcastQuizPacketToRemotes(Packet packet)
+    {
+        BroadcastServerPacket(packet);
+    }
+
     /// <summary>Client: send a quiz answer packet to the host.</summary>
     public void SendQuizPacketToHost(Packet packet)
     {
@@ -1069,6 +1076,10 @@ public class MultiplayerSessionManager : MonoBehaviour
                         serverPeers[peer.ClientId] = peer;
                         await SendServerPacketAsync(peer, new MultiplayerWelcomePacket(peer.ClientId, peer.PlayerName));
                         await SendExistingPlayersToClientAsync(peer);
+                        if (CodeWorldRuntime.TryCreateSnapshotPacket(out CodeWorldStatePacket codeWorldStatePacket))
+                        {
+                            await SendServerPacketAsync(peer, codeWorldStatePacket);
+                        }
                         SetStatus(peer.PlayerName + " joined the session.");
                         break;
 
@@ -1092,6 +1103,11 @@ public class MultiplayerSessionManager : MonoBehaviour
                         // Forward the client's answer to the host's local client connection
                         // by broadcasting to all — the host's own client loop receives it.
                         BroadcastServerPacket(quizAnswer);
+                        break;
+
+                    case CodeWorldCommandPacket codeWorldCommand:
+                        codeWorldCommand.AuthorClientId = peer.ClientId ?? string.Empty;
+                        BroadcastServerPacket(codeWorldCommand);
                         break;
 
                     case MultiplayerVoicePacket voicePacket:
@@ -1217,6 +1233,11 @@ public class MultiplayerSessionManager : MonoBehaviour
             case QuizAnswerPacket answerPacket:
                 // Route answer back to host's quiz manager (host receives its own broadcast echo)
                 EnqueueMainThread(() => OnQuizPacket?.Invoke(answerPacket));
+                break;
+
+            case CodeWorldCommandPacket _:
+            case CodeWorldStatePacket _:
+                EnqueueMainThread(() => OnQuizPacket?.Invoke(packet));
                 break;
 
             case MultiplayerVoicePacket voicePacket:

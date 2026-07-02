@@ -70,6 +70,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
     [SerializeField] private KeyCode jumpKey = KeyCode.Space;
     [SerializeField] private KeyCode forwardKey = KeyCode.W;
     [SerializeField] private float doubleTapSprintWindow = 0.28f;
+    [Header("Special Movement")]
+    [SerializeField] private float noclipMoveSpeed = 12f;
+    [SerializeField] private float noclipSprintMultiplier = 2.1f;
+    [SerializeField] private float noclipVerticalSpeed = 8f;
 
     private CharacterController controller;
     private Transform camTransform;
@@ -95,6 +99,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private Transform leftVrControllerVisual;
     private Transform rightVrControllerVisual;
     private bool handTrackingVisualsActive;
+    private bool noclipEnabled;
 
     private bool ShouldDriveVrControllerVisuals()
     {
@@ -262,7 +267,23 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
         if (movementLocked)
         {
+            if (noclipEnabled)
+            {
+                velocity = Vector3.zero;
+                return;
+            }
+
             ApplyGravityOnly();
+            return;
+        }
+
+        if (noclipEnabled)
+        {
+            MoveNoclip();
+            if (ShouldDriveVrControllerVisuals())
+            {
+                UpdateVrControllerVisuals();
+            }
             return;
         }
 
@@ -388,6 +409,33 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         velocity.y -= gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
+    }
+
+    private void MoveNoclip()
+    {
+        float h = GetAxisRawCompat("Horizontal");
+        float v = GetAxisRawCompat("Vertical");
+        Vector3 planar = (transform.right * h + transform.forward * v).normalized;
+
+        float vertical = 0f;
+        if (GetKeyCompat(jumpKey))
+        {
+            vertical += 1f;
+        }
+        if (GetKeyCompat(KeyCode.LeftControl) || GetKeyCompat(KeyCode.RightControl))
+        {
+            vertical -= 1f;
+        }
+
+        float speed = noclipMoveSpeed;
+        if (GetKeyCompat(sprintKey))
+        {
+            speed *= noclipSprintMultiplier;
+        }
+
+        Vector3 motion = planar * speed + Vector3.up * (vertical * noclipVerticalSpeed);
+        transform.position += motion * Time.deltaTime;
+        velocity = Vector3.zero;
     }
 
     private void UpdateDoubleTapSprint()
@@ -539,6 +587,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
                 return keyboard.capsLockKey;
             case KeyCode.LeftShift:
                 return keyboard.leftShiftKey;
+            case KeyCode.LeftControl:
+                return keyboard.leftCtrlKey;
+            case KeyCode.RightControl:
+                return keyboard.rightCtrlKey;
             case KeyCode.RightShift:
                 return keyboard.rightShiftKey;
             case KeyCode.Space:
@@ -881,6 +933,18 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
     }
 
+    public void SetNoclipEnabled(bool enabled)
+    {
+        noclipEnabled = enabled;
+        velocity = Vector3.zero;
+        pendingExternalDisplacement = Vector3.zero;
+
+        if (controller != null)
+        {
+            controller.enabled = !enabled;
+        }
+    }
+
     public void AddExternalDisplacement(Vector3 worldDelta)
     {
         pendingExternalDisplacement += worldDelta;
@@ -888,6 +952,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
     private bool ApplyGroundStick()
     {
+        if (controller == null || !controller.enabled)
+        {
+            wasGrounded = false;
+            return false;
+        }
+
         bool grounded = controller.isGrounded;
         if (grounded && velocity.y < 0f)
         {
@@ -909,6 +979,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
     private void ApplyGravityOnly()
     {
+        if (controller == null || !controller.enabled)
+        {
+            velocity = Vector3.zero;
+            return;
+        }
+
         ApplyGroundStick();
         velocity.y -= gravity * Time.deltaTime;
         controller.Move(new Vector3(0f, velocity.y, 0f) * Time.deltaTime);
@@ -925,6 +1001,27 @@ public class FirstPersonControllerSimple : MonoBehaviour
         transform.SetPositionAndRotation(spawnPosition, spawnRotation);
         controller.enabled = wasEnabled;
         AudioManager.Play(MenSfx.Respawn);
+    }
+
+    public void TeleportTo(Vector3 position, Quaternion rotation)
+    {
+        drownTimer = 0f;
+        velocity = Vector3.zero;
+        pendingExternalDisplacement = Vector3.zero;
+        xrHeadOriginCaptured = false;
+
+        bool wasEnabled = controller != null && controller.enabled;
+        if (controller != null)
+        {
+            controller.enabled = false;
+        }
+
+        transform.SetPositionAndRotation(position, rotation);
+
+        if (controller != null)
+        {
+            controller.enabled = wasEnabled;
+        }
     }
 
     private void HandleWaterSubmersion()
@@ -964,6 +1061,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         Vector3 delta = pendingExternalDisplacement;
         pendingExternalDisplacement = Vector3.zero;
+        if (!controller.enabled)
+        {
+            transform.position += delta;
+            return;
+        }
+
         controller.Move(delta);
     }
 

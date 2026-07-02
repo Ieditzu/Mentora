@@ -60,6 +60,8 @@ namespace Mentora.Network
                 57 => new MultiplayerUdpHelloPacket(),
                 58 => new CompanionVoiceTextPacket(),
                 59 => new CompanionVoiceAudioPacket(),
+                60 => new CodeWorldCommandPacket(),
+                61 => new CodeWorldStatePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -956,6 +958,58 @@ namespace Mentora.Network
         {
             ClientId = ReadString(reader);
             PlayerName = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldCommandPacket : Packet
+    {
+        public string CommandText;
+        public string AuthorClientId;
+
+        public CodeWorldCommandPacket(string commandText, string authorClientId = "") : base(60)
+        {
+            CommandText = commandText;
+            AuthorClientId = authorClientId;
+        }
+
+        public CodeWorldCommandPacket() : base(60) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, CommandText ?? string.Empty);
+            PutString(writer, AuthorClientId ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            CommandText = ReadString(reader);
+            AuthorClientId = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldStatePacket : Packet
+    {
+        public bool IsActive;
+        public string HistoryText;
+
+        public CodeWorldStatePacket(bool isActive, string historyText) : base(61)
+        {
+            IsActive = isActive;
+            HistoryText = historyText;
+        }
+
+        public CodeWorldStatePacket() : base(61) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            WriteInt32BigEndian(writer, IsActive ? 1 : 0);
+            PutString(writer, HistoryText ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            IsActive = ReadInt32BigEndian(reader) != 0;
+            HistoryText = ReadString(reader);
         }
     }
 
