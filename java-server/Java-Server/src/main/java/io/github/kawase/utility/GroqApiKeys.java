@@ -76,11 +76,15 @@ final class GroqApiKeys {
         Purpose resolvedPurpose = purpose == null ? Purpose.CHAT : purpose;
         KeyState state = stateFor(resolvedPurpose);
         long now = System.currentTimeMillis();
-        int start = Math.floorMod(state.currentIndex.get(), API_KEYS.size());
+        int current = Math.floorMod(state.currentIndex.get(), API_KEYS.size());
+        if (!isCoolingDown(state, current, now)) {
+            return new ConfiguredKey(resolvedPurpose, current, API_KEYS.get(current));
+        }
+
+        int start = Math.floorMod(current + 1, API_KEYS.size());
         for (int offset = 0; offset < API_KEYS.size(); offset++) {
             int index = (start + offset) % API_KEYS.size();
-            long cooldownUntil = state.cooldownUntilByIndex.getOrDefault(index, 0L);
-            if (cooldownUntil <= now) {
+            if (!isCoolingDown(state, index, now)) {
                 state.currentIndex.set(index);
                 return new ConfiguredKey(resolvedPurpose, index, API_KEYS.get(index));
             }
@@ -150,6 +154,10 @@ final class GroqApiKeys {
 
     private static KeyState stateFor(final Purpose purpose) {
         return KEY_STATES.get(purpose == null ? Purpose.CHAT : purpose);
+    }
+
+    private static boolean isCoolingDown(final KeyState state, final int index, final long now) {
+        return state.cooldownUntilByIndex.getOrDefault(index, 0L) > now;
     }
 
     private static List<String> loadApiKeys() {
