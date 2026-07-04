@@ -486,6 +486,11 @@ public class CodeWorldRuntime : MonoBehaviour
             ActivateLocal(false, false);
         }
 
+        if (sessionManager != null && packet.AuthorClientId == sessionManager.LocalClientId)
+        {
+            return;
+        }
+
         string incomingText = packet.EditorText ?? string.Empty;
         if (editorInput != null && string.Equals(editorInput.text ?? string.Empty, incomingText, StringComparison.Ordinal))
         {
@@ -2990,10 +2995,17 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
+        int anchor = Mathf.Clamp(editorInput.selectionAnchorPosition, 0, (value ?? string.Empty).Length);
+        int focus = Mathf.Clamp(editorInput.selectionFocusPosition, 0, (value ?? string.Empty).Length);
+        int caret = Mathf.Clamp(editorInput.caretPosition, 0, (value ?? string.Empty).Length);
+
         suppressEditorTracking = true;
         suppressEditorSync = true;
         editorInput.text = value ?? string.Empty;
         lastEditorTrackedText = editorInput.text;
+        editorInput.selectionAnchorPosition = Mathf.Clamp(anchor, 0, editorInput.text.Length);
+        editorInput.selectionFocusPosition = Mathf.Clamp(focus, 0, editorInput.text.Length);
+        editorInput.caretPosition = Mathf.Clamp(caret, 0, editorInput.text.Length);
         suppressEditorTracking = false;
         suppressEditorSync = false;
         editorSyncDirty = false;
