@@ -345,27 +345,44 @@ public class PickupUIController : MonoBehaviour
             return;
         }
 
-        const float width = 480f;
-        const float height = 300f;
+        bool useMobileLayout = Input.touchSupported || Application.isMobilePlatform;
+        float width = useMobileLayout ? 760f : 480f;
+        float height = useMobileLayout ? 460f : 300f;
         Rect rect = new Rect(Screen.width - width - 16f, 16f, width, height);
         GUI.Box(rect, GUIContent.none);
 
         GUILayout.BeginArea(new Rect(rect.x + 10f, rect.y + 10f, rect.width - 20f, rect.height - 20f));
 
         bool enterPressed = Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return;
+        int labelFontSize = useMobileLayout ? 28 : 16;
+        int textFieldFontSize = useMobileLayout ? 28 : 16;
+        float labelWidth = useMobileLayout ? 240f : 140f;
+        float compactLabelWidth = useMobileLayout ? 240f : 100f;
+
+        int oldGlobalLabelSize = GUI.skin.label.fontSize;
+        int oldGlobalTextSize = GUI.skin.textField.fontSize;
+        GUI.skin.label.fontSize = labelFontSize;
+        GUI.skin.textField.fontSize = textFieldFontSize;
+        GUIStyle labelStyle = new GUIStyle(GUI.skin.label);
+        GUIStyle textFieldStyle = new GUIStyle(GUI.skin.textField);
+        if (useMobileLayout)
+        {
+            labelStyle.fixedHeight = 40f;
+            labelStyle.padding = new RectOffset(0, 0, 6, 6);
+            labelStyle.wordWrap = true;
+        }
+        if (useMobileLayout)
+        {
+            textFieldStyle.fixedHeight = 42f;
+            textFieldStyle.padding = new RectOffset(8, 8, 6, 6);
+        }
 
         if (activeMode == CoinRotator.CoinMode.JumpAndBox)
         {
-            // Slightly larger font for readability.
-            var oldLabelSize = GUI.skin.label.fontSize;
-            var oldTextSize = GUI.skin.textField.fontSize;
-            GUI.skin.label.fontSize = 16;
-            GUI.skin.textField.fontSize = 16;
-
             GUI.SetNextControlName("JumpField");
             GUILayout.BeginHorizontal();
-            GUILayout.Label("jumpVelocity =", GUILayout.Width(140f));
-            jumpInput = GUILayout.TextField(jumpInput, 12);
+            GUILayout.Label("jumpVelocity =", labelStyle, GUILayout.Width(labelWidth));
+            jumpInput = GUILayout.TextField(jumpInput, 12, textFieldStyle);
             GUILayout.EndHorizontal();
 
             if (float.TryParse(jumpInput, out float jp))
@@ -396,8 +413,8 @@ public class PickupUIController : MonoBehaviour
             }
             GUI.SetNextControlName("BoxField");
             GUILayout.BeginHorizontal();
-            GUILayout.Label("boxRigidbody =", GUILayout.Width(100f));
-            boxInput = GUILayout.TextField(boxInput, 8).ToLowerInvariant();
+            GUILayout.Label("boxRigidbody =", labelStyle, GUILayout.Width(compactLabelWidth));
+            boxInput = GUILayout.TextField(boxInput, 8, textFieldStyle).ToLowerInvariant();
             GUILayout.EndHorizontal();
             if (enterPressed && GUI.GetNameOfFocusedControl() == "BoxField")
             {
@@ -412,9 +429,6 @@ public class PickupUIController : MonoBehaviour
                     PauseMenuManager.CompleteTaskByTitle("Set Jump Power");
                 }
             }
-
-            GUI.skin.label.fontSize = oldLabelSize;
-            GUI.skin.textField.fontSize = oldTextSize;
         }
         else
         {
@@ -422,14 +436,14 @@ public class PickupUIController : MonoBehaviour
             string label = activeMode == CoinRotator.CoinMode.IslandReveal ? IslandVisibleLabel : BridgeVisibleLabel;
             GUI.SetNextControlName(fieldName);
             GUILayout.BeginHorizontal();
-            GUILayout.Label(label, GUILayout.Width(100f));
+            GUILayout.Label(label, labelStyle, GUILayout.Width(compactLabelWidth));
             if (activeMode == CoinRotator.CoinMode.IslandReveal)
             {
-                islandInput = GUILayout.TextField(islandInput, 8).ToLowerInvariant();
+                islandInput = GUILayout.TextField(islandInput, 8, textFieldStyle).ToLowerInvariant();
             }
             else
             {
-                bridgeInput = GUILayout.TextField(bridgeInput, 8).ToLowerInvariant();
+                bridgeInput = GUILayout.TextField(bridgeInput, 8, textFieldStyle).ToLowerInvariant();
             }
             GUILayout.EndHorizontal();
             if (enterPressed && GUI.GetNameOfFocusedControl() == fieldName)
@@ -454,8 +468,8 @@ public class PickupUIController : MonoBehaviour
         }
 
         GUILayout.FlexibleSpace();
-        GUILayout.Label("Press L to hide this");
-        GUILayout.Label("Press H for hint");
+        GUILayout.Label("Press L to hide this", labelStyle);
+        GUILayout.Label("Press H for hint", labelStyle);
         if (showHint)
         {
             GUILayout.Space(4f);
@@ -466,7 +480,7 @@ public class PickupUIController : MonoBehaviour
                 CoinRotator.CoinMode.BridgeReveal => "Hint: viewPod controls the bridge. true shows it, false hides it.",
                 _ => "Hint unavailable for this mode."
             };
-            GUILayout.Label(hint);
+            GUILayout.Label(hint, labelStyle);
         }
 
         GUILayout.EndArea();
@@ -475,6 +489,9 @@ public class PickupUIController : MonoBehaviour
         {
             GUI.FocusControl(null); // exit any focused field when Enter is pressed
         }
+
+        GUI.skin.label.fontSize = oldGlobalLabelSize;
+        GUI.skin.textField.fontSize = oldGlobalTextSize;
     }
 
     private void EnsureRevealIslandSetup()
