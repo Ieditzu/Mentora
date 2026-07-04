@@ -72,6 +72,11 @@ public class AudioManager : MonoBehaviour
         {
             foreach (var btn in FindObjectsOfType<Button>(true))
             {
+                if (!ShouldRegisterDefaultClick(btn))
+                {
+                    continue;
+                }
+
                 if (registeredButtons.Add(btn))
                 {
                     btn.onClick.AddListener(() => Play(MenSfx.ButtonClick));
@@ -79,6 +84,11 @@ public class AudioManager : MonoBehaviour
             }
             yield return wait;
         }
+    }
+
+    private static bool ShouldRegisterDefaultClick(Button button)
+    {
+        return button != null && button.GetComponent<MobileJumpButton>() == null;
     }
 
     public static void Play(MenSfx sfx)
