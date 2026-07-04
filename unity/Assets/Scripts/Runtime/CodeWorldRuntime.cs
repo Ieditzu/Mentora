@@ -67,6 +67,10 @@ public class CodeWorldRuntime : MonoBehaviour
     private string pendingAiResponse = string.Empty;
     private bool aiNetworkSubscribed;
     private bool editorHintDismissed;
+    private Coroutine localExecutionRoutine;
+    private bool localExecutionRunning;
+    private bool localExecutionStopRequested;
+    private Button stopButton;
     private const int MaxAiChatLines = 16;
     private const int MaxLoopIterations = 256;
 
@@ -168,8 +172,14 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private void OnDisable()
     {
+        StopLocalScriptExecution(false);
         SubscribePackets(false);
         UnregisterAiNetworkHandlers();
+    }
+
+    private void OnDestroy()
+    {
+        StopLocalScriptExecution(false);
     }
 
     private void Update()
@@ -187,6 +197,12 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
+        if (keyboard.escapeKey.wasPressedThisFrame && localExecutionRunning)
+        {
+            StopLocalScriptExecution(true);
+            return;
+        }
+
         if (keyboard.backquoteKey.wasPressedThisFrame)
         {
             UpdateEditorVisibility(!editorVisible);
@@ -201,6 +217,12 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (keyboard.escapeKey.wasPressedThisFrame)
         {
+            if (localExecutionRunning)
+            {
+                StopLocalScriptExecution(true);
+                return;
+            }
+
             UpdateEditorVisibility(false);
             return;
         }
@@ -537,71 +559,284 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
-        if (!TryCompileScriptCommands(script, out List<string> lines, out string compileFeedback))
+        StartLocalScriptExecution(script);
+    }
+
+    private void StartLocalScriptExecution(string script)
+    {
+        StopLocalScriptExecution(false);
+        localExecutionStopRequested = false;
+        localExecutionRoutine = StartCoroutine(RunLocalScriptRoutine(script));
+    }
+
+    private void StopLocalScriptExecution(bool updateStatus)
+    {
+        localExecutionStopRequested = true;
+
+        if (localExecutionRoutine != null)
         {
-            SetStatus(compileFeedback);
-            return;
+            StopCoroutine(localExecutionRoutine);
+            localExecutionRoutine = null;
         }
 
-        int successCount = 0;
-
-        for (int i = 0; i < lines.Count; i++)
+        if (localExecutionRunning && updateStatus)
         {
-            string line = NormalizeCommand(lines[i]);
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
+            SetStatus("Script stopped.");
+        }
 
-            bool hostAppliesDirectly = sessionManager == null || !sessionManager.IsConnectedToSession || sessionManager.IsHosting;
-            if (hostAppliesDirectly)
-            {
-                if (TryRunCommand(line, true, out string feedback, out bool mutatedWorld))
-                {
-                    successCount++;
-                    if (mutatedWorld)
-                    {
-                        commandHistory.Add(line);
-                        BroadcastCommandFromHost(line);
-                    }
+        localExecutionRunning = false;
+    }
 
-                    SetStatus(feedback);
-                }
-                else
-                {
-                    SetStatus(feedback);
-                    break;
-                }
-            }
-            else
-            {
-                if (TryRunCommand(line, false, out string feedback, out bool mutatedWorld))
-                {
-                    if (mutatedWorld)
-                    {
-                        successCount++;
-                        sessionManager.SendQuizPacketToHost(new CodeWorldCommandPacket(line, sessionManager.LocalClientId));
-                        SetStatus("Sent to host: " + line);
-                    }
-                    else
-                    {
-                        SetStatus(feedback);
-                    }
-                }
-                else
-                {
-                    SetStatus(feedback);
-                    break;
-                }
-            }
+    private IEnumerator RunLocalScriptRoutine(string script)
+    {
+        localExecutionRunning = true;
+        SetStatus("Running code...");
+
+        string feedback = string.Empty;
+        yield return ExecuteStatementListCoroutine(
+            TokenizeScript(script),
+            new ScriptCursor(),
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase),
+            result => feedback = result);
+
+        if (!string.IsNullOrWhiteSpace(feedback))
+        {
+            SetStatus(feedback);
+        }
+        else if (!localExecutionStopRequested)
+        {
+            SetStatus("Code finished.");
         }
 
         RefreshHistoryText();
-        if (successCount > 0 && editorInput != null)
+        if (editorInput != null)
         {
             lastEditorTrackedText = editorInput.text;
             editorInput.ActivateInputField();
         }
+
+        localExecutionRunning = false;
+        localExecutionRoutine = null;
+        localExecutionStopRequested = false;
+        yield break;
+    }
+
+    private IEnumerator ExecuteStatementListCoroutine(List<string> statements, ScriptCursor cursor, Dictionary<string, float> variables, Action<string> onError)
+    {
+        while (!localExecutionStopRequested && cursor.Index < statements.Count)
+        {
+            string statement = statements[cursor.Index];
+            if (string.IsNullOrWhiteSpace(statement))
+            {
+                cursor.Index++;
+                continue;
+            }
+
+            if (statement == "}")
+            {
+                cursor.Index++;
+                yield break;
+            }
+
+            if (statement == "{")
+            {
+                cursor.Index++;
+                continue;
+            }
+
+            if (IsIgnorableScriptStatement(statement))
+            {
+                cursor.Index++;
+                continue;
+            }
+
+            if (TryParseLoopHeader(statement, "for", out string loopHeader))
+            {
+                cursor.Index++;
+                if (!TryExtractLoopBody(statements, ref cursor.Index, out List<string> bodyStatements, out string feedback))
+                {
+                    onError?.Invoke(feedback);
+                    yield break;
+                }
+
+                yield return ExecuteForLoopCoroutine(loopHeader, bodyStatements, variables, onError);
+                if (localExecutionStopRequested)
+                {
+                    yield break;
+                }
+
+                continue;
+            }
+
+            if (TryParseLoopHeader(statement, "while", out loopHeader))
+            {
+                cursor.Index++;
+                if (!TryExtractLoopBody(statements, ref cursor.Index, out List<string> bodyStatements, out string feedback))
+                {
+                    onError?.Invoke(feedback);
+                    yield break;
+                }
+
+                yield return ExecuteWhileLoopCoroutine(loopHeader, bodyStatements, variables, onError);
+                if (localExecutionStopRequested)
+                {
+                    yield break;
+                }
+
+                continue;
+            }
+
+            if (!TryExecuteVariableStatement(statement, variables, out bool handledVariable, out string variableFeedback))
+            {
+                onError?.Invoke(variableFeedback);
+                yield break;
+            }
+
+            if (handledVariable)
+            {
+                cursor.Index++;
+                yield return null;
+                continue;
+            }
+
+            if (TryCompileCommandStatement(statement, variables, out string compiledCommand, out string commandFeedback))
+            {
+                cursor.Index++;
+                if (!string.IsNullOrWhiteSpace(compiledCommand))
+                {
+                    yield return ExecuteCommandCoroutine(compiledCommand, onError);
+                }
+
+                continue;
+            }
+
+            onError?.Invoke(commandFeedback);
+            yield break;
+        }
+    }
+
+    private IEnumerator ExecuteForLoopCoroutine(string header, List<string> bodyStatements, Dictionary<string, float> variables, Action<string> onError)
+    {
+        string[] sections = SplitTopLevelSemicolons(header);
+        if (sections.Length != 3)
+        {
+            onError?.Invoke("For syntax: for (int i = 0; i < 5; i++)");
+            yield break;
+        }
+
+        if (!TryExecuteVariableStatement(sections[0], variables, out _, out string feedback))
+        {
+            onError?.Invoke(feedback);
+            yield break;
+        }
+
+        yield return null;
+
+        while (!localExecutionStopRequested)
+        {
+            if (!EvaluateConditionExpression(sections[1], variables, out bool condition, out feedback))
+            {
+                onError?.Invoke(feedback);
+                yield break;
+            }
+
+            if (!condition)
+            {
+                yield break;
+            }
+
+            yield return ExecuteStatementListCoroutine(bodyStatements, new ScriptCursor(), variables, onError);
+            if (localExecutionStopRequested)
+            {
+                yield break;
+            }
+
+            if (!TryExecuteVariableStatement(sections[2], variables, out _, out feedback))
+            {
+                onError?.Invoke(feedback);
+                yield break;
+            }
+
+            yield return null;
+        }
+    }
+
+    private IEnumerator ExecuteWhileLoopCoroutine(string header, List<string> bodyStatements, Dictionary<string, float> variables, Action<string> onError)
+    {
+        while (!localExecutionStopRequested)
+        {
+            if (!EvaluateConditionExpression(header, variables, out bool condition, out string feedback))
+            {
+                onError?.Invoke(feedback);
+                yield break;
+            }
+
+            if (!condition)
+            {
+                yield break;
+            }
+
+            yield return ExecuteStatementListCoroutine(bodyStatements, new ScriptCursor(), variables, onError);
+            if (localExecutionStopRequested)
+            {
+                yield break;
+            }
+
+            yield return null;
+        }
+    }
+
+    private IEnumerator ExecuteCommandCoroutine(string compiledCommand, Action<string> onError)
+    {
+        string line = NormalizeCommand(compiledCommand);
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            yield return null;
+            yield break;
+        }
+
+        bool hostAppliesDirectly = sessionManager == null || !sessionManager.IsConnectedToSession || sessionManager.IsHosting;
+        if (hostAppliesDirectly)
+        {
+            if (TryRunCommand(line, true, out string feedback, out bool mutatedWorld))
+            {
+                if (mutatedWorld)
+                {
+                    commandHistory.Add(line);
+                    BroadcastCommandFromHost(line);
+                }
+
+                SetStatus(feedback);
+                RefreshHistoryText();
+            }
+            else
+            {
+                onError?.Invoke(feedback);
+                yield break;
+            }
+        }
+        else
+        {
+            if (TryRunCommand(line, false, out string feedback, out bool mutatedWorld))
+            {
+                if (mutatedWorld)
+                {
+                    sessionManager.SendQuizPacketToHost(new CodeWorldCommandPacket(line, sessionManager.LocalClientId));
+                    SetStatus("Sent to host: " + line);
+                }
+                else
+                {
+                    SetStatus(feedback);
+                }
+            }
+            else
+            {
+                onError?.Invoke(feedback);
+                yield break;
+            }
+        }
+
+        yield return null;
     }
 
     private void BroadcastCommandFromHost(string line)
@@ -2235,7 +2470,10 @@ public class CodeWorldRuntime : MonoBehaviour
         aiOpenButton = CreateButton("AiOpenButton", editorPanel.transform, "AI", new Vector2(252f, -245f), new Vector2(88f, 38f), new Color(0.16f, 0.52f, 0.82f, 1f), 13);
         aiOpenButton.onClick.AddListener(() => UpdateAiVisibility(true));
 
-        Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
+        stopButton = CreateButton("StopButton", editorPanel.transform, "STOP", new Vector2(160f, -245f), new Vector2(88f, 38f), new Color(0.8f, 0.28f, 0.23f, 1f), 13);
+        stopButton.onClick.AddListener(() => StopLocalScriptExecution(true));
+
+        Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press Esc or STOP to stop running code. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
         helpText.raycastTarget = false;
 
         GameObject codeViewport = CreateUiObject("CodeViewport", editorPanel.transform, new Vector2(590f, 300f), new Vector2(0f, 10f));
@@ -2570,6 +2808,11 @@ public class CodeWorldRuntime : MonoBehaviour
         Text text = CreateText(name + "Label", obj.transform, label, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 1f), size);
         text.raycastTarget = false;
         return button;
+    }
+
+    private sealed class ScriptCursor
+    {
+        public int Index;
     }
 
     private static void AttachScrollWheelForwarder(GameObject target, ScrollRect scrollRect)
