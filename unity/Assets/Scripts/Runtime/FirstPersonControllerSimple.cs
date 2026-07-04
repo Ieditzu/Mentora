@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.XR;
@@ -94,6 +95,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private float speedBoostUntilTime = -1f;
     private Vector2 lastTouchPos;
     private bool touchLookActive;
+    private int touchLookPointerId = int.MinValue;
     private bool xrHeadOriginCaptured;
     private Vector3 xrHeadOriginLocalPosition;
     private Transform leftVrControllerVisual;
@@ -458,32 +460,40 @@ public class FirstPersonControllerSimple : MonoBehaviour
         if (touchscreen != null)
         {
             int skipId = MobileTouchInput.JoystickPointerId;
-            TouchControl touch = null;
-            foreach (TouchControl t in touchscreen.touches)
+
+            if (touchLookActive)
             {
-                if (t.press.isPressed && t.touchId.ReadValue() != skipId)
+                foreach (TouchControl t in touchscreen.touches)
                 {
-                    touch = t;
-                    break;
+                    if (t.press.isPressed && t.touchId.ReadValue() == touchLookPointerId)
+                    {
+                        Vector2 pos = t.position.ReadValue();
+                        Vector2 touchDelta = pos - lastTouchPos;
+                        lastTouchPos = pos;
+                        return touchDelta * (mouseSensitivity * 0.002f);
+                    }
                 }
+
+                touchLookActive = false;
+                touchLookPointerId = int.MinValue;
             }
 
-            if (touch != null && touch.press.isPressed)
+            foreach (TouchControl t in touchscreen.touches)
             {
-                Vector2 pos = touch.position.ReadValue();
-                if (!touchLookActive)
+                if (!IsTouchLookCandidate(t, skipId))
                 {
-                    touchLookActive = true;
-                    lastTouchPos = pos;
-                    return Vector2.zero;
+                    continue;
                 }
 
-                Vector2 touchDelta = pos - lastTouchPos;
+                Vector2 pos = t.position.ReadValue();
+                touchLookActive = true;
+                touchLookPointerId = t.touchId.ReadValue();
                 lastTouchPos = pos;
-                return touchDelta * (mouseSensitivity * 0.002f);
+                return Vector2.zero;
             }
 
             touchLookActive = false;
+            touchLookPointerId = int.MinValue;
         }
 
         if (Mouse.current == null)
@@ -496,6 +506,34 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         Vector2 delta = Mouse.current.delta.ReadValue();
         return delta * (mouseSensitivity * 0.02f);
+    }
+
+    private static bool IsTouchLookCandidate(TouchControl touch, int joystickPointerId)
+    {
+        if (touch == null || !touch.press.isPressed)
+        {
+            return false;
+        }
+
+        int touchId = touch.touchId.ReadValue();
+        if (touchId == joystickPointerId)
+        {
+            return false;
+        }
+
+        Vector2 position = touch.position.ReadValue();
+        if (position.x < Screen.width * 0.5f)
+        {
+            return false;
+        }
+
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem != null && eventSystem.IsPointerOverGameObject(touchId))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static float GetAxisRawCompat(string axisName)
