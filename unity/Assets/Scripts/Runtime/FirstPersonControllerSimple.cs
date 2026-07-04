@@ -377,14 +377,28 @@ public class FirstPersonControllerSimple : MonoBehaviour
             v = vrMove.y;
         }
 
-        Vector3 input = (transform.right * h + transform.forward * v).normalized;
+        bool usingTouchMove = touchMove.sqrMagnitude > 0.0001f;
+        bool usingVrMove = false;
+        Vector3 input = transform.right * h + transform.forward * v;
         if (IsVrActive() && camTransform != null)
         {
             Vector3 camF = camTransform.forward;
             camF.y = 0f;
             camF = camF.sqrMagnitude > 0.0001f ? camF.normalized : transform.forward;
             Vector3 camR = new Vector3(camF.z, 0f, -camF.x).normalized;
-            input = (camR * h + camF * v).normalized;
+            input = camR * h + camF * v;
+            usingVrMove = !usingTouchMove && Mathf.Abs(h) > 0.0001f || Mathf.Abs(v) > 0.0001f;
+        }
+
+        float inputMagnitude = Mathf.Clamp01(new Vector2(h, v).magnitude);
+        if (!usingTouchMove && !usingVrMove && input.sqrMagnitude > 1f)
+        {
+            input.Normalize();
+            inputMagnitude = 1f;
+        }
+        else if (input.sqrMagnitude > 0.0001f)
+        {
+            input = input.normalized * inputMagnitude;
         }
 
         float speed = moveSpeed;
