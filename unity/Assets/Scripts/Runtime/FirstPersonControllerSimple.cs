@@ -28,6 +28,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
     [Header("Look")]
     [SerializeField] private float mouseSensitivity = 12f;
+    [SerializeField] private float touchLookSensitivityMultiplier = 0.02f;
     [SerializeField] private float minPitch = -80f;
     [SerializeField] private float maxPitch = 80f;
     [Tooltip("Optional anchor (e.g., head bone) to position the camera. If null, a local offset is used.")]
@@ -470,7 +471,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
                         Vector2 pos = t.position.ReadValue();
                         Vector2 touchDelta = pos - lastTouchPos;
                         lastTouchPos = pos;
-                        return touchDelta * (mouseSensitivity * 0.002f);
+                        return touchDelta * (mouseSensitivity * touchLookSensitivityMultiplier);
                     }
                 }
 

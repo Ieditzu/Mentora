@@ -1791,9 +1791,9 @@ public class PauseMenuManager : MonoBehaviour
         innerCard.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
         innerCard.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
 
-        CreateText("SensitivityLabel", innerCard.transform, "Mouse Sensitivity", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-72f, 20f), new Vector2(180f, 24f));
+        CreateText("SensitivityLabel", innerCard.transform, "Sensitivity", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-72f, 20f), new Vector2(180f, 24f));
         sensitivityValueText = CreateText("SensitivityValue", innerCard.transform, "1.80", 14, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.55f, 0.92f, 1f), new Vector2(132f, 20f), new Vector2(56f, 22f));
-        CreateText("SensitivityHint", innerCard.transform, "Lower = steadier aim, higher = faster camera turn.", 10, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.68f, 0.78f, 0.92f), new Vector2(0f, -24f), new Vector2(352f, 18f));
+        CreateText("SensitivityHint", innerCard.transform, "Lower = steadier aim, higher = faster turn.", 10, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.68f, 0.78f, 0.92f), new Vector2(0f, -24f), new Vector2(352f, 18f));
 
         sensitivityInput = null;
         sensitivitySlider = CreateSlider(innerCard.transform, "SensitivitySlider", new Vector2(0f, -1f), new Vector2(280f, 22f), 0.2f, 6f, PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f));
