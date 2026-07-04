@@ -662,7 +662,7 @@ public class PauseMenuManager : MonoBehaviour
 
         settingsPanel = CreateUiObject("SettingsPanel", canvas.transform);
         RectTransform settingsRect = settingsPanel.GetComponent<RectTransform>();
-        settingsRect.sizeDelta = new Vector2(760f, 600f);
+        settingsRect.sizeDelta = new Vector2(660f, 500f);
         settingsRect.anchoredPosition = Vector2.zero;
         settingsPanel.AddComponent<Image>().color = new Color(0.05f, 0.06f, 0.12f, 0.97f);
         var settingsOutline = settingsPanel.AddComponent<Outline>();
@@ -671,18 +671,18 @@ public class PauseMenuManager : MonoBehaviour
 
         GameObject settingsTopBar = CreateUiObject("TopBar", settingsPanel.transform);
         RectTransform settingsTopRect = settingsTopBar.GetComponent<RectTransform>();
-        settingsTopRect.sizeDelta = new Vector2(760f, 78f);
-        settingsTopRect.anchoredPosition = new Vector2(0f, 252f);
+        settingsTopRect.sizeDelta = new Vector2(660f, 60f);
+        settingsTopRect.anchoredPosition = new Vector2(0f, 205f);
         settingsTopBar.AddComponent<Image>().color = new Color(0.08f, 0.12f, 0.28f, 1f);
         settingsTopBar.AddComponent<Outline>().effectColor = new Color(0.3f, 0.65f, 1f, 0.8f);
-        CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 36, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(480f, 52f));
+        CreateText("SettingsTitle", settingsTopBar.transform, "SETTINGS", 26, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.95f, 1f, 1f), Vector2.zero, new Vector2(380f, 38f));
 
         CreateSensitivitySection(settingsPanel.transform);
         CreateGlobalVoiceSettingsSection(settingsPanel.transform);
 
-        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -282f), new Color(0.4f, 0.4f, 0.4f));
-        settingsBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(180f, 40f);
-        settingsBackBtn.GetComponentInChildren<Text>().fontSize = 15;
+        Button settingsBackBtn = CreateButton(settingsPanel.transform, "SettingsBackBtn", "Back", new Vector2(0f, -223f), new Color(0.4f, 0.4f, 0.4f));
+        settingsBackBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(148f, 32f);
+        settingsBackBtn.GetComponentInChildren<Text>().fontSize = 13;
         settingsBackBtn.onClick.AddListener(() => ShowPanel(mainPanel));
         settingsPanel.SetActive(false);
 
@@ -1779,16 +1779,24 @@ public class PauseMenuManager : MonoBehaviour
     {
         GameObject card = CreateUiObject("SensitivityCard", parent);
         RectTransform cardRect = card.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(520f, 145f);
-        cardRect.anchoredPosition = new Vector2(0f, 175f);
+        cardRect.sizeDelta = new Vector2(450f, 110f);
+        cardRect.anchoredPosition = new Vector2(0f, 92f);
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
+        card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
 
-        CreateText("SensitivityLabel", card.transform, "Mouse Sensitivity", 20, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-116f, 42f), new Vector2(230f, 30f));
-        sensitivityValueText = CreateText("SensitivityValue", card.transform, "1.80", 18, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.55f, 0.92f, 1f), new Vector2(178f, 42f), new Vector2(90f, 28f));
-        CreateText("SensitivityHint", card.transform, "Lower = steadier aim, higher = faster camera turn.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.68f, 0.78f, 0.92f), new Vector2(0f, -47f), new Vector2(420f, 22f));
+        GameObject innerCard = CreateUiObject("SensitivityInnerCard", card.transform);
+        RectTransform innerRect = innerCard.GetComponent<RectTransform>();
+        innerRect.sizeDelta = new Vector2(410f, 80f);
+        innerRect.anchoredPosition = new Vector2(0f, -1f);
+        innerCard.AddComponent<Image>().color = new Color(0.11f, 0.16f, 0.23f, 0.9f);
+        innerCard.AddComponent<Outline>().effectColor = new Color(0.0f, 0.65f, 1f, 0.3f);
+
+        CreateText("SensitivityLabel", innerCard.transform, "Mouse Sensitivity", 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(-72f, 20f), new Vector2(180f, 24f));
+        sensitivityValueText = CreateText("SensitivityValue", innerCard.transform, "1.80", 14, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.55f, 0.92f, 1f), new Vector2(132f, 20f), new Vector2(56f, 22f));
+        CreateText("SensitivityHint", innerCard.transform, "Lower = steadier aim, higher = faster camera turn.", 10, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.68f, 0.78f, 0.92f), new Vector2(0f, -24f), new Vector2(352f, 18f));
 
         sensitivityInput = null;
-        sensitivitySlider = CreateSlider(card.transform, "SensitivitySlider", new Vector2(0f, -5f), new Vector2(390f, 30f), 0.2f, 6f, PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f));
+        sensitivitySlider = CreateSlider(innerCard.transform, "SensitivitySlider", new Vector2(0f, -1f), new Vector2(280f, 22f), 0.2f, 6f, PlayerPrefs.GetFloat(MouseSensitivityPrefKey, 1.8f));
         sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
     }
 
@@ -1796,46 +1804,46 @@ public class PauseMenuManager : MonoBehaviour
     {
         GameObject card = CreateUiObject("VoiceSettingsCard", parent);
         RectTransform cardRect = card.GetComponent<RectTransform>();
-        cardRect.sizeDelta = new Vector2(520f, 390f);
-        cardRect.anchoredPosition = new Vector2(0f, -68f);
+        cardRect.sizeDelta = new Vector2(450f, 286f);
+        cardRect.anchoredPosition = new Vector2(0f, -45f);
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
         card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
 
-        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 20, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 166f), new Vector2(240f, 30f));
+        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 16, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 120f), new Vector2(200f, 24f));
 
-        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 124f), new Color(0.26f, 0.50f, 0.58f, 1f));
-        playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
-        playerModelButton.GetComponentInChildren<Text>().fontSize = 14;
+        playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 88f), new Color(0.26f, 0.50f, 0.58f, 1f));
+        playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 28f);
+        playerModelButton.GetComponentInChildren<Text>().fontSize = 12;
         playerModelButton.onClick.AddListener(OnPlayerModelClicked);
 
-        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 82f), new Color(0.18f, 0.55f, 0.80f, 1f));
-        voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
-        voiceChatButton.GetComponentInChildren<Text>().fontSize = 15;
+        voiceChatButton = CreateButton(card.transform, "VoiceChatBtn", "Mode: Always On", new Vector2(0f, 54f), new Color(0.18f, 0.55f, 0.80f, 1f));
+        voiceChatButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 30f);
+        voiceChatButton.GetComponentInChildren<Text>().fontSize = 12;
         voiceChatButton.onClick.AddListener(OnVoiceChatClicked);
 
-        rudolfVoiceModeButton = CreateButton(card.transform, "RudolfVoiceModeBtn", "Rudolf: Always On", new Vector2(0f, 38f), new Color(0.14f, 0.58f, 0.52f, 1f));
-        rudolfVoiceModeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
-        rudolfVoiceModeButton.GetComponentInChildren<Text>().fontSize = 14;
+        rudolfVoiceModeButton = CreateButton(card.transform, "RudolfVoiceModeBtn", "Rudolf: Always On", new Vector2(0f, 20f), new Color(0.14f, 0.58f, 0.52f, 1f));
+        rudolfVoiceModeButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 30f);
+        rudolfVoiceModeButton.GetComponentInChildren<Text>().fontSize = 12;
         rudolfVoiceModeButton.onClick.AddListener(OnRudolfVoiceModeClicked);
 
-        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -6f), new Color(0.26f, 0.42f, 0.68f, 1f));
-        microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 38f);
-        microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 13;
+        microphoneDeviceButton = CreateButton(card.transform, "MicrophoneDeviceBtn", "Mic: Default", new Vector2(0f, -14f), new Color(0.26f, 0.42f, 0.68f, 1f));
+        microphoneDeviceButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 30f);
+        microphoneDeviceButton.GetComponentInChildren<Text>().fontSize = 12;
         microphoneDeviceButton.onClick.AddListener(OnMicrophoneDeviceClicked);
 
-        guideDebugLinesButton = CreateButton(card.transform, "GuideDebugLinesBtn", "Rudolf Path Lines: Off", new Vector2(0f, -50f), new Color(0.35f, 0.34f, 0.50f, 1f));
-        guideDebugLinesButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 36f);
-        guideDebugLinesButton.GetComponentInChildren<Text>().fontSize = 13;
+        guideDebugLinesButton = CreateButton(card.transform, "GuideDebugLinesBtn", "Rudolf Path Lines: Off", new Vector2(0f, -48f), new Color(0.35f, 0.34f, 0.50f, 1f));
+        guideDebugLinesButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 28f);
+        guideDebugLinesButton.GetComponentInChildren<Text>().fontSize = 11;
         guideDebugLinesButton.onClick.AddListener(OnGuideDebugLinesClicked);
 
-        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -92f), new Vector2(260f, 22f));
-        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -122f), new Vector2(340f, 34f), false);
+        CreateText("RudolfApiKeyLabel", card.transform, "Optional OpenAI TTS Key", 11, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.8f, 0.93f, 1f), new Vector2(0f, -82f), new Vector2(220f, 18f));
+        rudolfApiKeyInput = CreateInputField(card.transform, "RudolfOpenAiKeyInput", "sk-...", new Vector2(0f, -104f), new Vector2(280f, 28f), false);
         rudolfApiKeyInput.contentType = InputField.ContentType.Password;
         rudolfApiKeyInput.asteriskChar = '•';
         rudolfApiKeyInput.SetTextWithoutNotify(PlayerPrefs.GetString(RobotVoiceBridge.OpenAiApiKeyPrefKey, string.Empty));
         rudolfApiKeyInput.onEndEdit.AddListener(OnRudolfApiKeyChanged);
 
-        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 12, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -166f), new Vector2(455f, 34f));
+        voiceHintText = CreateText("VoiceHintText", card.transform, "Used by multiplayer voice and Rudolf.", 10, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.65f, 0.78f, 0.95f), new Vector2(0f, -128f), new Vector2(340f, 22f));
         RefreshRudolfVoiceModeButton();
         RefreshGuideDebugLinesButton();
     }
