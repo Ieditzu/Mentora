@@ -18,6 +18,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float sprintMultiplier = 3.2f;
+    [SerializeField] private float mobileMoveSpeedMultiplier = 3.2f;
     [SerializeField] private float temporaryBoostMultiplier = 4f;
     [SerializeField] private float temporaryBoostDuration = 5f;
     [SerializeField] private float jumpVelocity = 7f;
@@ -387,6 +388,12 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         float speed = moveSpeed;
+        bool hasTouchMoveInput = touchMove.sqrMagnitude > 0.0001f;
+        if (hasTouchMoveInput)
+        {
+            speed *= mobileMoveSpeedMultiplier;
+        }
+
         bool sprintHeld = GetKeyCompat(sprintKey) || IsVrSprintHeld();
         bool movingForward = v > 0.01f;
         if (sprintHeld || (doubleTapSprintActive && movingForward))
