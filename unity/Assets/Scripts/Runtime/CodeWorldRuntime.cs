@@ -48,6 +48,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private ScrollRect aiHistoryScrollRect;
     private RectTransform aiHistoryContentRect;
     private RectTransform aiHistoryViewportRect;
+    private Button runButton;
     private Button aiOpenButton;
     private Button aiCloseButton;
     private readonly Stack<string> editorUndoStack = new Stack<string>();
@@ -2467,11 +2468,14 @@ public class CodeWorldRuntime : MonoBehaviour
         DraggableWindowHandle dragHandle = titleBar.AddComponent<DraggableWindowHandle>();
         dragHandle.Configure(editorPanelRect);
 
-        aiOpenButton = CreateButton("AiOpenButton", editorPanel.transform, "AI", new Vector2(252f, -245f), new Vector2(88f, 38f), new Color(0.16f, 0.52f, 0.82f, 1f), 13);
-        aiOpenButton.onClick.AddListener(() => UpdateAiVisibility(true));
-
-        stopButton = CreateButton("StopButton", editorPanel.transform, "STOP", new Vector2(160f, -245f), new Vector2(88f, 38f), new Color(0.8f, 0.28f, 0.23f, 1f), 13);
+        stopButton = CreateButton("StopButton", editorPanel.transform, "STOP", new Vector2(114f, -245f), new Vector2(70f, 38f), new Color(0.8f, 0.28f, 0.23f, 1f), 12);
         stopButton.onClick.AddListener(() => StopLocalScriptExecution(true));
+
+        runButton = CreateButton("RunButton", editorPanel.transform, "RUN", new Vector2(196f, -245f), new Vector2(70f, 38f), new Color(0.18f, 0.68f, 0.32f, 1f), 12);
+        runButton.onClick.AddListener(() => ExecuteLocalScript(editorInput != null ? editorInput.text : string.Empty));
+
+        aiOpenButton = CreateButton("AiOpenButton", editorPanel.transform, "AI", new Vector2(278f, -245f), new Vector2(70f, 38f), new Color(0.16f, 0.52f, 0.82f, 1f), 12);
+        aiOpenButton.onClick.AddListener(() => UpdateAiVisibility(true));
 
         Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press Esc or STOP to stop running code. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
         helpText.raycastTarget = false;
