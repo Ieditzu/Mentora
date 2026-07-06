@@ -9,6 +9,7 @@ public class MobileTouchHud : MonoBehaviour
     private const float CodeWorldButtonSpacing = 18f;
 
     private bool lastPausedState = false;
+    private bool lastCodeWindowOpen = false;
     private Button pauseButton;
     private Button codeWorldButton;
     private GameObject[] gameplayControls = System.Array.Empty<GameObject>();
@@ -27,6 +28,7 @@ public class MobileTouchHud : MonoBehaviour
         BindPauseButton();
         EnsureCodeWorldButton();
         CacheGameplayControls();
+        lastCodeWindowOpen = CodeWorldRuntime.ConsumesPauseInput;
         ApplyPausedState(PauseMenuManager.IsGamePaused);
     }
 
@@ -38,8 +40,11 @@ public class MobileTouchHud : MonoBehaviour
         }
 
         bool paused = PauseMenuManager.IsGamePaused;
-        if (paused != lastPausedState)
+        bool codeWindowOpen = CodeWorldRuntime.ConsumesPauseInput;
+        bool shouldRefresh = paused != lastPausedState || codeWindowOpen != lastCodeWindowOpen;
+        if (shouldRefresh)
         {
+            lastCodeWindowOpen = codeWindowOpen;
             ApplyPausedState(paused);
         }
 
@@ -139,21 +144,23 @@ public class MobileTouchHud : MonoBehaviour
     private void ApplyPausedState(bool paused)
     {
         lastPausedState = paused;
+        lastCodeWindowOpen = CodeWorldRuntime.ConsumesPauseInput;
+        bool hideForOverlay = paused || lastCodeWindowOpen;
 
         if (pauseButton != null)
         {
-            pauseButton.gameObject.SetActive(!paused);
+            pauseButton.gameObject.SetActive(!hideForOverlay);
         }
 
         for (int i = 0; i < gameplayControls.Length; i++)
         {
             if (gameplayControls[i] != null)
             {
-                gameplayControls[i].SetActive(!paused);
+                gameplayControls[i].SetActive(!hideForOverlay);
             }
         }
 
-        if (paused)
+        if (hideForOverlay)
         {
             MobileTouchInput.ResetMove();
         }
@@ -190,7 +197,7 @@ public class MobileTouchHud : MonoBehaviour
             return;
         }
 
-        bool shouldShow = !PauseMenuManager.IsGamePaused && CodeWorldRuntime.ShouldShowMobileToggle;
+        bool shouldShow = !PauseMenuManager.IsGamePaused && !CodeWorldRuntime.ConsumesPauseInput && CodeWorldRuntime.ShouldShowMobileToggle;
         codeWorldButton.gameObject.SetActive(shouldShow);
     }
 

@@ -9,6 +9,7 @@ using Mentora.Network;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.UI;
 
 public class CodeWorldRuntime : MonoBehaviour
@@ -233,6 +234,11 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         if (!editorVisible)
+        {
+            return;
+        }
+
+        if ((Input.touchSupported || Application.isMobilePlatform) && TryHandleMobileOutsideTapClose())
         {
             return;
         }
@@ -2618,6 +2624,54 @@ public class CodeWorldRuntime : MonoBehaviour
 
         UpdateAiVisibility(aiVisible);
         UpdateRemoteCursorVisibility();
+    }
+
+    private bool TryHandleMobileOutsideTapClose()
+    {
+        if (editorPanelRect == null)
+        {
+            return false;
+        }
+
+        Vector2 screenPoint;
+        if (!TryGetTapBeganThisFrame(out screenPoint))
+        {
+            return false;
+        }
+
+        bool insideEditor = RectTransformUtility.RectangleContainsScreenPoint(editorPanelRect, screenPoint, null);
+        bool insideAi = aiVisible && aiPanelRect != null && RectTransformUtility.RectangleContainsScreenPoint(aiPanelRect, screenPoint, null);
+        if (insideEditor || insideAi)
+        {
+            return false;
+        }
+
+        UpdateEditorVisibility(false);
+        return true;
+    }
+
+    private static bool TryGetTapBeganThisFrame(out Vector2 screenPoint)
+    {
+        Touchscreen touchscreen = Touchscreen.current;
+        if (touchscreen != null)
+        {
+            TouchControl primaryTouch = touchscreen.primaryTouch;
+            if (primaryTouch != null && primaryTouch.press.wasPressedThisFrame)
+            {
+                screenPoint = primaryTouch.position.ReadValue();
+                return true;
+            }
+        }
+
+        Mouse mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+        {
+            screenPoint = mouse.position.ReadValue();
+            return true;
+        }
+
+        screenPoint = Vector2.zero;
+        return false;
     }
 
     private void ShowEditorHintIfNeeded()
