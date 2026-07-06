@@ -10,8 +10,11 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 using UnityEngine.XR;
+using XRCommonUsages = UnityEngine.XR.CommonUsages;
+using XRInputDevice = UnityEngine.XR.InputDevice;
 
 public class CodeWorldRuntime : MonoBehaviour
 {
@@ -36,6 +39,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private Canvas editorCanvas;
     private GameObject editorPanel;
     private RectTransform editorPanelRect;
+    private GraphicRaycaster editorCanvasRaycaster;
     private InputField editorInput;
     private ScrollRect editorScrollRect;
     private RectTransform editorContentRect;
@@ -74,9 +78,34 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool localExecutionRunning;
     private bool localExecutionStopRequested;
     private bool vrCodeTogglePressed;
+    private GameObject vrCursor;
+    private RectTransform vrCursorRect;
+    private Image vrCursorImage;
+    private Outline vrCursorOutline;
+    private PointerEventData vrPointerEventData;
+    private EventSystem vrPointerEventSystem;
+    private readonly List<RaycastResult> vrRaycastResults = new List<RaycastResult>();
+    private GameObject vrHoveredObject;
+    private GameObject vrPressedObject;
+    private bool vrSelectWasPressed;
+    private bool vrCursorHasSmoothedPosition;
+    private Vector2 vrCursorSmoothedAnchoredPosition;
+    private Vector2 vrCursorVelocity;
+    private InputField vrFocusedInputField;
+    private TouchScreenKeyboard vrTouchKeyboard;
+    private bool suppressVrKeyboardSync;
     private Button stopButton;
     private const int MaxAiChatLines = 16;
     private const int MaxLoopIterations = 256;
+    private const float VrEditorCanvasDistance = 1.45f;
+    private const float VrEditorCanvasHeightOffset = -0.04f;
+    private const float VrPointerMaxDistance = 6f;
+    private const float VrPointerDownwardAngle = -30f;
+    private const float VrCursorSmoothTime = 0.06f;
+    private static readonly Vector3 VrEditorCanvasScale = Vector3.one * 0.0011f;
+    private static readonly Vector2 VrCursorHoverSize = new Vector2(34f, 34f);
+    private static readonly Vector2 VrCursorPressedSize = new Vector2(26f, 26f);
+    private static Sprite vrCursorSprite;
 
     private sealed class RemoteCursorVisual
     {
@@ -215,8 +244,16 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (!modeActive)
         {
+            ResetVrPointerState();
             return;
         }
+
+        if (!editorVisible || !IsQuestVrCodeIslandUi())
+        {
+            UpdateEditorCanvasMode(false);
+        }
+        UpdateVrEditorPointer();
+        SyncVrKeyboard();
 
         Keyboard keyboard = Keyboard.current;
 
@@ -2513,7 +2550,7 @@ public class CodeWorldRuntime : MonoBehaviour
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
 
-        canvasObject.AddComponent<GraphicRaycaster>();
+        editorCanvasRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
         DontDestroyOnLoad(canvasObject);
 
         editorPanel = CreateUiObject("EditorPanel", editorCanvas.transform, new Vector2(640f, 560f), Vector2.zero);
@@ -2610,7 +2647,9 @@ public class CodeWorldRuntime : MonoBehaviour
         editorHintText.raycastTarget = false;
         editorHintText.gameObject.SetActive(false);
 
+        SetupVrPointer();
         BuildAiUi();
+        UpdateEditorCanvasMode(true);
     }
 
     private void UpdateEditorVisibility(bool visible)
@@ -2620,6 +2659,8 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             editorPanel.SetActive(editorVisible);
         }
+
+        UpdateEditorCanvasMode(editorVisible);
 
         FirstPersonControllerSimple fps = PlayerCache.GetFps();
         if (fps != null)
@@ -2652,10 +2693,781 @@ public class CodeWorldRuntime : MonoBehaviour
             editorInput.Select();
             RefreshEditorLayout();
             ScrollEditorToTop();
+
+            if (IsQuestVrCodeIslandUi())
+            {
+                FocusVrInputField(editorInput);
+            }
+        }
+        else if (!editorVisible)
+        {
+            ClearVrInputFocus();
         }
 
         UpdateAiVisibility(aiVisible);
         UpdateRemoteCursorVisibility();
+    }
+
+    private void SetupVrPointer()
+    {
+        EnsureEventSystem();
+        editorCanvasRaycaster = editorCanvas != null ? editorCanvas.GetComponent<GraphicRaycaster>() : editorCanvasRaycaster;
+
+        if (editorCanvas == null)
+        {
+            return;
+        }
+
+        if (vrCursor == null)
+        {
+            vrCursor = CreateUiObject("CodeWorldVrCursor", editorCanvas.transform, VrCursorHoverSize, Vector2.zero);
+            vrCursorRect = vrCursor.GetComponent<RectTransform>();
+            vrCursorRect.anchorMin = new Vector2(0.5f, 0.5f);
+            vrCursorRect.anchorMax = new Vector2(0.5f, 0.5f);
+            vrCursorRect.pivot = new Vector2(0.5f, 0.5f);
+            vrCursorRect.sizeDelta = VrCursorHoverSize;
+
+            vrCursorImage = vrCursor.AddComponent<Image>();
+            vrCursorImage.sprite = GetVrCursorSprite();
+            vrCursorImage.color = new Color(1f, 0.96f, 0.35f, 1f);
+            vrCursorImage.raycastTarget = false;
+
+            vrCursorOutline = vrCursor.AddComponent<Outline>();
+            vrCursorOutline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            vrCursorOutline.effectDistance = new Vector2(2f, -2f);
+
+            vrCursor.SetActive(false);
+        }
+        else
+        {
+            vrCursorRect = vrCursor.GetComponent<RectTransform>();
+            vrCursorImage = vrCursor.GetComponent<Image>();
+            vrCursorOutline = vrCursor.GetComponent<Outline>();
+        }
+    }
+
+    private static Sprite GetVrCursorSprite()
+    {
+        if (vrCursorSprite != null)
+        {
+            return vrCursorSprite;
+        }
+
+        Texture2D texture = Texture2D.whiteTexture;
+        const int size = 64;
+        texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.filterMode = FilterMode.Bilinear;
+
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float outerRadius = size * 0.34f;
+        float innerRadius = size * 0.24f;
+        float coreRadius = size * 0.08f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                float ringAlpha = 0f;
+                if (distance <= outerRadius && distance >= innerRadius)
+                {
+                    float outerFade = 1f - Mathf.InverseLerp(outerRadius - 3f, outerRadius, distance);
+                    float innerFade = Mathf.InverseLerp(innerRadius, innerRadius + 3f, distance);
+                    ringAlpha = Mathf.Clamp01(Mathf.Min(outerFade, innerFade));
+                }
+
+                float coreAlpha = distance <= coreRadius
+                    ? 1f - Mathf.InverseLerp(coreRadius - 2f, coreRadius, distance)
+                    : 0f;
+
+                float alpha = Mathf.Clamp01(Mathf.Max(ringAlpha * 0.95f, coreAlpha));
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        texture.Apply();
+        vrCursorSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        return vrCursorSprite;
+    }
+
+    private void UpdateEditorCanvasMode(bool snap)
+    {
+        if (editorCanvas == null)
+        {
+            return;
+        }
+
+        if (IsQuestVrCodeIslandUi())
+        {
+            Camera targetCamera = GetEditorCamera();
+            if (targetCamera == null)
+            {
+                return;
+            }
+
+            if (editorCanvas.renderMode != RenderMode.WorldSpace)
+            {
+                editorCanvas.renderMode = RenderMode.WorldSpace;
+            }
+
+            editorCanvas.worldCamera = targetCamera;
+            RectTransform canvasRect = editorCanvas.GetComponent<RectTransform>();
+            if (canvasRect != null)
+            {
+                canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+                canvasRect.localScale = VrEditorCanvasScale;
+            }
+
+            if (snap)
+            {
+                UpdateVrEditorCanvasPlacement(targetCamera, true);
+            }
+            return;
+        }
+
+        if (editorCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        {
+            editorCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        }
+
+        editorCanvas.worldCamera = null;
+        RectTransform rectTransform = editorCanvas.GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = Vector2.zero;
+            rectTransform.localPosition = Vector3.zero;
+            rectTransform.localRotation = Quaternion.identity;
+            rectTransform.localScale = Vector3.one;
+        }
+    }
+
+    private void UpdateVrEditorCanvasPlacement(Camera targetCamera, bool snap)
+    {
+        if (editorCanvas == null || targetCamera == null || editorCanvas.renderMode != RenderMode.WorldSpace)
+        {
+            return;
+        }
+
+        Transform camTransform = targetCamera.transform;
+        Vector3 forward = camTransform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = camTransform.forward;
+        }
+
+        forward.Normalize();
+        Vector3 desiredPosition = camTransform.position + forward * VrEditorCanvasDistance;
+        desiredPosition.y = camTransform.position.y + VrEditorCanvasHeightOffset;
+        Quaternion desiredRotation = Quaternion.LookRotation(desiredPosition - camTransform.position, Vector3.up);
+
+        Transform canvasTransform = editorCanvas.transform;
+        if (snap)
+        {
+            canvasTransform.position = desiredPosition;
+            canvasTransform.rotation = desiredRotation;
+            return;
+        }
+
+        float moveT = 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime);
+        float rotateT = 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime);
+        canvasTransform.position = Vector3.Lerp(canvasTransform.position, desiredPosition, moveT);
+        canvasTransform.rotation = Quaternion.Slerp(canvasTransform.rotation, desiredRotation, rotateT);
+    }
+
+    private static bool IsQuestVrCodeIslandUi()
+    {
+        return Application.platform == RuntimePlatform.Android && XRSettings.enabled && XRSettings.isDeviceActive;
+    }
+
+    private Camera GetEditorCamera()
+    {
+        FirstPersonControllerSimple fps = PlayerCache.GetFps();
+        if (fps != null)
+        {
+            Camera fpsCamera = fps.GetComponentInChildren<Camera>(true);
+            if (fpsCamera != null)
+            {
+                return fpsCamera;
+            }
+        }
+
+        return Camera.main;
+    }
+
+    private void UpdateVrEditorPointer()
+    {
+        if (!editorVisible || editorCanvas == null || editorCanvas.renderMode != RenderMode.WorldSpace || !IsQuestVrCodeIslandUi())
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        if (!TryGetRightControllerRay(out Vector3 rayOrigin, out Vector3 rayDirection))
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        RectTransform canvasRect = editorCanvas.GetComponent<RectTransform>();
+        if (canvasRect == null)
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        Plane canvasPlane = new Plane(-editorCanvas.transform.forward, editorCanvas.transform.position);
+        if (!canvasPlane.Raycast(new Ray(rayOrigin, rayDirection), out float distanceToPlane) ||
+            distanceToPlane < 0f ||
+            distanceToPlane > VrPointerMaxDistance)
+        {
+            HideVrCursor();
+            ClearVrHover();
+            HandleVrSelectReleaseIfNeeded();
+            return;
+        }
+
+        Vector3 hitPoint = rayOrigin + (rayDirection * distanceToPlane);
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(editorCanvas.worldCamera, hitPoint);
+        if (!IsWorldPointInsideCanvas(canvasRect, hitPoint))
+        {
+            HideVrCursor();
+            ClearVrHover();
+            HandleVrSelectReleaseIfNeeded();
+            return;
+        }
+
+        EnsureVrPointerEventData();
+        if (vrPointerEventData == null || editorCanvasRaycaster == null)
+        {
+            ResetVrPointerState();
+            return;
+        }
+
+        vrPointerEventData.Reset();
+        vrPointerEventData.button = PointerEventData.InputButton.Left;
+        vrPointerEventData.position = screenPoint;
+        vrPointerEventData.pointerCurrentRaycast = default;
+        vrRaycastResults.Clear();
+        editorCanvasRaycaster.Raycast(vrPointerEventData, vrRaycastResults);
+
+        RaycastResult raycastResult = FindFirstInteractiveRaycast(vrRaycastResults);
+        GameObject hitObject = raycastResult.gameObject;
+
+        UpdateVrHover(hitObject);
+        vrPointerEventData.pointerCurrentRaycast = raycastResult;
+
+        bool selectPressed = IsVrSelectPressed();
+        bool selectPressedThisFrame = selectPressed && !vrSelectWasPressed;
+        bool selectReleasedThisFrame = !selectPressed && vrSelectWasPressed;
+        vrSelectWasPressed = selectPressed;
+
+        InputField hitInputField = hitObject != null ? hitObject.GetComponentInParent<InputField>() : null;
+
+        if (selectPressedThisFrame && hitObject != null)
+        {
+            vrPressedObject = ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject;
+            vrPointerEventData.eligibleForClick = true;
+            vrPointerEventData.pointerPress = vrPressedObject;
+            vrPointerEventData.rawPointerPress = hitObject;
+            vrPointerEventData.pressPosition = screenPoint;
+            vrPointerEventData.pointerPressRaycast = raycastResult;
+            vrPointerEventData.delta = Vector2.zero;
+            vrPointerEventData.dragging = false;
+            vrPointerEventData.useDragThreshold = true;
+            vrPointerEventData.clickCount = 1;
+            vrPointerEventData.clickTime = Time.unscaledTime;
+            ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerDownHandler);
+
+            if (hitInputField != null)
+            {
+                FocusVrInputField(hitInputField);
+                SetVrInputCaretFromScreenPoint(hitInputField, screenPoint);
+                hitInputField.OnPointerDown(vrPointerEventData);
+            }
+            else
+            {
+                ClearVrInputFocus();
+            }
+        }
+
+        if (selectReleasedThisFrame)
+        {
+            HandleVrSelectRelease(hitObject, hitInputField);
+        }
+
+        GameObject currentClickHandler = hitObject != null ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(hitObject) ?? hitObject : null;
+        bool isPressingCurrent = selectPressed && currentClickHandler != null && currentClickHandler == vrPressedObject;
+        ShowVrCursor(hitPoint, isPressingCurrent);
+    }
+
+    private void EnsureVrPointerEventData()
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null)
+        {
+            EnsureEventSystem();
+            eventSystem = EventSystem.current;
+        }
+
+        if (eventSystem == null)
+        {
+            return;
+        }
+
+        if (vrPointerEventData == null || vrPointerEventSystem != eventSystem)
+        {
+            vrPointerEventSystem = eventSystem;
+            vrPointerEventData = new PointerEventData(eventSystem)
+            {
+                pointerId = -10
+            };
+        }
+    }
+
+    private void ShowVrCursor(Vector3 position, bool isSelecting)
+    {
+        if (vrCursor == null || vrCursorRect == null || editorCanvas == null)
+        {
+            return;
+        }
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                editorCanvas.GetComponent<RectTransform>(),
+                RectTransformUtility.WorldToScreenPoint(editorCanvas.worldCamera, position),
+                editorCanvas.worldCamera,
+                out Vector2 localPoint))
+        {
+            vrCursor.SetActive(false);
+            return;
+        }
+
+        vrCursor.SetActive(true);
+        vrCursor.transform.SetAsLastSibling();
+        if (!vrCursorHasSmoothedPosition)
+        {
+            vrCursorSmoothedAnchoredPosition = localPoint;
+            vrCursorVelocity = Vector2.zero;
+            vrCursorHasSmoothedPosition = true;
+        }
+        else
+        {
+            vrCursorSmoothedAnchoredPosition = Vector2.SmoothDamp(
+                vrCursorSmoothedAnchoredPosition,
+                localPoint,
+                ref vrCursorVelocity,
+                VrCursorSmoothTime,
+                Mathf.Infinity,
+                Time.unscaledDeltaTime);
+        }
+
+        vrCursorRect.anchoredPosition = vrCursorSmoothedAnchoredPosition;
+        vrCursorRect.sizeDelta = isSelecting ? VrCursorPressedSize : VrCursorHoverSize;
+
+        if (vrCursorImage != null)
+        {
+            vrCursorImage.color = isSelecting
+                ? new Color(1f, 0.48f, 0.16f, 0.98f)
+                : new Color(0.98f, 0.95f, 0.78f, 0.96f);
+        }
+    }
+
+    private void HideVrCursor()
+    {
+        if (vrCursor != null)
+        {
+            vrCursor.SetActive(false);
+        }
+
+        vrCursorHasSmoothedPosition = false;
+        vrCursorVelocity = Vector2.zero;
+    }
+
+    private void UpdateVrHover(GameObject hitObject)
+    {
+        GameObject nextHover = hitObject != null
+            ? ExecuteEvents.GetEventHandler<IPointerEnterHandler>(hitObject) ?? hitObject
+            : null;
+
+        if (vrHoveredObject == nextHover)
+        {
+            if (vrHoveredObject != null && vrPointerEventData != null)
+            {
+                ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerMoveHandler);
+            }
+            return;
+        }
+
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerExitHandler);
+        }
+
+        vrHoveredObject = nextHover;
+
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerEnterHandler);
+        }
+    }
+
+    private void ClearVrHover()
+    {
+        if (vrHoveredObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrHoveredObject, vrPointerEventData, ExecuteEvents.pointerExitHandler);
+        }
+
+        vrHoveredObject = null;
+    }
+
+    private void HandleVrSelectReleaseIfNeeded()
+    {
+        bool selectPressed = IsVrSelectPressed();
+        bool selectReleasedThisFrame = !selectPressed && vrSelectWasPressed;
+        vrSelectWasPressed = selectPressed;
+        if (selectReleasedThisFrame)
+        {
+            HandleVrSelectRelease(null, null);
+        }
+    }
+
+    private void HandleVrSelectRelease(GameObject currentHitObject, InputField hitInputField)
+    {
+        if (vrPressedObject != null && vrPointerEventData != null)
+        {
+            ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerUpHandler);
+
+            GameObject clickTarget = currentHitObject != null
+                ? ExecuteEvents.GetEventHandler<IPointerClickHandler>(currentHitObject)
+                : null;
+
+            if (vrPointerEventData.eligibleForClick && clickTarget != null && clickTarget == vrPressedObject)
+            {
+                ExecuteEvents.Execute(vrPressedObject, vrPointerEventData, ExecuteEvents.pointerClickHandler);
+            }
+        }
+
+        if (hitInputField != null && vrPointerEventData != null)
+        {
+            SetVrInputCaretFromScreenPoint(hitInputField, vrPointerEventData.position);
+            hitInputField.OnPointerClick(vrPointerEventData);
+            FocusVrInputField(hitInputField);
+        }
+
+        if (vrPointerEventData != null)
+        {
+            vrPointerEventData.eligibleForClick = false;
+            vrPointerEventData.pointerPress = null;
+            vrPointerEventData.rawPointerPress = null;
+        }
+
+        vrPressedObject = null;
+    }
+
+    private void ResetVrPointerState()
+    {
+        HideVrCursor();
+        ClearVrHover();
+        HandleVrSelectReleaseIfNeeded();
+    }
+
+    private void FocusVrInputField(InputField inputField)
+    {
+        if (inputField == null)
+        {
+            ClearVrInputFocus();
+            return;
+        }
+
+        vrFocusedInputField = inputField;
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(inputField.gameObject);
+        }
+        inputField.ActivateInputField();
+        inputField.Select();
+        OpenVrKeyboard(inputField);
+    }
+
+    private void ClearVrInputFocus()
+    {
+        vrFocusedInputField = null;
+
+        if (vrTouchKeyboard != null)
+        {
+            try
+            {
+                vrTouchKeyboard.active = false;
+            }
+            catch
+            {
+            }
+        }
+
+        vrTouchKeyboard = null;
+    }
+
+    private void OpenVrKeyboard(InputField inputField)
+    {
+        if (inputField == null || !(Application.isMobilePlatform || Input.touchSupported))
+        {
+            return;
+        }
+
+        string text = inputField.text ?? string.Empty;
+        bool isMultiline = inputField.lineType != InputField.LineType.SingleLine;
+
+        try
+        {
+            vrTouchKeyboard = TouchScreenKeyboard.Open(
+                text,
+                TouchScreenKeyboardType.Default,
+                false,
+                isMultiline,
+                false,
+                false,
+                string.Empty);
+        }
+        catch
+        {
+            vrTouchKeyboard = null;
+        }
+    }
+
+    private void SyncVrKeyboard()
+    {
+        if (!IsQuestVrCodeIslandUi())
+        {
+            ClearVrInputFocus();
+            return;
+        }
+
+        if (!editorVisible || vrFocusedInputField == null)
+        {
+            ClearVrInputFocus();
+            return;
+        }
+
+        if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != vrFocusedInputField.gameObject)
+        {
+            EventSystem.current.SetSelectedGameObject(vrFocusedInputField.gameObject);
+        }
+
+        if (vrTouchKeyboard == null)
+        {
+            OpenVrKeyboard(vrFocusedInputField);
+            return;
+        }
+
+        if (vrTouchKeyboard.status == TouchScreenKeyboard.Status.Canceled ||
+            vrTouchKeyboard.status == TouchScreenKeyboard.Status.Done ||
+            !vrTouchKeyboard.active)
+        {
+            vrFocusedInputField.ActivateInputField();
+            OpenVrKeyboard(vrFocusedInputField);
+            return;
+        }
+
+        if (suppressVrKeyboardSync)
+        {
+            return;
+        }
+
+        string keyboardText = vrTouchKeyboard.text ?? string.Empty;
+        string fieldText = vrFocusedInputField.text ?? string.Empty;
+        if (!string.Equals(keyboardText, fieldText, StringComparison.Ordinal))
+        {
+            suppressVrKeyboardSync = true;
+            vrFocusedInputField.text = keyboardText;
+            vrFocusedInputField.caretPosition = keyboardText.Length;
+            vrFocusedInputField.selectionAnchorPosition = keyboardText.Length;
+            vrFocusedInputField.selectionFocusPosition = keyboardText.Length;
+            suppressVrKeyboardSync = false;
+        }
+    }
+
+    private void SetVrInputCaretFromScreenPoint(InputField inputField, Vector2 screenPoint)
+    {
+        if (inputField == null || inputField.textComponent == null)
+        {
+            return;
+        }
+
+        RectTransform textRect = inputField.textComponent.rectTransform;
+        Camera eventCamera = editorCanvas != null ? editorCanvas.worldCamera : null;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(textRect, screenPoint, eventCamera, out Vector2 localPoint))
+        {
+            return;
+        }
+
+        string currentText = inputField.text ?? string.Empty;
+        int caretIndex = GetClosestCaretIndex(currentText, localPoint, textRect.rect);
+        inputField.caretPosition = caretIndex;
+        inputField.selectionAnchorPosition = caretIndex;
+        inputField.selectionFocusPosition = caretIndex;
+    }
+
+    private int GetClosestCaretIndex(string text, Vector2 localPoint, Rect textRect)
+    {
+        string currentText = text ?? string.Empty;
+        string[] lines = currentText.Split('\n');
+        float lineHeight = GetEditorLineHeight();
+        float localX = Mathf.Clamp(localPoint.x - textRect.xMin, 0f, textRect.width);
+        float localYFromTop = Mathf.Clamp(textRect.yMax - localPoint.y, 0f, Mathf.Max(lineHeight, textRect.height));
+        int lineIndex = Mathf.Clamp(Mathf.FloorToInt(localYFromTop / Mathf.Max(1f, lineHeight)), 0, Mathf.Max(0, lines.Length - 1));
+
+        int lineStartIndex = 0;
+        for (int i = 0; i < lineIndex; i++)
+        {
+            lineStartIndex += lines[i].Length + 1;
+        }
+
+        string lineText = lines.Length > 0 ? lines[lineIndex] : string.Empty;
+        int bestOffset = 0;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i <= lineText.Length; i++)
+        {
+            float width = MeasureEditorTextWidth(lineText.Substring(0, i));
+            float distance = Mathf.Abs(width - localX);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestOffset = i;
+            }
+        }
+
+        return Mathf.Clamp(lineStartIndex + bestOffset, 0, currentText.Length);
+    }
+
+    private bool TryGetRightControllerRay(out Vector3 origin, out Vector3 direction)
+    {
+        origin = Vector3.zero;
+        direction = Vector3.forward;
+
+        Transform reference = PlayerCache.GetFps() != null ? PlayerCache.GetFps().transform : null;
+        if (VrHandTracking.TryGetPointerRay(XRNode.RightHand, reference, out origin, out direction))
+        {
+            return true;
+        }
+
+        XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHand.isValid &&
+            rightHand.TryGetFeatureValue(XRCommonUsages.devicePosition, out Vector3 localPosition) &&
+            rightHand.TryGetFeatureValue(XRCommonUsages.deviceRotation, out Quaternion localRotation))
+        {
+            Quaternion pointerRotation = localRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
+            if (reference != null)
+            {
+                origin = reference.TransformPoint(localPosition);
+                direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
+                return true;
+            }
+
+            origin = localPosition;
+            direction = pointerRotation * Vector3.forward;
+            return true;
+        }
+
+        try
+        {
+            if ((OVRInput.GetConnectedControllers() & OVRInput.Controller.RTouch) != 0)
+            {
+                Vector3 ovrLocalPosition = OVRInput.GetLocalControllerPosition(OVRInput.Controller.RTouch);
+                Quaternion ovrLocalRotation = OVRInput.GetLocalControllerRotation(OVRInput.Controller.RTouch);
+                Quaternion pointerRotation = ovrLocalRotation * Quaternion.AngleAxis(VrPointerDownwardAngle, Vector3.right);
+                if (reference != null)
+                {
+                    origin = reference.TransformPoint(ovrLocalPosition);
+                    direction = reference.TransformDirection(pointerRotation * Vector3.forward).normalized;
+                    return true;
+                }
+
+                origin = ovrLocalPosition;
+                direction = pointerRotation * Vector3.forward;
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private bool IsVrSelectPressed()
+    {
+        if (VrHandTracking.IsPinching(XRNode.RightHand))
+        {
+            return true;
+        }
+
+        XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        if (rightHand.isValid)
+        {
+            if (rightHand.TryGetFeatureValue(XRCommonUsages.triggerButton, out bool triggerButton) && triggerButton)
+            {
+                return true;
+            }
+
+            if (rightHand.TryGetFeatureValue(XRCommonUsages.primaryButton, out bool primaryButton) && primaryButton)
+            {
+                return true;
+            }
+        }
+
+        try
+        {
+            return OVRInput.Get(OVRInput.RawButton.RIndexTrigger) || OVRInput.Get(OVRInput.RawButton.A);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsWorldPointInsideCanvas(RectTransform canvasRect, Vector3 worldPoint)
+    {
+        Vector3 localPoint3 = canvasRect.InverseTransformPoint(worldPoint);
+        Vector2 localPoint = new Vector2(localPoint3.x, localPoint3.y);
+        return canvasRect.rect.Contains(localPoint);
+    }
+
+    private static RaycastResult FindFirstInteractiveRaycast(List<RaycastResult> results)
+    {
+        for (int i = 0; i < results.Count; i++)
+        {
+            if (results[i].gameObject == null)
+            {
+                continue;
+            }
+
+            if (ExecuteEvents.GetEventHandler<IPointerClickHandler>(results[i].gameObject) != null ||
+                ExecuteEvents.GetEventHandler<ISubmitHandler>(results[i].gameObject) != null)
+            {
+                return results[i];
+            }
+        }
+
+        return results.Count > 0 ? results[0] : default;
+    }
+
+    private static void EnsureEventSystem()
+    {
+        if (FindObjectOfType<EventSystem>() != null)
+        {
+            return;
+        }
+
+        GameObject go = new GameObject("EventSystem");
+        go.AddComponent<EventSystem>();
+        go.AddComponent<InputSystemUIInputModule>();
     }
 
     private bool TryHandleMobileOutsideTapClose()
@@ -2715,6 +3527,28 @@ public class CodeWorldRuntime : MonoBehaviour
     {
         if (editorHintText != null)
         {
+            RectTransform hintRect = editorHintText.rectTransform;
+            if (XRSettings.enabled)
+            {
+                editorHintText.text = "Press X on your left controller to open the menu.";
+                editorHintText.alignment = TextAnchor.MiddleCenter;
+                hintRect.anchorMin = new Vector2(0.5f, 0.5f);
+                hintRect.anchorMax = new Vector2(0.5f, 0.5f);
+                hintRect.pivot = new Vector2(0.5f, 0.5f);
+                hintRect.anchoredPosition = new Vector2(0f, 0f);
+                hintRect.sizeDelta = new Vector2(760f, 56f);
+            }
+            else
+            {
+                editorHintText.text = "Press ` to show the code window.";
+                editorHintText.alignment = TextAnchor.LowerLeft;
+                hintRect.anchorMin = new Vector2(0f, 0f);
+                hintRect.anchorMax = new Vector2(0f, 0f);
+                hintRect.pivot = new Vector2(0f, 0f);
+                hintRect.anchoredPosition = new Vector2(34f, 28f);
+                hintRect.sizeDelta = new Vector2(520f, 40f);
+            }
+
             editorHintText.gameObject.SetActive(modeActive && !editorHintDismissed);
         }
     }
