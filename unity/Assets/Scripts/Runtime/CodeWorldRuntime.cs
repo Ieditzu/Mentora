@@ -73,6 +73,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private Coroutine localExecutionRoutine;
     private bool localExecutionRunning;
     private bool localExecutionStopRequested;
+    private bool vrCodeTogglePressed;
     private Button stopButton;
     private const int MaxAiChatLines = 16;
     private const int MaxLoopIterations = 256;
@@ -218,18 +219,19 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+
+        if (TryConsumeVrEditorToggle())
         {
-            return;
+            UpdateEditorVisibility(!editorVisible);
         }
 
-        if (keyboard.escapeKey.wasPressedThisFrame && localExecutionRunning)
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame && localExecutionRunning)
         {
             StopLocalScriptExecution(true);
             return;
         }
 
-        if (keyboard.backquoteKey.wasPressedThisFrame)
+        if (keyboard != null && keyboard.backquoteKey.wasPressedThisFrame)
         {
             UpdateEditorVisibility(!editorVisible);
         }
@@ -246,7 +248,7 @@ public class CodeWorldRuntime : MonoBehaviour
 
         TrackEditorUndoState();
 
-        if (keyboard.escapeKey.wasPressedThisFrame)
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
         {
             if (localExecutionRunning)
             {
@@ -255,6 +257,14 @@ public class CodeWorldRuntime : MonoBehaviour
             }
 
             UpdateEditorVisibility(false);
+            return;
+        }
+
+        if (keyboard == null)
+        {
+            TrackLocalCursorState();
+            FlushPendingEditorSync();
+            FlushPendingCursorSync();
             return;
         }
 
@@ -274,6 +284,26 @@ public class CodeWorldRuntime : MonoBehaviour
         TrackLocalCursorState();
         FlushPendingEditorSync();
         FlushPendingCursorSync();
+    }
+
+    private bool TryConsumeVrEditorToggle()
+    {
+        bool pressedNow = false;
+
+        UnityEngine.XR.InputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        if (leftHand.isValid)
+        {
+            leftHand.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out pressedNow);
+        }
+
+        if (!pressedNow)
+        {
+            try { pressedNow = OVRInput.Get(OVRInput.RawButton.X); } catch { }
+        }
+
+        bool pressedThisFrame = pressedNow && !vrCodeTogglePressed;
+        vrCodeTogglePressed = pressedNow;
+        return pressedThisFrame;
     }
 
     private void OnGUI()
