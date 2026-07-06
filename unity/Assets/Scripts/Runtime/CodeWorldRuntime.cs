@@ -85,6 +85,7 @@ public class CodeWorldRuntime : MonoBehaviour
     private PointerEventData vrPointerEventData;
     private EventSystem vrPointerEventSystem;
     private readonly List<RaycastResult> vrRaycastResults = new List<RaycastResult>();
+    private readonly List<RaycastResult> uiTapRaycastResults = new List<RaycastResult>();
     private GameObject vrHoveredObject;
     private GameObject vrPressedObject;
     private bool vrSelectWasPressed;
@@ -278,7 +279,7 @@ public class CodeWorldRuntime : MonoBehaviour
             return;
         }
 
-        if ((Input.touchSupported || Application.isMobilePlatform) && TryHandleMobileOutsideTapClose())
+        if (Application.isMobilePlatform && TryHandleMobileOutsideTapClose())
         {
             return;
         }
@@ -3478,7 +3479,17 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         Vector2 screenPoint;
-        if (!TryGetTapBeganThisFrame(out screenPoint))
+        if (!TryGetTapBeganThisFrame(out screenPoint, out int pointerId))
+        {
+            return false;
+        }
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId))
+        {
+            return false;
+        }
+
+        if (IsScreenPointInsideEditorUi(screenPoint))
         {
             return false;
         }
@@ -3494,8 +3505,46 @@ public class CodeWorldRuntime : MonoBehaviour
         return true;
     }
 
-    private static bool TryGetTapBeganThisFrame(out Vector2 screenPoint)
+    private bool IsScreenPointInsideEditorUi(Vector2 screenPoint)
     {
+        if (editorCanvasRaycaster == null || EventSystem.current == null)
+        {
+            return false;
+        }
+
+        PointerEventData pointerEventData = new PointerEventData(EventSystem.current)
+        {
+            position = screenPoint,
+            button = PointerEventData.InputButton.Left
+        };
+
+        uiTapRaycastResults.Clear();
+        editorCanvasRaycaster.Raycast(pointerEventData, uiTapRaycastResults);
+        for (int i = 0; i < uiTapRaycastResults.Count; i++)
+        {
+            GameObject hitObject = uiTapRaycastResults[i].gameObject;
+            if (hitObject == null)
+            {
+                continue;
+            }
+
+            if (editorPanel != null && hitObject.transform.IsChildOf(editorPanel.transform))
+            {
+                return true;
+            }
+
+            if (aiPanel != null && hitObject.transform.IsChildOf(aiPanel.transform))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetTapBeganThisFrame(out Vector2 screenPoint, out int pointerId)
+    {
+        pointerId = -1;
         Touchscreen touchscreen = Touchscreen.current;
         if (touchscreen != null)
         {
@@ -3503,15 +3552,9 @@ public class CodeWorldRuntime : MonoBehaviour
             if (primaryTouch != null && primaryTouch.press.wasPressedThisFrame)
             {
                 screenPoint = primaryTouch.position.ReadValue();
+                pointerId = primaryTouch.touchId.ReadValue();
                 return true;
             }
-        }
-
-        Mouse mouse = Mouse.current;
-        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-        {
-            screenPoint = mouse.position.ReadValue();
-            return true;
         }
 
         screenPoint = Vector2.zero;
