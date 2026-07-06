@@ -7,50 +7,53 @@ public static class WaterPlaneInitializer
 {
     private static readonly Color SurfaceShallowColor = new Color(0.18f, 0.62f, 0.92f, 0.82f);
     private static readonly Color SurfaceDeepColor = new Color(0.03f, 0.24f, 0.52f, 0.94f);
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Build()
     {
-        // On Android/Quest stability first: skip runtime water creation (visual only) to avoid GPU driver crashes.
-        if (Application.platform == RuntimePlatform.Android)
+        bool isAndroid = Application.platform == RuntimePlatform.Android;
+        if (GameObject.Find("InfiniteWater") != null || GameObject.Find("WaterSurface") != null)
         {
             return;
         }
 
-        if (GameObject.Find("InfiniteWater") != null)
+        if (!isAndroid)
         {
-            return;
+            GameObject water = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            water.name = "InfiniteWater";
+            water.transform.position = new Vector3(0f, -500f, 0f); // fills everything below y=0
+            water.transform.localScale = new Vector3(4000f, 1000f, 4000f);
+
+            Collider collider = water.GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.isTrigger = true; // let player pass through
+            }
+
+            Renderer renderer = water.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                renderer.sharedMaterial = CreateWaterSurfaceMaterial();
+            }
         }
 
-        GameObject water = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        water.name = "InfiniteWater";
-        water.transform.position = new Vector3(0f, -500f, 0f); // fills everything below y=0
-        water.transform.localScale = new Vector3(4000f, 1000f, 4000f);
-
-        var collider = water.GetComponent<Collider>();
-        if (collider != null)
-        {
-            collider.isTrigger = true; // let player pass through
-        }
-
-        var renderer = water.GetComponent<Renderer>();
-        if (renderer != null)
-        {
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            renderer.sharedMaterial = CreateWaterSurfaceMaterial();
-        }
-
-        // Surface at y=0 for visible water top, with animated vertex waves.
         GameObject surface = new GameObject("WaterSurface");
         surface.transform.position = new Vector3(0f, 0.01f, 0f);
         surface.transform.localScale = Vector3.one;
-        var mf = surface.AddComponent<MeshFilter>();
-        mf.sharedMesh = BuildGridMesh(800f, 180);
-        var mr = surface.AddComponent<MeshRenderer>();
+        MeshFilter mf = surface.AddComponent<MeshFilter>();
+        mf.sharedMesh = BuildGridMesh(isAndroid ? 1200f : 800f, isAndroid ? 72 : 180);
+        MeshRenderer mr = surface.AddComponent<MeshRenderer>();
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         mr.receiveShadows = false;
         mr.sharedMaterial = CreateWaterSurfaceMaterial();
-        surface.AddComponent<WaterWaveAnimator>();
+
+        WaterWaveAnimator animator = surface.AddComponent<WaterWaveAnimator>();
+        if (isAndroid)
+        {
+            animator.enabled = false;
+        }
     }
 
     /// <summary>
