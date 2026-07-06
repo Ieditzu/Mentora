@@ -5,9 +5,12 @@ using UnityEngine.UI;
 public class MobileTouchHud : MonoBehaviour
 {
     private const string PauseButtonObjectName = "PauseButton";
+    private const string CodeWorldButtonObjectName = "CodeWorldButton";
+    private const float CodeWorldButtonSpacing = 18f;
 
     private bool lastPausedState = false;
     private Button pauseButton;
+    private Button codeWorldButton;
     private GameObject[] gameplayControls = System.Array.Empty<GameObject>();
 
     private void Awake()
@@ -22,6 +25,7 @@ public class MobileTouchHud : MonoBehaviour
 
         EnsureEventSystem();
         BindPauseButton();
+        EnsureCodeWorldButton();
         CacheGameplayControls();
         ApplyPausedState(PauseMenuManager.IsGamePaused);
     }
@@ -34,12 +38,12 @@ public class MobileTouchHud : MonoBehaviour
         }
 
         bool paused = PauseMenuManager.IsGamePaused;
-        if (paused == lastPausedState)
+        if (paused != lastPausedState)
         {
-            return;
+            ApplyPausedState(paused);
         }
 
-        ApplyPausedState(paused);
+        UpdateCodeWorldButtonVisibility();
     }
 
     private static void EnsureEventSystem()
@@ -69,6 +73,49 @@ public class MobileTouchHud : MonoBehaviour
             pauseButton.onClick.RemoveListener(OnPauseButtonClicked);
             pauseButton.onClick.AddListener(OnPauseButtonClicked);
         }
+    }
+
+    private void EnsureCodeWorldButton()
+    {
+        if (pauseButton == null)
+        {
+            return;
+        }
+
+        Transform existing = transform.Find(CodeWorldButtonObjectName);
+        if (existing != null)
+        {
+            codeWorldButton = existing.GetComponent<Button>();
+        }
+        else
+        {
+            GameObject clone = Instantiate(pauseButton.gameObject, transform);
+            clone.name = CodeWorldButtonObjectName;
+            codeWorldButton = clone.GetComponent<Button>();
+
+            RectTransform pauseRect = pauseButton.GetComponent<RectTransform>();
+            RectTransform cloneRect = clone.GetComponent<RectTransform>();
+            if (pauseRect != null && cloneRect != null)
+            {
+                cloneRect.anchorMin = pauseRect.anchorMin;
+                cloneRect.anchorMax = pauseRect.anchorMax;
+                cloneRect.pivot = pauseRect.pivot;
+                cloneRect.sizeDelta = pauseRect.sizeDelta;
+                cloneRect.anchoredPosition = pauseRect.anchoredPosition + new Vector2(pauseRect.sizeDelta.x + CodeWorldButtonSpacing, 0f);
+                cloneRect.localScale = pauseRect.localScale;
+                cloneRect.localRotation = pauseRect.localRotation;
+            }
+        }
+
+        if (codeWorldButton == null)
+        {
+            return;
+        }
+
+        codeWorldButton.onClick.RemoveAllListeners();
+        codeWorldButton.onClick.AddListener(OnCodeWorldButtonClicked);
+        UpdateCodeWorldButtonVisuals();
+        UpdateCodeWorldButtonVisibility();
     }
 
     private void CacheGameplayControls()
@@ -110,10 +157,50 @@ public class MobileTouchHud : MonoBehaviour
         {
             MobileTouchInput.ResetMove();
         }
+
+        UpdateCodeWorldButtonVisibility();
+    }
+
+    private void UpdateCodeWorldButtonVisuals()
+    {
+        if (codeWorldButton == null)
+        {
+            return;
+        }
+
+        Text[] texts = codeWorldButton.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            if (texts[i] == null)
+            {
+                continue;
+            }
+
+            texts[i].text = "</>";
+            texts[i].fontSize = Mathf.Max(texts[i].fontSize, 28);
+            texts[i].alignment = TextAnchor.MiddleCenter;
+            texts[i].resizeTextForBestFit = false;
+        }
+    }
+
+    private void UpdateCodeWorldButtonVisibility()
+    {
+        if (codeWorldButton == null)
+        {
+            return;
+        }
+
+        bool shouldShow = !PauseMenuManager.IsGamePaused && CodeWorldRuntime.ShouldShowMobileToggle;
+        codeWorldButton.gameObject.SetActive(shouldShow);
     }
 
     private static void OnPauseButtonClicked()
     {
         PauseMenuManager.VrTogglePause();
+    }
+
+    private static void OnCodeWorldButtonClicked()
+    {
+        CodeWorldRuntime.ToggleEditorFromMobile();
     }
 }

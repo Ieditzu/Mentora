@@ -101,6 +101,29 @@ public class CodeWorldRuntime : MonoBehaviour
         EnsureInstance().ActivateAsHost();
     }
 
+    public static bool ShouldShowMobileToggle
+    {
+        get
+        {
+            if (instance == null || !instance.modeActive)
+            {
+                return false;
+            }
+
+            return instance.sessionManager != null && instance.sessionManager.IsHosting;
+        }
+    }
+
+    public static void ToggleEditorFromMobile()
+    {
+        if (instance == null || !instance.modeActive)
+        {
+            return;
+        }
+
+        instance.UpdateEditorVisibility(!instance.editorVisible);
+    }
+
     public static void DeactivateLocal()
     {
         if (instance != null)
