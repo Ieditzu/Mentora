@@ -11,6 +11,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.UI;
+using UnityEngine.XR;
 
 public class CodeWorldRuntime : MonoBehaviour
 {
@@ -2593,8 +2594,9 @@ public class CodeWorldRuntime : MonoBehaviour
         FirstPersonControllerSimple fps = PlayerCache.GetFps();
         if (fps != null)
         {
-            fps.SetMovementLocked(editorVisible);
-            fps.SetCameraControlEnabled(!editorVisible);
+            bool vrActive = XRSettings.enabled;
+            fps.SetMovementLocked(editorVisible && !vrActive);
+            fps.SetCameraControlEnabled(vrActive || !editorVisible);
         }
 
         Cursor.visible = editorVisible;

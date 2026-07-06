@@ -439,14 +439,45 @@ public class FirstPersonControllerSimple : MonoBehaviour
     {
         float h = GetAxisRawCompat("Horizontal");
         float v = GetAxisRawCompat("Vertical");
-        Vector3 planar = (transform.right * h + transform.forward * v).normalized;
+        if (IsVrActive() && TryGetVrMoveAxis(out Vector2 vrMove))
+        {
+            h = vrMove.x;
+            v = vrMove.y;
+        }
+
+        Vector3 planar;
+        if (IsVrActive() && camTransform != null)
+        {
+            Vector3 camForward = camTransform.forward;
+            camForward.y = 0f;
+            camForward = camForward.sqrMagnitude > 0.0001f ? camForward.normalized : transform.forward;
+            Vector3 camRight = new Vector3(camForward.z, 0f, -camForward.x).normalized;
+            planar = camRight * h + camForward * v;
+        }
+        else
+        {
+            planar = transform.right * h + transform.forward * v;
+        }
+
+        if (planar.sqrMagnitude > 1f)
+        {
+            planar.Normalize();
+        }
 
         float vertical = 0f;
         if (GetKeyCompat(jumpKey))
         {
             vertical += 1f;
         }
+        if (IsVrNoclipAscendHeld())
+        {
+            vertical += 1f;
+        }
         if (GetKeyCompat(sprintKey))
+        {
+            vertical -= 1f;
+        }
+        if (IsVrNoclipDescendHeld())
         {
             vertical -= 1f;
         }
@@ -1343,6 +1374,40 @@ public class FirstPersonControllerSimple : MonoBehaviour
         bool downThisFrame = pressedNow && !_vrJumpWasPressed;
         _vrJumpWasPressed = pressedNow;
         return downThisFrame;
+    }
+
+    private bool IsVrNoclipAscendHeld()
+    {
+        XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        bool pressed = false;
+        if (rightHand.isValid)
+        {
+            rightHand.TryGetFeatureValue(XRCommonUsages.primaryButton, out pressed);
+        }
+
+        if (!pressed)
+        {
+            try { pressed = OVRInput.Get(OVRInput.RawButton.A); } catch { }
+        }
+
+        return pressed;
+    }
+
+    private bool IsVrNoclipDescendHeld()
+    {
+        XRInputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        bool pressed = false;
+        if (rightHand.isValid)
+        {
+            rightHand.TryGetFeatureValue(XRCommonUsages.secondaryButton, out pressed);
+        }
+
+        if (!pressed)
+        {
+            try { pressed = OVRInput.Get(OVRInput.RawButton.B); } catch { }
+        }
+
+        return pressed;
     }
 
     private bool IsVrSprintHeld()
