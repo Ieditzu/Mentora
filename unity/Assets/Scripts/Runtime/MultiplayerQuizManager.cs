@@ -86,6 +86,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private float  timerRemaining;
     private bool   timerActive;
     private Coroutine pendingEarlyFinishRoutine;
+    private Coroutine countdownAudioRoutine;
     private readonly Dictionary<string, int> scores         = new Dictionary<string, int>();
     private readonly Dictionary<string, int> pendingAnswers = new Dictionary<string, int>();
     private readonly HashSet<string> expectedAnswerClientIds = new HashSet<string>();
@@ -315,6 +316,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         if (answerLocked) return;
         answerLocked      = true;
         lockedAnswerIndex = idx;
+        AudioManager.Play(MenSfx.QuizAnswerLock);
 
         for (int i = 0; i < 4; i++)
         {
@@ -411,6 +413,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         currentQuestionIndex = 0;
         quizRunning          = true;
         scores.Clear();
+        AudioManager.Play(MenSfx.QuizStart);
         StartCoroutine(CountdownThenQuestion());
     }
 
@@ -442,6 +445,7 @@ public class MultiplayerQuizManager : MonoBehaviour
                 theaterQuestionText.text     = i.ToString();
                 theaterQuestionText.color    = Color.white;
             }
+            AudioManager.Play(MenSfx.QuizCountdownTick);
             yield return new WaitForSeconds(1f);
         }
 
@@ -463,6 +467,8 @@ public class MultiplayerQuizManager : MonoBehaviour
         ShowInteraction(q.options);
         timerRemaining = QuizTimerSeconds;
         timerActive    = true;
+        AudioManager.Play(MenSfx.QuizQuestionReveal);
+        StartQuizUrgencyAudio();
 
         // Broadcast to clients
         MultiplayerSessionManager.Instance?.BroadcastQuizPacket(
@@ -472,6 +478,7 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     private void BroadcastResults()
     {
+        StopQuizUrgencyAudio();
         HideInteraction();
         if (currentQuestionIndex >= totalQuestions) { EndQuiz(); return; }
 
@@ -488,6 +495,8 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
 
         SetTheaterResult(correct);
+        AudioManager.Play(MenSfx.QuizResultsReveal);
+        PlayLocalAnswerOutcome(correct);
 
         var sb = new System.Text.StringBuilder();
         foreach (var kv in scores) { if (sb.Length > 0) sb.Append(','); sb.Append(kv.Key).Append(':').Append(kv.Value); }
@@ -511,6 +520,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         quizRunning = false;
         timerActive = false;
         CancelPendingEarlyFinish();
+        StopQuizUrgencyAudio();
         HideInteraction();
 
         if (theaterSubText != null)      theaterSubText.text      = "Quiz Over! Final Scores:";
@@ -580,13 +590,18 @@ public class MultiplayerQuizManager : MonoBehaviour
         timerRemaining = p.TimerSeconds;
         timerActive    = true;
         answerLocked   = false;
+        AudioManager.Play(MenSfx.QuizQuestionReveal);
+        StartQuizUrgencyAudio();
     }
 
     private void HandleQuizResult(QuizResultPacket p)
     {
         timerActive = false;
+        StopQuizUrgencyAudio();
         HideInteraction();
         SetTheaterResult(p.CorrectIndex);
+        AudioManager.Play(MenSfx.QuizResultsReveal);
+        PlayLocalAnswerOutcome(p.CorrectIndex);
 
         // Parse scores
         var map = new Dictionary<string, int>();
@@ -646,6 +661,51 @@ public class MultiplayerQuizManager : MonoBehaviour
 
         StopCoroutine(pendingEarlyFinishRoutine);
         pendingEarlyFinishRoutine = null;
+    }
+
+    private void StartQuizUrgencyAudio()
+    {
+        StopQuizUrgencyAudio();
+        countdownAudioRoutine = StartCoroutine(QuizUrgencyAudioLoop());
+    }
+
+    private void StopQuizUrgencyAudio()
+    {
+        if (countdownAudioRoutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(countdownAudioRoutine);
+        countdownAudioRoutine = null;
+    }
+
+    private void PlayLocalAnswerOutcome(int correctIndex)
+    {
+        if (lockedAnswerIndex < 0)
+        {
+            return;
+        }
+
+        AudioManager.Play(lockedAnswerIndex == correctIndex ? MenSfx.AnswerCorrect : MenSfx.AnswerWrong);
+    }
+
+    private IEnumerator QuizUrgencyAudioLoop()
+    {
+        int lastPlayedSecond = int.MinValue;
+        while (timerActive && quizRunning)
+        {
+            int secondsRemaining = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
+            if (secondsRemaining <= 5 && secondsRemaining > 0 && secondsRemaining != lastPlayedSecond)
+            {
+                AudioManager.Play(MenSfx.QuizCountdownTick);
+                lastPlayedSecond = secondsRemaining;
+            }
+
+            yield return null;
+        }
+
+        countdownAudioRoutine = null;
     }
 
     private IEnumerator DelayedBroadcastResults(float delaySeconds)

@@ -225,9 +225,16 @@ private void EnsurePointableCanvasModule()
         }
         
         // Play hover sound
-        if (!wasHovering && hoverEnterSound != null && audioSource != null)
+        if (!wasHovering && audioSource != null)
         {
-            audioSource.PlayOneShot(hoverEnterSound, audioVolume);
+            if (hoverEnterSound != null)
+            {
+                audioSource.PlayOneShot(hoverEnterSound, audioVolume);
+            }
+            else
+            {
+                AudioManager.PlayHover();
+            }
         }
         
         wasHovering = true;
@@ -266,9 +273,16 @@ private void EnsurePointableCanvasModule()
         }
         
         // Play select sound
-        if (selectSound != null && audioSource != null)
+        if (audioSource != null)
         {
-            audioSource.PlayOneShot(selectSound, audioVolume);
+            if (selectSound != null)
+            {
+                audioSource.PlayOneShot(selectSound, audioVolume);
+            }
+            else
+            {
+                AudioManager.Play(MenSfx.ButtonClick);
+            }
         }
         
     }
