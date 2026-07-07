@@ -270,6 +270,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         var sorted = new List<KeyValuePair<string, int>>(scoreMap);
         sorted.Sort((a, b) => b.Value.CompareTo(a.Value));
+        MultiplayerSessionManager sessionManager = MultiplayerSessionManager.Instance;
 
         for (int i = 0; i < 4; i++)
         {
@@ -278,8 +279,8 @@ public class MultiplayerQuizManager : MonoBehaviour
             {
                 if (i < sorted.Count)
                 {
-                    string id = sorted[i].Key.Length > 8 ? sorted[i].Key.Substring(0, 8) + "…" : sorted[i].Key;
-                    theaterAnswerTexts[i].text = (i + 1) + ".  " + id + "   " + sorted[i].Value + " pts";
+                    string playerName = sessionManager != null ? sessionManager.ResolvePlayerName(sorted[i].Key) : "Player";
+                    theaterAnswerTexts[i].text = (i + 1) + ".  " + playerName + "   " + sorted[i].Value + " pts";
                 }
                 else theaterAnswerTexts[i].text = "";
             }

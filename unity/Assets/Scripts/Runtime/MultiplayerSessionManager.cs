@@ -83,6 +83,31 @@ public class MultiplayerSessionManager : MonoBehaviour
     public string LocalClientId => localClientId;
     public string LocalPlayerName => localPlayerName;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
+
+    public string ResolvePlayerName(string clientId)
+    {
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            return "Player";
+        }
+
+        if (string.Equals(clientId, localClientId, StringComparison.Ordinal))
+        {
+            return NormalizePlayerName(localPlayerName);
+        }
+
+        if (serverPeers.TryGetValue(clientId, out NetworkPeer peer) && peer != null && !string.IsNullOrWhiteSpace(peer.PlayerName))
+        {
+            return NormalizePlayerName(peer.PlayerName);
+        }
+
+        if (remoteAvatars.TryGetValue(clientId, out RemoteAvatar avatar) && avatar?.NameText != null && !string.IsNullOrWhiteSpace(avatar.NameText.text))
+        {
+            return NormalizePlayerName(avatar.NameText.text);
+        }
+
+        return "Player";
+    }
     public bool IsHosting => mode == SessionMode.Hosting;
     public bool IsConnectedToSession => !string.IsNullOrEmpty(localClientId);
 
