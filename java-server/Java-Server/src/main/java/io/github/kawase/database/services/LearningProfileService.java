@@ -3,12 +3,17 @@ package io.github.kawase.database.services;
 import io.github.kawase.cpp.CppExecutor;
 import io.github.kawase.database.entity.Child;
 import io.github.kawase.database.repository.ChildRepository;
+import io.github.kawase.database.repository.CompletedTaskRepository;
 import io.github.kawase.python.PythonExecutor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -21,6 +26,7 @@ import java.util.Map;
 public class LearningProfileService {
 
     private final ChildRepository childRepository;
+    private final CompletedTaskRepository completedTaskRepository;
     private static final long SUMMARY_MIN_INTERVAL_SECONDS = 300;
 
     @Transactional
@@ -228,6 +234,152 @@ public class LearningProfileService {
         appendListLine(context, "Frequent help topics", topHelpTopics(aiProfile));
         appendRecentEventsLine(context, aiProfile);
         return context.toString().trim();
+    }
+
+    @Transactional(readOnly = true)
+    public String generateWeeklyParentReport(final Long childId) {
+        if (childId == null) {
+            return "";
+        }
+
+        Child child = childRepository.findById(childId).orElse(null);
+        if (child == null) {
+            return "";
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        LocalDate weekEnd = weekStart.plusDays(6);
+        String childName = child.getName() == null || child.getName().isBlank() ? "your child" : child.getName();
+
+        var completedThisWeek = completedTaskRepository.findByChildIdOrderByCompletedAtDesc(childId).stream()
+                .filter(ct -> ct.getCompletedAt() != null)
+                .filter(ct -> {
+                    LocalDate completedDate = ct.getCompletedAt().withZoneSameInstant(ZoneId.systemDefault()).toLocalDate();
+                    return !completedDate.isBefore(weekStart) && !completedDate.isAfter(weekEnd);
+                })
+                .toList();
+
+        Map<String, Object> stats = child.getGameStats() == null ? Collections.emptyMap() : child.getGameStats();
+        Map<String, Object> cpp = safeMap(stats.get("aiProfileCpp"));
+        Map<String, Object> python = safeMap(stats.get("aiProfilePython"));
+        Map<String, Object> general = safeMap(stats.get("aiProfileGeneral"));
+
+        List<String> recentEvents = collectRecentWeeklyEvents(general, weekStart, weekEnd);
+        if (recentEvents.isEmpty()) {
+            recentEvents.addAll(collectRecentWeeklyEvents(cpp, weekStart, weekEnd));
+            recentEvents.addAll(collectRecentWeeklyEvents(python, weekStart, weekEnd));
+        }
+
+        String prompt = buildWeeklyReportPrompt(childName, weekStart, weekEnd, completedThisWeek, cpp, python, general, recentEvents);
+        io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
+        String report = ai.generate(prompt);
+        if (report == null || report.isBlank() || report.startsWith("AI Error")) {
+            return buildFallbackWeeklyReport(childName, weekStart, weekEnd, completedThisWeek, cpp, python, general);
+        }
+
+        return report.trim();
+    }
+
+    private String buildWeeklyReportPrompt(final String childName,
+                                           final LocalDate weekStart,
+                                           final LocalDate weekEnd,
+                                           final List<io.github.kawase.database.entity.CompletedTask> completedTasks,
+                                           final Map<String, Object> cpp,
+                                           final Map<String, Object> python,
+                                           final Map<String, Object> general,
+                                           final List<String> recentEvents) {
+        int cppCorrect = getInt(cpp.get("correctCount"));
+        int cppIncorrect = getInt(cpp.get("incorrectCount"));
+        int pyCorrect = getInt(python.get("correctCount"));
+        int pyIncorrect = getInt(python.get("incorrectCount"));
+        int generalCorrect = getInt(general.get("correctCount"));
+        int generalIncorrect = getInt(general.get("incorrectCount"));
+
+        Map<String, Integer> taskCounts = new LinkedHashMap<>();
+        for (var completedTask : completedTasks) {
+            String title = completedTask.getTask() == null ? "Task" : completedTask.getTask().getTitle();
+            taskCounts.put(title, taskCounts.getOrDefault(title, 0) + 1);
+        }
+
+        return "You are the Mentora AI tutor writing a weekly report card letter to a parent.\n" +
+                "Write in warm natural language, not a table. Keep it to 2 short paragraphs plus one actionable next step.\n" +
+                "Do not invent facts beyond the data. If data is sparse, say that plainly.\n\n" +
+                "Child: " + childName + "\n" +
+                "Week: " + weekStart + " through " + weekEnd + "\n" +
+                "Completed tasks this week: " + completedTasks.size() + "\n" +
+                "Task titles/counts: " + (taskCounts.isEmpty() ? "none" : taskCounts.toString()) + "\n" +
+                "C++ attempts: correct=" + cppCorrect + ", incorrect=" + cppIncorrect + ", hints=" + getInt(cpp.get("hintsUsed")) + ", common mistakes=" + topMistakes(cpp) + ", struggles=" + topConcepts(cpp, true) + "\n" +
+                "Python attempts: correct=" + pyCorrect + ", incorrect=" + pyIncorrect + ", hints=" + getInt(python.get("hintsUsed")) + ", common mistakes=" + topMistakes(python) + ", struggles=" + topConcepts(python, true) + "\n" +
+                "Overall attempts: correct=" + generalCorrect + ", incorrect=" + generalIncorrect + ", hints=" + getInt(general.get("hintsUsed")) + ", chatTurns=" + getInt(general.get("chatTurns")) + "\n" +
+                "Recent tracked events from this week: " + (recentEvents.isEmpty() ? "none" : String.join(" | ", recentEvents)) + "\n\n" +
+                "Write the letter starting with: This week " + childName + " ";
+    }
+
+    private String buildFallbackWeeklyReport(final String childName,
+                                             final LocalDate weekStart,
+                                             final LocalDate weekEnd,
+                                             final List<io.github.kawase.database.entity.CompletedTask> completedTasks,
+                                             final Map<String, Object> cpp,
+                                             final Map<String, Object> python,
+                                             final Map<String, Object> general) {
+        int correct = getInt(general.get("correctCount"));
+        int incorrect = getInt(general.get("incorrectCount"));
+        int total = correct + incorrect;
+        List<String> struggles = topConcepts(general, true);
+        List<String> mistakes = topMistakes(general);
+
+        StringBuilder builder = new StringBuilder();
+        builder.append("This week ").append(childName).append(" completed ")
+                .append(completedTasks.size()).append(" task")
+                .append(completedTasks.size() == 1 ? "" : "s")
+                .append(" between ").append(weekStart).append(" and ").append(weekEnd).append(". ");
+        if (total > 0) {
+            builder.append("Across tracked attempts, the profile shows ")
+                    .append(correct).append(" correct and ").append(incorrect).append(" incorrect responses. ");
+        } else {
+            builder.append("There is not enough attempt-level data yet for a precise pattern analysis. ");
+        }
+        if (!struggles.isEmpty()) {
+            builder.append("The main areas to revisit are ").append(String.join(", ", struggles)).append(". ");
+        }
+        if (!mistakes.isEmpty()) {
+            builder.append("The most common mistake pattern is ").append(String.join(", ", mistakes)).append(". ");
+        }
+        builder.append("For the next session, choose one short challenge in the weakest area and ask for a hint only after the first independent attempt.");
+        return builder.toString();
+    }
+
+    private List<String> collectRecentWeeklyEvents(final Map<String, Object> profile, final LocalDate weekStart, final LocalDate weekEnd) {
+        Object recentValue = profile.get("recentEvents");
+        if (!(recentValue instanceof List<?> recentEvents) || recentEvents.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> events = new ArrayList<>();
+        for (Object item : recentEvents) {
+            if (!(item instanceof Map<?, ?> rawMap)) {
+                continue;
+            }
+
+            String ts = rawMap.get("ts") == null ? "" : rawMap.get("ts").toString();
+            try {
+                LocalDate eventDate = Instant.parse(ts).atZone(ZoneId.systemDefault()).toLocalDate();
+                if (eventDate.isBefore(weekStart) || eventDate.isAfter(weekEnd)) {
+                    continue;
+                }
+            } catch (Exception ignored) {
+                continue;
+            }
+
+            String type = rawMap.get("type") == null ? "event" : rawMap.get("type").toString();
+            String topic = rawMap.get("topic") == null ? "general" : rawMap.get("topic").toString();
+            String correctness = rawMap.get("correctness") == null ? "unknown" : rawMap.get("correctness").toString();
+            String detail = rawMap.get("detail") == null ? "" : truncate(rawMap.get("detail").toString(), 90);
+            events.add(type + " on " + topic + " (" + correctness + ")" + (detail.isBlank() ? "" : ": " + detail));
+        }
+
+        return events;
     }
 
     @Transactional

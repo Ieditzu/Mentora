@@ -8,12 +8,15 @@ import io.github.kawase.database.services.GoalService;
 import io.github.kawase.database.services.LearningProfileService;
 import io.github.kawase.database.services.ParentService;
 import io.github.kawase.database.services.TaskService;
+import io.github.kawase.packet.impl.game.LiveSessionUpdatePacket;
+import io.github.kawase.packet.impl.game.ParentChallengePacket;
 import io.github.kawase.packet.PacketManager;
 import io.github.kawase.socket.ServerSocket;
 import lombok.Getter;
 import org.springframework.context.ApplicationContext;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 @Getter
 public class Server {
@@ -23,6 +26,9 @@ public class Server {
     private ConcurrentHashMap<Client, ClientHandler> activeConnections;
 
     private ConcurrentHashMap<String, ClientHandler> pendingQRLogins = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<Long, LiveSessionUpdatePacket> latestLiveSessionStates;
+    private ConcurrentHashMap<Long, Set<ClientHandler>> liveSessionSpectators;
+    private ConcurrentHashMap<Long, ParentChallengePacket> activeParentChallenges;
 
     private ServerSocket socket;
 
@@ -44,6 +50,9 @@ public class Server {
     public void init(final int port,  final ApplicationContext applicationContext) {
         this.packetManager = new PacketManager();
         this.activeConnections = new ConcurrentHashMap<>();
+        this.latestLiveSessionStates = new ConcurrentHashMap<>();
+        this.liveSessionSpectators = new ConcurrentHashMap<>();
+        this.activeParentChallenges = new ConcurrentHashMap<>();
 
         // init spring boot context.
         this.context = applicationContext;

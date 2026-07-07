@@ -64,6 +64,8 @@ namespace Mentora.Network
                 61 => new CodeWorldStatePacket(),
                 62 => new CodeWorldEditorSyncPacket(),
                 63 => new CodeWorldCursorPacket(),
+                65 => new LiveSessionUpdatePacket(),
+                67 => new ParentChallengePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -675,6 +677,100 @@ namespace Mentora.Network
             Topic = ReadString(reader);
             Correctness = ReadInt32BigEndian(reader);
             Details = ReadString(reader);
+        }
+    }
+
+    public class LiveSessionUpdatePacket : Packet
+    {
+        public long ChildId;
+        public string ChildName;
+        public bool Online;
+        public string PadName;
+        public string CodeText;
+        public int AttemptCount;
+        public bool HintRequested;
+        public string Status;
+        public string UpdatedAt;
+
+        public LiveSessionUpdatePacket() : base(65) { }
+        public LiveSessionUpdatePacket(long childId, string childName, bool online, string padName, string codeText, int attemptCount, bool hintRequested, string status, string updatedAt) : base(65)
+        {
+            ChildId = childId;
+            ChildName = childName;
+            Online = online;
+            PadName = padName;
+            CodeText = codeText;
+            AttemptCount = attemptCount;
+            HintRequested = hintRequested;
+            Status = status;
+            UpdatedAt = updatedAt;
+        }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            byte[] childBytes = BitConverter.GetBytes(ChildId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            writer.Write(childBytes);
+            PutString(writer, ChildName ?? string.Empty);
+            writer.Write((byte)(Online ? 1 : 0));
+            PutString(writer, PadName ?? string.Empty);
+            PutString(writer, CodeText ?? string.Empty);
+            WriteInt32BigEndian(writer, AttemptCount);
+            writer.Write((byte)(HintRequested ? 1 : 0));
+            PutString(writer, Status ?? string.Empty);
+            PutString(writer, UpdatedAt ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] childBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            ChildId = BitConverter.ToInt64(childBytes, 0);
+            ChildName = ReadString(reader);
+            Online = reader.ReadByte() == 1;
+            PadName = ReadString(reader);
+            CodeText = ReadString(reader);
+            AttemptCount = ReadInt32BigEndian(reader);
+            HintRequested = reader.ReadByte() == 1;
+            Status = ReadString(reader);
+            UpdatedAt = ReadString(reader);
+        }
+    }
+
+    public class ParentChallengePacket : Packet
+    {
+        public string ChallengeId;
+        public long ChildId;
+        public string Message;
+        public string SentAt;
+
+        public ParentChallengePacket() : base(67) { }
+        public ParentChallengePacket(string challengeId, long childId, string message, string sentAt) : base(67)
+        {
+            ChallengeId = challengeId;
+            ChildId = childId;
+            Message = message;
+            SentAt = sentAt;
+        }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ChallengeId ?? string.Empty);
+            byte[] childBytes = BitConverter.GetBytes(ChildId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            writer.Write(childBytes);
+            PutString(writer, Message ?? string.Empty);
+            PutString(writer, SentAt ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            ChallengeId = ReadString(reader);
+            byte[] childBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            ChildId = BitConverter.ToInt64(childBytes, 0);
+            Message = ReadString(reader);
+            SentAt = ReadString(reader);
         }
     }
 

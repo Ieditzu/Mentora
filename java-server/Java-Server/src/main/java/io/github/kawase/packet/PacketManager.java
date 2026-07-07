@@ -75,6 +75,13 @@ public class PacketManager {
             case 48 -> new CompanionSpeakResponsePacket();
             case 58 -> new CompanionVoiceTextPacket();
             case 59 -> new CompanionVoiceAudioPacket();
+            case 64 -> new SubscribeLiveSessionPacket();
+            case 65 -> new LiveSessionUpdatePacket();
+            case 66 -> new SendParentChallengePacket();
+            case 67 -> new ParentChallengePacket();
+            case 68 -> new ParentChallengeCompletedPacket();
+            case 69 -> new FetchWeeklyReportPacket();
+            case 70 -> new WeeklyReportResponsePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

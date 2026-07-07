@@ -44,6 +44,25 @@ data class Child(val id: Long, val name: String, val points: Int, val isOnline: 
 data class Task(val id: Long, val name: String, val points: Int)
 data class Goal(val id: Long, val title: String, val reward: String, val completed: Boolean, val requiredPoints: Int)
 data class CompletedTask(val id: Long, val taskTitle: String, val pointValue: Int, val completedAt: String)
+data class LiveSessionState(
+    val childId: Long,
+    val childName: String,
+    val online: Boolean,
+    val padName: String,
+    val codeText: String,
+    val attemptCount: Int,
+    val hintRequested: Boolean,
+    val status: String,
+    val updatedAt: String
+)
+data class WeeklyReport(
+    val childId: Long,
+    val childName: String,
+    val weekStart: String,
+    val weekEnd: String,
+    val reportText: String,
+    val aiGenerated: Boolean
+)
 data class AiProfile(
     val level: String,
     val totalInteractions: Int,
@@ -57,6 +76,7 @@ data class AiProfile(
     val struggleConcepts: List<String>,
     val commonMistakes: List<String>,
     val helpTopics: List<String>,
+    val skillScores: Map<String, Float>,
     val lastUpdated: String,
     val summaryText: String,
     val summaryOneLine: String,
@@ -166,7 +186,14 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     val aiProfilesPython: Map<Long, AiProfile> = _aiProfilesPython
     private val _aiProfilesGeneral = mutableStateMapOf<Long, AiProfile>()
     val aiProfilesGeneral: Map<Long, AiProfile> = _aiProfilesGeneral
+    private val _liveSessions = mutableStateMapOf<Long, LiveSessionState>()
+    val liveSessions: Map<Long, LiveSessionState> = _liveSessions
+    private val _weeklyReports = mutableStateMapOf<Long, WeeklyReport>()
+    val weeklyReports: Map<Long, WeeklyReport> = _weeklyReports
+    private val _weeklyReportLoading = mutableStateMapOf<Long, Boolean>()
+    val weeklyReportLoading: Map<Long, Boolean> = _weeklyReportLoading
     private var pendingChildStatsId: Long? = null
+    private var pendingWeeklyReportChildId: Long? = null
 
     private val _errorFlow = MutableSharedFlow<String>()
     val errorFlow: SharedFlow<String> = _errorFlow.asSharedFlow()
@@ -253,6 +280,27 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     fun fetchChildProfile(childId: Long) {
         pendingChildStatsId = childId
         sendPacket(FetchChildStatsByParentPacket(childId))
+    }
+
+    fun watchLiveSession(childId: Long) {
+        sendPacket(SubscribeLiveSessionPacket(childId, true))
+    }
+
+    fun unwatchLiveSession(childId: Long) {
+        sendPacket(SubscribeLiveSessionPacket(childId, false))
+    }
+
+    fun fetchWeeklyReport(childId: Long) {
+        pendingWeeklyReportChildId = childId
+        _weeklyReportLoading[childId] = true
+        sendPacket(FetchWeeklyReportPacket(childId))
+    }
+
+    fun sendParentChallenge(childId: Long, message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isNotEmpty()) {
+            sendPacket(SendParentChallengePacket(childId, trimmed))
+        }
     }
 
     fun addGoal(childId: Long, title: String, reward: String, points: Int, taskId: Long) {
@@ -380,7 +428,14 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                             sendNotification("Task Completed!", "$childName compleated the logic minigames")
                             fetchChildren()
                         }
+                        if (packet.requestPacketId == 66) {
+                            _successFlow.emit(packet.message ?: "Challenge sent")
+                        }
                     } else {
+                        if (packet.requestPacketId == 69) {
+                            pendingWeeklyReportChildId?.let { _weeklyReportLoading[it] = false }
+                            pendingWeeklyReportChildId = null
+                        }
                         _errorFlow.emit("Error: ${packet.message}")
                     }
                 }
@@ -423,6 +478,39 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     pendingChildStatsId = null
                 }
+            }
+            is LiveSessionUpdatePacket -> {
+                _liveSessions[packet.childId] = LiveSessionState(
+                    childId = packet.childId,
+                    childName = packet.childName,
+                    online = packet.isOnline,
+                    padName = packet.padName,
+                    codeText = packet.codeText,
+                    attemptCount = packet.attemptCount,
+                    hintRequested = packet.isHintRequested,
+                    status = packet.status,
+                    updatedAt = packet.updatedAt
+                )
+            }
+            is WeeklyReportResponsePacket -> {
+                _weeklyReportLoading[packet.childId] = false
+                if (pendingWeeklyReportChildId == packet.childId) {
+                    pendingWeeklyReportChildId = null
+                }
+                _weeklyReports[packet.childId] = WeeklyReport(
+                    childId = packet.childId,
+                    childName = packet.childName,
+                    weekStart = packet.weekStart,
+                    weekEnd = packet.weekEnd,
+                    reportText = packet.reportText,
+                    aiGenerated = packet.isAiGenerated
+                )
+            }
+            is ParentChallengeCompletedPacket -> {
+                val childName = children.firstOrNull { it.id == packet.childId }?.name ?: "Your child"
+                sendNotification("Challenge completed", "$childName finished: ${packet.message}")
+                viewModelScope.launch { _successFlow.emit("$childName completed tonight's challenge") }
+                fetchChildren()
             }
         }
     }
@@ -499,6 +587,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             val commonMistakeList = commonMistakes.sortedByDescending { it.second }.filter { it.second > 0 }.map { it.first }.take(3)
+            val skillScores = buildSkillScores(topicsJson, conceptsJson, correct, incorrect)
 
             val rawOneLine = profile.optString("summaryOneLine", "")
             val rawThreeLine = profile.optString("summaryThreeLine", "")
@@ -529,6 +618,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                 struggleConcepts = struggleList,
                 commonMistakes = commonMistakeList,
                 helpTopics = helpTopics,
+                skillScores = skillScores,
                 lastUpdated = profile.optString("lastUpdated", ""),
                 summaryText = rawSummary,
                 summaryOneLine = summaryOneLine,
@@ -536,6 +626,50 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun buildSkillScores(topicsJson: JSONObject?, conceptsJson: JSONObject?, correct: Int, incorrect: Int): Map<String, Float> {
+        val axes = linkedMapOf(
+            "Loops" to listOf("loop", "for", "while", "range"),
+            "Functions" to listOf("function", "def ", "return"),
+            "Conditionals" to listOf("conditional", "condition", "if", "else", "switch"),
+            "Recursion" to listOf("recursion", "recursive"),
+            "Memory" to listOf("memory", "pointer", "reference", "address", "pass-by-reference"),
+            "Data Structures" to listOf("data", "structure", "array", "vector", "list", "collection", "dictionary", "map")
+        )
+        val totals = axes.keys.associateWith { intArrayOf(0, 0) }.toMutableMap()
+
+        fun addFrom(json: JSONObject?) {
+            if (json == null) return
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val normalized = key.lowercase()
+                val stats = json.optJSONObject(key) ?: continue
+                axes.forEach { (axis, markers) ->
+                    if (markers.any { normalized.contains(it) }) {
+                        val bucket = totals[axis] ?: intArrayOf(0, 0)
+                        bucket[0] += stats.optInt("correct", 0)
+                        bucket[1] += stats.optInt("incorrect", 0)
+                        totals[axis] = bucket
+                    }
+                }
+            }
+        }
+
+        addFrom(conceptsJson)
+        addFrom(topicsJson)
+
+        val overallTotal = correct + incorrect
+        val overall = if (overallTotal == 0) 0f else correct.toFloat() / overallTotal.toFloat()
+        return totals.mapValues { (_, score) ->
+            val attempts = score[0] + score[1]
+            when {
+                attempts > 0 -> (score[0].toFloat() / attempts.toFloat()).coerceIn(0f, 1f)
+                overallTotal > 0 -> (overall * 0.35f).coerceIn(0f, 1f)
+                else -> 0f
+            }
         }
     }
 

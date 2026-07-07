@@ -30,6 +30,13 @@ public class PacketManager {
             case 32: return new FetchChildStatsByParentPacket();
             case 30: return new AskAiPacket();
             case 31: return new AiResponsePacket();
+            case 64: return new SubscribeLiveSessionPacket();
+            case 65: return new LiveSessionUpdatePacket();
+            case 66: return new SendParentChallengePacket();
+            case 67: return new ParentChallengePacket();
+            case 68: return new ParentChallengeCompletedPacket();
+            case 69: return new FetchWeeklyReportPacket();
+            case 70: return new WeeklyReportResponsePacket();
         }
 
         return null;

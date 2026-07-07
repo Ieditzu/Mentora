@@ -205,6 +205,8 @@ public class ClientHandler {
                             }
                         }
                     }
+
+                    notifyParentChallengeCompleted(completeTaskPacket.getChildId());
                 }
 
                 case FetchTasksPacket fetchTasksPacket -> {
@@ -366,6 +368,8 @@ public class ClientHandler {
                         client.setParentId(child.getParent() != null ? child.getParent().getId() : null);
 
                         connection.send(new ChildAuthResponsePacket(true, child.getId(), child.getName(), sessionToken).encode());
+                        notifyChildOnlineState(child.getId(), child.getName());
+                        pushActiveParentChallengeToChild(child.getId());
                     } else {
                         connection.send(new ChildAuthResponsePacket(false, -1, "", "").encode());
                     }
@@ -456,6 +460,8 @@ public class ClientHandler {
                                 gameHandler.getClient().setParentId(child.getParent().getId());
                                 
                                 gameHandler.getConnection().send(new ChildAuthResponsePacket(true, child.getId(), child.getName(), sessionToken).encode());
+                                gameHandler.notifyChildOnlineState(child.getId(), child.getName());
+                                gameHandler.pushActiveParentChallengeToChild(child.getId());
                                 connection.send(new ActionResponsePacket(packet.getId(), true, "Child logged into game successfully", child.getId()).encode());
                             } else {
                                 connection.send(new ActionResponsePacket(packet.getId(), false, "Access denied: You don't own this child", -1).encode());
@@ -484,6 +490,8 @@ public class ClientHandler {
                             client.setParentId(child.getParent().getId());
                             
                             connection.send(new ChildAuthResponsePacket(true, child.getId(), child.getName(), verifySessionPacket.getSessionToken()).encode());
+                            notifyChildOnlineState(child.getId(), child.getName());
+                            pushActiveParentChallengeToChild(child.getId());
                         } else {
                             connection.send(new ChildAuthResponsePacket(false, -1, "", "").encode());
                         }
@@ -577,6 +585,100 @@ public class ClientHandler {
                             recordLearningEventPacket.getCorrectness(),
                             recordLearningEventPacket.getDetails()
                     );
+                }
+
+                case SubscribeLiveSessionPacket subscribeLiveSessionPacket -> {
+                    if (client.getParentId() == null) {
+                        throw new RuntimeException("Not logged in as a parent.");
+                    }
+
+                    final var child = verifyParentOwnsChild(subscribeLiveSessionPacket.getChildId());
+                    if (subscribeLiveSessionPacket.isSubscribe()) {
+                        Server.getInstance().getLiveSessionSpectators()
+                                .computeIfAbsent(child.getId(), id -> java.util.concurrent.ConcurrentHashMap.newKeySet())
+                                .add(this);
+                    } else {
+                        final var spectators = Server.getInstance().getLiveSessionSpectators().get(child.getId());
+                        if (spectators != null) {
+                            spectators.remove(this);
+                        }
+                    }
+
+                    sendCurrentLiveSession(child.getId(), child.getName());
+                }
+
+                case LiveSessionUpdatePacket liveSessionUpdatePacket -> {
+                    if (client.getChildId() == null) {
+                        throw new RuntimeException("Not logged in as a child.");
+                    }
+                    if (!client.getChildId().equals(liveSessionUpdatePacket.getChildId())) {
+                        throw new RuntimeException("Access denied: You can only update your own live session.");
+                    }
+                    broadcastLiveSessionUpdate(liveSessionUpdatePacket);
+                }
+
+                case SendParentChallengePacket sendParentChallengePacket -> {
+                    if (client.getParentId() == null) {
+                        throw new RuntimeException("Not logged in as a parent.");
+                    }
+
+                    final var child = verifyParentOwnsChild(sendParentChallengePacket.getChildId());
+                    String message = sendParentChallengePacket.getMessage() == null ? "" : sendParentChallengePacket.getMessage().trim();
+                    if (message.isBlank()) {
+                        throw new RuntimeException("Challenge message cannot be empty.");
+                    }
+                    if (message.length() > 240) {
+                        message = message.substring(0, 240);
+                    }
+
+                    final String challengeId = java.util.UUID.randomUUID().toString();
+                    final ParentChallengePacket challengePacket = new ParentChallengePacket(
+                            challengeId,
+                            child.getId(),
+                            message,
+                            java.time.Instant.now().toString()
+                    );
+                    Server.getInstance().getActiveParentChallenges().put(child.getId(), challengePacket);
+
+                    boolean delivered = false;
+                    for (var entry : Server.getInstance().getActiveConnections().entrySet()) {
+                        if (child.getId().equals(entry.getKey().getChildId())) {
+                            try {
+                                entry.getValue().getConnection().send(challengePacket.encode());
+                                delivered = true;
+                            } catch (Exception ignored) {}
+                        }
+                    }
+
+                    connection.send(new ActionResponsePacket(
+                            packet.getId(),
+                            true,
+                            delivered ? "Challenge sent to the game" : "Challenge queued for the next game login",
+                            child.getId()
+                    ).encode());
+                }
+
+                case FetchWeeklyReportPacket fetchWeeklyReportPacket -> {
+                    if (client.getParentId() == null) {
+                        throw new RuntimeException("Not logged in as a parent.");
+                    }
+
+                    final var child = verifyParentOwnsChild(fetchWeeklyReportPacket.getChildId());
+                    final java.time.LocalDate weekStart = java.time.LocalDate.now()
+                            .with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                    final java.time.LocalDate weekEnd = weekStart.plusDays(6);
+                    final String report = Server.getInstance().getLearningProfileService()
+                            .generateWeeklyParentReport(child.getId());
+                    final boolean aiGenerated = report != null && !report.startsWith("AI Error");
+
+                    connection.send(new WeeklyReportResponsePacket(
+                            child.getId(),
+                            child.getName(),
+                            weekStart.toString(),
+                            weekEnd.toString(),
+                            report == null ? "" : report,
+                            aiGenerated
+                    ).encode());
                 }
 
                 case GenerateAiTaskPacket generateAiTaskPacket -> {
@@ -686,11 +788,154 @@ public class ClientHandler {
         }
     }
 
+    private io.github.kawase.database.entity.Child verifyParentOwnsChild(final long childId) {
+        final var child = Server.getInstance().getChildService().findById(childId)
+                .orElseThrow(() -> new RuntimeException("Child not found"));
+
+        if (child.getParent() == null || !child.getParent().getId().equals(client.getParentId())) {
+            throw new RuntimeException("Access denied: This child does not belong to you.");
+        }
+
+        return child;
+    }
+
+    private void sendCurrentLiveSession(final long childId, final String childName) {
+        LiveSessionUpdatePacket current = Server.getInstance().getLatestLiveSessionStates().get(childId);
+        if (current == null) {
+            current = new LiveSessionUpdatePacket(
+                    childId,
+                    childName,
+                    isChildOnline(childId),
+                    "",
+                    "",
+                    0,
+                    false,
+                    isChildOnline(childId) ? "Online" : "Offline",
+                    java.time.Instant.now().toString()
+            );
+        }
+
+        connection.send(current.encode());
+    }
+
+    private boolean isChildOnline(final long childId) {
+        for (var activeClient : Server.getInstance().getActiveConnections().keySet()) {
+            if (Long.valueOf(childId).equals(activeClient.getChildId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void broadcastLiveSessionUpdate(final LiveSessionUpdatePacket update) {
+        Server.getInstance().getLatestLiveSessionStates().put(update.getChildId(), update);
+        final var spectators = Server.getInstance().getLiveSessionSpectators().get(update.getChildId());
+        if (spectators == null || spectators.isEmpty()) {
+            return;
+        }
+
+        for (ClientHandler spectator : spectators) {
+            if (spectator == null || spectator.getConnection() == null || !spectator.getConnection().isOpen()) {
+                spectators.remove(spectator);
+                continue;
+            }
+            try {
+                spectator.getConnection().send(update.encode());
+            } catch (Exception ignored) {
+                spectators.remove(spectator);
+            }
+        }
+    }
+
+    private void notifyChildOnlineState(final long childId, final String childName) {
+        LiveSessionUpdatePacket update = new LiveSessionUpdatePacket(
+                childId,
+                childName,
+                true,
+                "",
+                "",
+                0,
+                false,
+                "Online",
+                java.time.Instant.now().toString()
+        );
+        broadcastLiveSessionUpdate(update);
+    }
+
+    private void notifyChildOfflineState() {
+        if (client.getChildId() == null) {
+            return;
+        }
+
+        long childId = client.getChildId();
+        String childName = Server.getInstance().getChildService().findById(childId)
+                .map(io.github.kawase.database.entity.Child::getName)
+                .orElse("");
+        LiveSessionUpdatePacket update = new LiveSessionUpdatePacket(
+                childId,
+                childName,
+                false,
+                "",
+                "",
+                0,
+                false,
+                "Offline",
+                java.time.Instant.now().toString()
+        );
+        broadcastLiveSessionUpdate(update);
+    }
+
+    private void pushActiveParentChallengeToChild(final long childId) {
+        ParentChallengePacket challengePacket = Server.getInstance().getActiveParentChallenges().get(childId);
+        if (challengePacket == null || connection == null || !connection.isOpen()) {
+            return;
+        }
+
+        try {
+            connection.send(challengePacket.encode());
+        } catch (Exception ignored) {}
+    }
+
+    private void notifyParentChallengeCompleted(final long childId) {
+        ParentChallengePacket activeChallenge = Server.getInstance().getActiveParentChallenges().remove(childId);
+        if (activeChallenge == null) {
+            return;
+        }
+
+        ParentChallengeCompletedPacket completedPacket = new ParentChallengeCompletedPacket(
+                activeChallenge.getChallengeId(),
+                childId,
+                activeChallenge.getMessage(),
+                java.time.Instant.now().toString()
+        );
+
+        final var child = Server.getInstance().getChildService().findById(childId).orElse(null);
+        if (child == null || child.getParent() == null) {
+            return;
+        }
+
+        Long parentId = child.getParent().getId();
+        for (var entry : Server.getInstance().getActiveConnections().entrySet()) {
+            if (parentId.equals(entry.getKey().getParentId()) && entry.getKey().getChildId() == null) {
+                try {
+                    entry.getValue().getConnection().send(completedPacket.encode());
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    private void removeFromLiveSessionSpectators() {
+        for (var spectators : Server.getInstance().getLiveSessionSpectators().values()) {
+            spectators.remove(this);
+        }
+    }
+
     public void onOpen() {
 
     }
 
     public void onClose() {
-
+        removeFromLiveSessionSpectators();
+        notifyChildOfflineState();
     }
 }

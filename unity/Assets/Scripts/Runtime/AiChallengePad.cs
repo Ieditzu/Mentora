@@ -19,6 +19,9 @@ public class AiChallengePad : MonoBehaviour
     private bool challengeActive;
     private bool running;
     private long currentTaskId = -1;
+    private int attemptCount;
+    private float nextLiveSyncTime;
+    private const float LiveSyncIntervalSeconds = 0.9f;
 
     // Built UI refs
     private GameObject promptOverlay;   // "Walk closer — AI challenge awaits"
@@ -48,6 +51,12 @@ public class AiChallengePad : MonoBehaviour
             Vector3 dir = promptOverlay.transform.position - Camera.main.transform.position;
             if (dir.sqrMagnitude > 0.001f)
                 promptOverlay.transform.rotation = Quaternion.LookRotation(dir);
+        }
+
+        if (challengeActive && codeEditor != null && codeEditor.gameObject.activeInHierarchy && Time.unscaledTime >= nextLiveSyncTime)
+        {
+            nextLiveSyncTime = Time.unscaledTime + LiveSyncIntervalSeconds;
+            SendLiveSessionUpdate("Working on an AI challenge");
         }
     }
 
@@ -222,6 +231,8 @@ public class AiChallengePad : MonoBehaviour
         runButton.interactable = false;
         if (statusText) statusText.text = "Running…";
         if (outputText) outputText.text = "";
+        attemptCount++;
+        SendLiveSessionUpdate("Running AI challenge attempt " + attemptCount);
 
         Packet p = language == "cpp"
             ? (Packet)new ExecuteCPPCodePacket(code)
@@ -292,6 +303,8 @@ public class AiChallengePad : MonoBehaviour
         if (outputText) outputText.text = "";
         if (statusText) statusText.text = "";
         if (runButton) runButton.interactable = false;
+        attemptCount = 0;
+        SendLiveSessionUpdate("Requesting a personalized challenge");
 
         _ = GameClient.Instance.SendPacket(new GenerateAiTaskPacket(language));
     }
@@ -304,6 +317,7 @@ public class AiChallengePad : MonoBehaviour
         if (pointsText)      pointsText.text      = $"+{r.PointValue} pts";
         if (codeEditor)      codeEditor.text       = r.CodeTemplate;
         if (runButton)       runButton.interactable = true;
+        SendLiveSessionUpdate("Working on " + r.Title);
         RobotCompanion.Trigger("entering_" + r.Language);
     }
 
@@ -329,6 +343,7 @@ public class AiChallengePad : MonoBehaviour
             response.TrimStart().StartsWith("CORRECT", System.StringComparison.OrdinalIgnoreCase);
 
         if (statusText) statusText.text = correct ? "✓  CORRECT!" : "✗  INCORRECT";
+        SendLiveSessionUpdate(correct ? "Solved AI challenge" : "AI challenge attempt was incorrect");
 
         if (correct && currentTaskId > 0)
         {
@@ -355,6 +370,27 @@ public class AiChallengePad : MonoBehaviour
     {
         string v = PlayerPrefs.GetString("loggedInChildId", "-1");
         return long.TryParse(v, out long id) ? id : -1;
+    }
+
+    private void SendLiveSessionUpdate(string status)
+    {
+        long cid = GetChildId();
+        if (cid <= 0 || GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            return;
+        }
+
+        _ = GameClient.Instance.SendPacket(new LiveSessionUpdatePacket(
+            cid,
+            PlayerPrefs.GetString("loggedInChildName", string.Empty),
+            true,
+            language == "cpp" ? "AI C++ Challenge Pad" : "AI Python Challenge Pad",
+            codeEditor != null ? codeEditor.text ?? string.Empty : string.Empty,
+            attemptCount,
+            false,
+            string.IsNullOrWhiteSpace(status) ? "Working on an AI challenge" : status,
+            System.DateTime.UtcNow.ToString("o")
+        ));
     }
 
     // ── UI factory helpers ───────────────────────────────────────────────────

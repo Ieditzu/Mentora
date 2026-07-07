@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Paint
 import android.net.Uri
 import android.util.Base64
 import android.util.Size
@@ -17,6 +18,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,15 +47,20 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -75,7 +82,13 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.io.ByteArrayOutputStream
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 
 sealed class Screen(val route: String, val icon: ImageVector, val label: String) {
     object Home : Screen("home", Icons.Default.Home, "Home")
@@ -1177,6 +1190,353 @@ private fun ProfileDetailList(label: String, items: List<String>, accentColor: C
 }
 
 @Composable
+fun LiveSessionCard(state: LiveSessionState?, primaryColor: Color, isDarkMode: Boolean) {
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+    val online = state?.online == true
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Visibility, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Live Session", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(shape = CircleShape, color = if (online) Color(0xFF10B981).copy(alpha = 0.14f) else Color.Gray.copy(alpha = 0.14f)) {
+                    Text(
+                        if (online) "Online" else "Offline",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (online) Color(0xFF10B981) else subtextColor
+                    )
+                }
+            }
+
+            if (state == null || !online) {
+                Text("No active game feed yet.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    MiniMetric("Pad", state.padName.ifBlank { "Exploring" }, primaryColor, modifier = Modifier.weight(1f))
+                    MiniMetric("Attempts", state.attemptCount.toString(), Color(0xFFFF9800), modifier = Modifier.weight(1f))
+                    MiniMetric("Hint", if (state.hintRequested) "Asked" else "No", if (state.hintRequested) Color(0xFFEF4444) else Color(0xFF10B981), modifier = Modifier.weight(1f))
+                }
+
+                Text(state.status.ifBlank { "Watching the current activity." }, style = MaterialTheme.typography.bodySmall, color = subtextColor)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 72.dp, max = 150.dp)
+                        .background(if (isDarkMode) Color.Black.copy(alpha = 0.32f) else Color.Black.copy(alpha = 0.045f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        state.codeText.ifBlank { "// Code appears here while they type" },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (state.codeText.isBlank()) subtextColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.1f)) {
+        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = color, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f), maxLines = 1)
+        }
+    }
+}
+
+@Composable
+fun ParentChallengeCard(
+    childName: String,
+    primaryColor: Color,
+    isDarkMode: Boolean,
+    onSend: (String) -> Unit
+) {
+    var message by remember { mutableStateOf("") }
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Tonight's Challenge", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Send a parent note into the game for $childName.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                }
+            }
+
+            OutlinedTextField(
+                value = message,
+                onValueChange = { if (it.length <= 240) message = it },
+                label = { Text("Challenge message") },
+                placeholder = { Text("Try the factorial task before dinner.") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                minLines = 2,
+                maxLines = 4,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = primaryColor,
+                    focusedLabelColor = primaryColor,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+
+            Button(
+                onClick = {
+                    keyboardController?.hide()
+                    onSend(message)
+                    message = ""
+                },
+                enabled = message.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+            ) {
+                Text("Send to Game", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyReportCard(
+    report: WeeklyReport?,
+    isLoading: Boolean,
+    primaryColor: Color,
+    isDarkMode: Boolean,
+    onRefresh: () -> Unit
+) {
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Weekly AI Report", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(report?.let { "${it.weekStart} to ${it.weekEnd}" } ?: "Generated every Monday from learning data.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                }
+                IconButton(onClick = onRefresh, enabled = !isLoading) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = primaryColor)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh report", tint = primaryColor)
+                    }
+                }
+            }
+
+            Text(
+                report?.reportText ?: "No report generated yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun LearningHeatmapCard(history: List<CompletedTask>, primaryColor: Color, isDarkMode: Boolean) {
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+    val today = remember { LocalDate.now() }
+    val days = remember(today) { (55 downTo 0).map { today.minusDays(it.toLong()) } }
+    val pointsByDate = remember(history) {
+        history.groupBy { parseCompletedTaskDate(it.completedAt) }
+            .filterKeys { it != null }
+            .mapKeys { it.key!! }
+            .mapValues { (_, tasks) -> tasks.sumOf { it.pointValue } }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("Learning Heatmap", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Last 8 weeks by completed-task quality.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (row in 0 until 7) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (col in 0 until 8) {
+                            val day = days.getOrNull(col * 7 + row)
+                            val points = day?.let { pointsByDate[it] ?: 0 } ?: 0
+                            val color = heatmapColor(points, isDarkMode)
+                            Box(
+                                modifier = Modifier
+                                    .size(15.dp)
+                                    .background(color, RoundedCornerShape(3.dp))
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeatmapLegendDot("Low", Color(0xFFEF4444))
+                HeatmapLegendDot("Good", Color(0xFFF59E0B))
+                HeatmapLegendDot("Strong", Color(0xFF10B981))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeatmapLegendDot(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(9.dp).background(color, RoundedCornerShape(2.dp)))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
+    }
+}
+
+private fun parseCompletedTaskDate(value: String): LocalDate? {
+    val rawDate = value.substringBefore(" ").substringBefore("T")
+    return runCatching { LocalDate.parse(rawDate, DateTimeFormatter.ISO_LOCAL_DATE) }.getOrNull()
+}
+
+private fun heatmapColor(points: Int, isDarkMode: Boolean): Color {
+    return when {
+        points <= 0 -> if (isDarkMode) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+        points < 15 -> Color(0xFFEF4444)
+        points < 40 -> Color(0xFFF59E0B)
+        else -> Color(0xFF10B981)
+    }
+}
+
+@Composable
+fun SkillRadarCard(profiles: List<AiProfile>, primaryColor: Color, isDarkMode: Boolean) {
+    val scores = remember(profiles) { mergeSkillScores(profiles) }
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDarkMode) 0.18f else 0.12f)
+    val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val fillColor = primaryColor.copy(alpha = 0.24f)
+    val axes = radarAxes()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Radar, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("Skill Radar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Competency estimate from correct attempts and help patterns.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                }
+            }
+
+            Canvas(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+                val center = Offset(size.width / 2f, size.height / 2f + 4.dp.toPx())
+                val radius = min(size.width, size.height) * 0.33f
+                val ringCount = 4
+                val n = axes.size
+
+                fun pointFor(index: Int, scale: Float): Offset {
+                    val angle = (-PI / 2.0) + (index * 2.0 * PI / n)
+                    return Offset(
+                        center.x + (cos(angle).toFloat() * radius * scale),
+                        center.y + (sin(angle).toFloat() * radius * scale)
+                    )
+                }
+
+                repeat(ringCount) { ring ->
+                    val scale = (ring + 1).toFloat() / ringCount.toFloat()
+                    val path = Path()
+                    for (i in 0 until n) {
+                        val p = pointFor(i, scale)
+                        if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                    }
+                    path.close()
+                    drawPath(path, gridColor, style = Stroke(width = 1.dp.toPx()))
+                }
+
+                for (i in 0 until n) {
+                    drawLine(gridColor, center, pointFor(i, 1f), strokeWidth = 1.dp.toPx())
+                }
+
+                val valuePath = Path()
+                for (i in axes.indices) {
+                    val value = scores[axes[i]] ?: 0f
+                    val p = pointFor(i, value.coerceIn(0f, 1f))
+                    if (i == 0) valuePath.moveTo(p.x, p.y) else valuePath.lineTo(p.x, p.y)
+                }
+                valuePath.close()
+                drawPath(valuePath, fillColor)
+                drawPath(valuePath, primaryColor, style = Stroke(width = 2.dp.toPx()))
+
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = labelColor
+                    textAlign = Paint.Align.CENTER
+                    textSize = 11.5f * density
+                    isFakeBoldText = true
+                }
+
+                axes.forEachIndexed { index, label ->
+                    val p = pointFor(index, 1.18f)
+                    drawContext.canvas.nativeCanvas.drawText(label, p.x, p.y + 4.dp.toPx(), paint)
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                scores.entries.sortedByDescending { it.value }.take(3).forEach { (label, value) ->
+                    MiniMetric(label, "${(value * 100).toInt()}%", primaryColor, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+private fun radarAxes(): List<String> = listOf("Loops", "Functions", "Conditionals", "Recursion", "Memory", "Data Structures")
+
+private fun mergeSkillScores(profiles: List<AiProfile>): Map<String, Float> {
+    val axes = radarAxes()
+    if (profiles.isEmpty()) {
+        return axes.associateWith { 0f }
+    }
+
+    return axes.associateWith { axis ->
+        profiles.mapNotNull { it.skillScores[axis] }.maxOrNull() ?: 0f
+    }
+}
+
+@Composable
 fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
     val goals = viewModel.goals
     val cppProfile = viewModel.aiProfilesCpp[childId]
@@ -1185,6 +1545,16 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
     LaunchedEffect(childId) {
         if (childId != -1L) {
             viewModel.fetchChildProfile(childId)
+            viewModel.fetchCompletedTasks(childId)
+            viewModel.fetchWeeklyReport(childId)
+            viewModel.watchLiveSession(childId)
+        }
+    }
+    DisposableEffect(childId) {
+        onDispose {
+            if (childId != -1L) {
+                viewModel.unwatchLiveSession(childId)
+            }
         }
     }
 
@@ -1209,6 +1579,51 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
         }
 
         if (childId != -1L) {
+            item {
+                LiveSessionCard(
+                    state = viewModel.liveSessions[childId],
+                    primaryColor = viewModel.primaryColor.value,
+                    isDarkMode = viewModel.isDarkMode.value
+                )
+            }
+
+            item {
+                ParentChallengeCard(
+                    childName = viewModel.children.firstOrNull { it.id == childId }?.name ?: "your child",
+                    primaryColor = viewModel.primaryColor.value,
+                    isDarkMode = viewModel.isDarkMode.value,
+                    onSend = { message -> viewModel.sendParentChallenge(childId, message) }
+                )
+            }
+
+            item {
+                WeeklyReportCard(
+                    report = viewModel.weeklyReports[childId],
+                    isLoading = viewModel.weeklyReportLoading[childId] == true,
+                    primaryColor = viewModel.primaryColor.value,
+                    isDarkMode = viewModel.isDarkMode.value,
+                    onRefresh = { viewModel.fetchWeeklyReport(childId) }
+                )
+            }
+
+            item {
+                LearningHeatmapCard(
+                    history = viewModel.completedTasks,
+                    primaryColor = viewModel.primaryColor.value,
+                    isDarkMode = viewModel.isDarkMode.value
+                )
+            }
+
+            item {
+                SkillRadarCard(
+                    profiles = profiles.mapNotNull { it.second },
+                    primaryColor = viewModel.primaryColor.value,
+                    isDarkMode = viewModel.isDarkMode.value
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(4.dp)) }
+
             item {
                 Text("AI Insights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(4.dp))

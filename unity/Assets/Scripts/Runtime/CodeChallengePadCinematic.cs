@@ -247,6 +247,12 @@ public class CodeChallengePadCinematic : MonoBehaviour
     private bool networkSubscribed;
     private readonly List<string> aiChatLines = new List<string>();
     private const int MaxChatLines = 14;
+    private const float LiveSyncIntervalSeconds = 0.9f;
+    private int liveAttemptCount;
+    private bool liveHintRequested;
+    private string liveStatus = string.Empty;
+    private string lastLiveSnapshot = string.Empty;
+    private float nextLiveSyncTime;
 
     public void ConfigureForPad(bool useHardMode)
     {
@@ -308,6 +314,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
         {
             SetCursorVisible(true);
         }
+
+        MaybeSyncLiveSession();
     }
 
     private void EnsureDispatcher()
@@ -528,6 +536,11 @@ public class CodeChallengePadCinematic : MonoBehaviour
             continueRequested = false;
 
             ApplyChallengeContent(challenge, current, challenges.Length, answers[current], attemptsLeft[current]);
+            liveAttemptCount = GetAttemptsAllowed() - attemptsLeft[current];
+            liveHintRequested = false;
+            liveStatus = "Working on " + GetChallengeTitle(challenge);
+            lastLiveSnapshot = string.Empty;
+            SendLiveSessionUpdate(liveStatus);
 
             verifyButton.onClick.RemoveAllListeners();
             verifyButton.onClick.AddListener(OnVerifyClicked);
@@ -552,6 +565,9 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 if (hintRequested)
                 {
                     hintRequested = false;
+                    liveHintRequested = true;
+                    liveStatus = "Asked for a hint";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return ShowHintScreen(GetChallengeHint(challenge));
                     if (leaveRequested)
                     {
@@ -574,6 +590,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 else if (runRequested)
                 {
                     runRequested = false;
+                    liveStatus = "Running code";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return RunCodeOnly(codeInput.text);
                     ShowMainUi(true);
                     ShowChallengeButtons(current > 0, true, true, true, false, false);
@@ -595,11 +613,16 @@ public class CodeChallengePadCinematic : MonoBehaviour
             }
 
             bool correct = false;
+            liveAttemptCount = GetAttemptsAllowed() - attemptsLeft[current] + 1;
+            liveStatus = "Submitting attempt " + liveAttemptCount;
+            SendLiveSessionUpdate(liveStatus);
             yield return EvaluateChallenge(challenge, codeInput.text, result => correct = result);
             answers[current] = codeInput.text;
 
             if (correct)
             {
+                liveStatus = "Solved " + GetChallengeTitle(challenge);
+                SendLiveSessionUpdate(liveStatus);
                 if (!solved[current])
                 {
                     solved[current] = true;
@@ -615,6 +638,9 @@ public class CodeChallengePadCinematic : MonoBehaviour
                     if (hintRequested)
                     {
                         hintRequested = false;
+                        liveHintRequested = true;
+                        liveStatus = "Asked for a hint";
+                        SendLiveSessionUpdate(liveStatus);
                         yield return ShowHintScreen(GetChallengeHint(challenge));
                         if (leaveRequested)
                         {
@@ -641,6 +667,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
                     else if (runRequested)
                     {
                         runRequested = false;
+                        liveStatus = "Running code";
+                        SendLiveSessionUpdate(liveStatus);
                         yield return RunCodeOnly(codeInput.text);
                         ShowMainUi(true);
                         ShowChallengeButtons(current > 0, true, true, false, true, false);
@@ -667,6 +695,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
             }
 
             attemptsLeft[current] = Mathf.Max(0, attemptsLeft[current] - 1);
+            liveStatus = "Incorrect attempt";
+            SendLiveSessionUpdate(liveStatus);
             if (attemptsLeft[current] > 0)
             {
                 feedbackText.text = Localize("Incorect. Mai ai ", "Incorrect. You have ") + attemptsLeft[current] + Localize(" incercari.", " attempts left.");
@@ -688,6 +718,9 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 if (hintRequested)
                 {
                     hintRequested = false;
+                    liveHintRequested = true;
+                    liveStatus = "Asked for a hint";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return ShowHintScreen(GetChallengeHint(challenge));
                     if (leaveRequested)
                     {
@@ -714,6 +747,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 else if (runRequested)
                 {
                     runRequested = false;
+                    liveStatus = "Running code";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return RunCodeOnly(codeInput.text);
                     ShowMainUi(true);
                     ShowChallengeButtons(current > 0, true, true, true, false, false);
@@ -734,6 +769,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
         titleText.text = mode == ChallengeMode.Medium
             ? Localize("Medium complet", "Medium complete")
             : Localize("Hard complet", "Hard complete");
+        liveStatus = "Finished " + GetLivePadName();
+        SendLiveSessionUpdate(liveStatus);
         counterText.text = Localize("Rezultat", "Result");
         promptText.text = Localize("Ai rezolvat corect ", "You solved ") + score + Localize(" din ", " out of ") + challenges.Length + Localize(" provocari.", " challenges correctly.");
         feedbackText.text = Localize("Poti reface intrebarile gresite sau poti iesi.", "You can retry the wrong questions or leave.");
@@ -1324,6 +1361,67 @@ public class CodeChallengePadCinematic : MonoBehaviour
         StartCoroutine(SendPacketWithConnect(new RecordLearningEventPacket(eventType, topic, correctness, details), null));
     }
 
+    private void MaybeSyncLiveSession()
+    {
+        if (!running || codeInput == null || !codeInput.gameObject.activeInHierarchy)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime < nextLiveSyncTime)
+        {
+            return;
+        }
+
+        nextLiveSyncTime = Time.unscaledTime + LiveSyncIntervalSeconds;
+        SendLiveSessionUpdate(liveStatus);
+    }
+
+    private void SendLiveSessionUpdate(string status)
+    {
+        if (GameClient.Instance == null || !GameClient.Instance.IsConnected)
+        {
+            return;
+        }
+
+        long childId = GetLoggedInChildId();
+        if (childId <= 0)
+        {
+            return;
+        }
+
+        string code = codeInput != null ? codeInput.text ?? string.Empty : string.Empty;
+        string snapshot = GetLivePadName() + "|" + liveAttemptCount + "|" + liveHintRequested + "|" + status + "|" + code;
+        if (snapshot == lastLiveSnapshot && Time.unscaledTime < nextLiveSyncTime + 0.01f)
+        {
+            return;
+        }
+
+        lastLiveSnapshot = snapshot;
+        _ = GameClient.Instance.SendPacket(new LiveSessionUpdatePacket(
+            childId,
+            PlayerPrefs.GetString("loggedInChildName", string.Empty),
+            true,
+            GetLivePadName(),
+            code,
+            liveAttemptCount,
+            liveHintRequested,
+            string.IsNullOrWhiteSpace(status) ? "Working on a challenge" : status,
+            System.DateTime.UtcNow.ToString("o")
+        ));
+    }
+
+    private string GetLivePadName()
+    {
+        return mode == ChallengeMode.Hard ? "C++ Hard Pad" : "C++ Medium Pad";
+    }
+
+    private static long GetLoggedInChildId()
+    {
+        string value = PlayerPrefs.GetString("loggedInChildId", "-1");
+        return long.TryParse(value, out long childId) ? childId : -1;
+    }
+
     private static readonly System.Collections.Generic.Dictionary<string, string> ValidationIdToTaskTitle = new System.Collections.Generic.Dictionary<string, string>
     {
         { "medium_multiply", "Fix MultiplyByTwo" },
@@ -1463,6 +1561,11 @@ public class CodeChallengePadCinematic : MonoBehaviour
             codeInput.text = retryAnswers[current];
             feedbackText.text = Localize("Incercari ramase: ", "Attempts left: ") + retryAttempts[current] + " / " + GetAttemptsAllowed();
             feedbackText.color = textColor;
+            liveAttemptCount = GetAttemptsAllowed() - retryAttempts[current];
+            liveHintRequested = false;
+            liveStatus = "Retrying " + GetChallengeTitle(challenge);
+            lastLiveSnapshot = string.Empty;
+            SendLiveSessionUpdate(liveStatus);
             if (outputText != null && mode == ChallengeMode.Medium)
             {
                 outputText.text = Localize("Output-ul va aparea aici.", "Output will appear here.");
@@ -1490,6 +1593,9 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 if (hintRequested)
                 {
                     hintRequested = false;
+                    liveHintRequested = true;
+                    liveStatus = "Asked for a hint";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return ShowHintScreen(GetChallengeHint(challenge));
                     if (leaveRequested)
                     {
@@ -1512,6 +1618,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
                 else if (runRequested)
                 {
                     runRequested = false;
+                    liveStatus = "Running code";
+                    SendLiveSessionUpdate(liveStatus);
                     yield return RunCodeOnly(codeInput.text);
                     ShowMainUi(true);
                     ShowChallengeButtons(current > 0, true, true, true, false, false);
@@ -1534,9 +1642,14 @@ public class CodeChallengePadCinematic : MonoBehaviour
 
             retryAnswers[current] = codeInput.text;
             bool retryCorrect = false;
+            liveAttemptCount = GetAttemptsAllowed() - retryAttempts[current] + 1;
+            liveStatus = "Submitting retry attempt " + liveAttemptCount;
+            SendLiveSessionUpdate(liveStatus);
             yield return EvaluateChallenge(challenge, codeInput.text, result => retryCorrect = result);
             if (retryCorrect)
             {
+                liveStatus = "Solved " + GetChallengeTitle(challenge);
+                SendLiveSessionUpdate(liveStatus);
                 retrySolved[current] = true;
                 solved[retrySourceIndex[current]] = true;
                 AutoCompleteTaskForChallenge(challenge);
@@ -1549,6 +1662,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
                     if (runRequested)
                     {
                         runRequested = false;
+                        liveStatus = "Running code";
+                        SendLiveSessionUpdate(liveStatus);
                         yield return RunCodeOnly(codeInput.text);
                         ShowMainUi(true);
                         ShowChallengeButtons(current > 0, true, true, false, true, false);
@@ -1566,6 +1681,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
             }
 
             retryAttempts[current] = Mathf.Max(0, retryAttempts[current] - 1);
+            liveStatus = "Incorrect retry attempt";
+            SendLiveSessionUpdate(liveStatus);
             if (retryAttempts[current] > 0)
             {
                 feedbackText.text = Localize("Incorect. Mai ai ", "Incorrect. You have ") + retryAttempts[current] + Localize(" incercari.", " attempts left.");
