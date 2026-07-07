@@ -55,12 +55,12 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.4.0")
 
     // CameraX and ML Kit for QR Scanning
-    val cameraxVersion = "1.3.0"
+    val cameraxVersion = "1.6.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation("com.google.zxing:core:3.5.4")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

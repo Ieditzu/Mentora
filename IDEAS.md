@@ -32,21 +32,21 @@ Two students race to solve the same challenge simultaneously. Countdown timer, b
 
 ## Android App
 
-### [ ] Live session spectator mode
+### [x] Live session spectator mode
 Parent opens app while child is playing and sees a live feed: which pad they're at, what code they're typing, attempt count, whether they asked for a hint. Same WebSocket infrastructure, more events.
 
-### [ ] Weekly AI report card
+### [x] Weekly AI report card
 Every Monday the app generates a natural-language letter from the AI tutor:
 > "This week Andrei spent 3 sessions on Python. He consistently miscounts loop ranges — appeared in 5 of 8 mistakes..."
 All data already exists. One Groq call with a smart prompt.
 
-### [ ] Parent sets tonight's challenge
+### [x] Parent sets tonight's challenge
 From the app, parent sends a custom challenge push to the game: "Try the factorial task before dinner." Child sees it in-game as a notification from their parent. Parent gets push on completion.
 
-### [ ] Learning heatmap calendar
+### [x] Learning heatmap calendar
 GitHub contribution-style graph — green/yellow/red days based on session quality. Far more readable than "streak: 6 days."
 
-### [ ] Skill radar chart
+### [x] Skill radar chart
 Hexagonal radar with axes: Loops, Functions, Conditionals, Recursion, Memory, Data Structures. Fills as child demonstrates competency. The visual parents screenshot and share.
 
 ---
