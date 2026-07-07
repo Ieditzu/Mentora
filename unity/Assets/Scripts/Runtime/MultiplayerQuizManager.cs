@@ -85,6 +85,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private QuizQuestion[] questions;
     private float  timerRemaining;
     private bool   timerActive;
+    private Coroutine pendingEarlyFinishRoutine;
     private readonly Dictionary<string, int> scores         = new Dictionary<string, int>();
     private readonly Dictionary<string, int> pendingAnswers = new Dictionary<string, int>();
     private readonly HashSet<string> expectedAnswerClientIds = new HashSet<string>();
@@ -137,6 +138,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         if (timerRemaining <= 0f && isHost)
         {
             timerActive = false;
+            CancelPendingEarlyFinish();
             BroadcastResults();
         }
 
@@ -451,6 +453,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         if (currentQuestionIndex >= totalQuestions) { EndQuiz(); return; }
 
+        CancelPendingEarlyFinish();
         pendingAnswers.Clear();
         expectedAnswerClientIds.Clear();
         var q = questions[currentQuestionIndex];
@@ -507,6 +510,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         quizRunning = false;
         timerActive = false;
+        CancelPendingEarlyFinish();
         HideInteraction();
 
         if (theaterSubText != null)      theaterSubText.text      = "Quiz Over! Final Scores:";
@@ -633,6 +637,30 @@ public class MultiplayerQuizManager : MonoBehaviour
         return string.IsNullOrWhiteSpace(localId) ? "__host_local__" : localId;
     }
 
+    private void CancelPendingEarlyFinish()
+    {
+        if (pendingEarlyFinishRoutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(pendingEarlyFinishRoutine);
+        pendingEarlyFinishRoutine = null;
+    }
+
+    private IEnumerator DelayedBroadcastResults(float delaySeconds)
+    {
+        yield return new WaitForSeconds(delaySeconds);
+        pendingEarlyFinishRoutine = null;
+
+        if (!quizRunning)
+        {
+            yield break;
+        }
+
+        BroadcastResults();
+    }
+
     private void TryFinishQuestionEarly()
     {
         if (!isHost || !timerActive)
@@ -659,7 +687,8 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
 
         timerActive = false;
-        BroadcastResults();
+        CancelPendingEarlyFinish();
+        pendingEarlyFinishRoutine = StartCoroutine(DelayedBroadcastResults(2f));
     }
 
     private void OnCommunityPacket(Packet packet)
