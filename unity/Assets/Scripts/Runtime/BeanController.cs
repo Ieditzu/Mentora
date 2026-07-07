@@ -21,6 +21,10 @@ public class BeanController : MonoBehaviour
     [Header("Bean Visual")]
     [SerializeField] private GameObject beanVisualPrefab;
     [SerializeField] private float beanVisualScale = 4.4f;
+    [Header("Audio")]
+    [SerializeField] private float footstepIntervalWalk = 0.42f;
+    [SerializeField] private float footstepIntervalSprint = 0.28f;
+    [SerializeField] private float footstepMinMoveAmount = 0.18f;
 
     private Rigidbody rb;
     private Vector3 input;
@@ -41,6 +45,7 @@ public class BeanController : MonoBehaviour
     private float pitch;
     private bool xrHeadOriginCaptured;
     private Vector3 xrHeadOriginLocalPosition;
+    private float footstepTimer;
 
     public static bool KeyboardInputEnabled { get; set; } = true;
 
@@ -277,12 +282,14 @@ public class BeanController : MonoBehaviour
 
         if (CommunityIslandMenu.IsVrMenuActive)
         {
+            footstepTimer = 0f;
             rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
             return;
         }
 
         if (hardFreeze)
         {
+            footstepTimer = 0f;
             rb.velocity = new Vector3(0, rb.velocity.y, 0);
             return;
         }
@@ -298,6 +305,7 @@ public class BeanController : MonoBehaviour
 
         if (movementLocked)
         {
+            footstepTimer = 0f;
             return;
         }
 
@@ -334,6 +342,7 @@ public class BeanController : MonoBehaviour
 
         Vector3 targetVelocity = moveDir * currentSpeed;
         rb.velocity = new Vector3(targetVelocity.x, rb.velocity.y, targetVelocity.z);
+        UpdateFootsteps(targetVelocity.magnitude);
 
         if (gravityMultiplier > 1f)
         {
@@ -366,6 +375,24 @@ public class BeanController : MonoBehaviour
         Vector3 bottom = center - transform.up * halfHeight;
         Vector3 castStart = bottom + transform.up * 0.08f;
         return Physics.SphereCast(castStart, radius, Vector3.down, out _, groundCheckDistance);
+    }
+
+    private void UpdateFootsteps(float planarSpeed)
+    {
+        if (!isGrounded || planarSpeed < footstepMinMoveAmount)
+        {
+            footstepTimer = 0f;
+            return;
+        }
+
+        footstepTimer -= Time.fixedDeltaTime;
+        if (footstepTimer > 0f)
+        {
+            return;
+        }
+
+        AudioManager.PlayFootstep(isSprinting ? 0.95f : 0.78f);
+        footstepTimer = isSprinting ? footstepIntervalSprint : footstepIntervalWalk;
     }
 
     private void SpawnVisualBeanIfNeeded()

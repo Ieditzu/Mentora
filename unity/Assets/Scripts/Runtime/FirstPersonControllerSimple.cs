@@ -77,6 +77,10 @@ public class FirstPersonControllerSimple : MonoBehaviour
     [SerializeField] private float noclipMoveSpeed = 12f;
     [SerializeField] private float noclipSprintMultiplier = 2.1f;
     [SerializeField] private float noclipVerticalSpeed = 8f;
+    [Header("Audio")]
+    [SerializeField] private float footstepIntervalWalk = 0.46f;
+    [SerializeField] private float footstepIntervalSprint = 0.3f;
+    [SerializeField] private float footstepMinMoveAmount = 0.2f;
 
     private CharacterController controller;
     private Transform camTransform;
@@ -104,6 +108,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
     private Transform rightVrControllerVisual;
     private bool handTrackingVisualsActive;
     private bool noclipEnabled;
+    private float footstepTimer;
 
     private bool ShouldDriveVrControllerVisuals()
     {
@@ -271,6 +276,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
         if (movementLocked)
         {
+            footstepTimer = 0f;
             if (noclipEnabled)
             {
                 velocity = Vector3.zero;
@@ -283,6 +289,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         if (noclipEnabled)
         {
+            footstepTimer = 0f;
             MoveNoclip();
             if (ShouldDriveVrControllerVisuals())
             {
@@ -410,7 +417,8 @@ public class FirstPersonControllerSimple : MonoBehaviour
 
         bool sprintHeld = GetKeyCompat(sprintKey) || IsVrSprintHeld();
         bool movingForward = v > 0.01f;
-        if (sprintHeld || (doubleTapSprintActive && movingForward))
+        bool sprinting = sprintHeld || (doubleTapSprintActive && movingForward);
+        if (sprinting)
         {
             speed *= sprintMultiplier;
         }
@@ -421,6 +429,7 @@ public class FirstPersonControllerSimple : MonoBehaviour
         }
 
         controller.Move(input * speed * Time.deltaTime);
+        UpdateFootsteps(grounded, inputMagnitude, sprinting);
 
         bool jumpRequested = GetKeyDownCompat(jumpKey) || MobileTouchInput.ConsumeJumpRequest() || TryGetVrJumpRequest();
         bool canJump = grounded || (Time.time - lastGroundedTime) <= coyoteTime;
@@ -1069,12 +1078,32 @@ public class FirstPersonControllerSimple : MonoBehaviour
         if (controller == null || !controller.enabled)
         {
             velocity = Vector3.zero;
+            footstepTimer = 0f;
             return;
         }
 
         ApplyGroundStick();
+        footstepTimer = 0f;
         velocity.y -= gravity * Time.deltaTime;
         controller.Move(new Vector3(0f, velocity.y, 0f) * Time.deltaTime);
+    }
+
+    private void UpdateFootsteps(bool grounded, float moveAmount, bool sprinting)
+    {
+        if (!grounded || moveAmount < footstepMinMoveAmount)
+        {
+            footstepTimer = 0f;
+            return;
+        }
+
+        footstepTimer -= Time.deltaTime;
+        if (footstepTimer > 0f)
+        {
+            return;
+        }
+
+        AudioManager.PlayFootstep(sprinting ? 0.95f : 0.8f);
+        footstepTimer = sprinting ? footstepIntervalSprint : footstepIntervalWalk;
     }
 
     public void RespawnAtSpawnPoint()
