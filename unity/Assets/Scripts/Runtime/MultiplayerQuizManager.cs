@@ -87,6 +87,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private bool   timerActive;
     private readonly Dictionary<string, int> scores         = new Dictionary<string, int>();
     private readonly Dictionary<string, int> pendingAnswers = new Dictionary<string, int>();
+    private readonly HashSet<string> expectedAnswerClientIds = new HashSet<string>();
 
     // ── Static entry point called from PauseMenuManager ──────────────────────
 
@@ -319,14 +320,14 @@ public class MultiplayerQuizManager : MonoBehaviour
                 theaterAnswerBgs[i].color = (i == idx) ? AnswerColors[i] : AnswerColors[i] * 0.3f;
         }
 
-        string myId = MultiplayerSessionManager.Instance?.LocalClientId ?? string.Empty;
-        if (isHost && !string.IsNullOrEmpty(myId))
+        string myId = GetLocalQuizParticipantId();
+        if (isHost)
         {
             pendingAnswers[myId] = idx;
             TryFinishQuestionEarly();
         }
 
-        if (!string.IsNullOrEmpty(myId))
+        if (!string.IsNullOrEmpty(MultiplayerSessionManager.Instance?.LocalClientId))
             MultiplayerSessionManager.Instance?.SendQuizPacketToHost(new QuizAnswerPacket(myId, idx));
     }
 
@@ -451,7 +452,9 @@ public class MultiplayerQuizManager : MonoBehaviour
         if (currentQuestionIndex >= totalQuestions) { EndQuiz(); return; }
 
         pendingAnswers.Clear();
+        expectedAnswerClientIds.Clear();
         var q = questions[currentQuestionIndex];
+        CaptureExpectedAnswerParticipants();
 
         SetTheaterQuestion(q.prompt, q.options, "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions + "  |  " + QuizTimerSeconds + "s");
         ShowInteraction(q.options);
@@ -600,6 +603,36 @@ public class MultiplayerQuizManager : MonoBehaviour
         ShowScoresOnTheater(map);
     }
 
+    private void CaptureExpectedAnswerParticipants()
+    {
+        MultiplayerSessionManager sessionManager = MultiplayerSessionManager.Instance;
+        if (sessionManager == null)
+        {
+            expectedAnswerClientIds.Add(GetLocalQuizParticipantId());
+            return;
+        }
+
+        List<string> ids = sessionManager.GetConnectedPlayerIds(GetLocalQuizParticipantId());
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(ids[i]))
+            {
+                expectedAnswerClientIds.Add(ids[i]);
+            }
+        }
+
+        if (expectedAnswerClientIds.Count == 0)
+        {
+            expectedAnswerClientIds.Add(GetLocalQuizParticipantId());
+        }
+    }
+
+    private string GetLocalQuizParticipantId()
+    {
+        string localId = MultiplayerSessionManager.Instance != null ? MultiplayerSessionManager.Instance.LocalClientId : string.Empty;
+        return string.IsNullOrWhiteSpace(localId) ? "__host_local__" : localId;
+    }
+
     private void TryFinishQuestionEarly()
     {
         if (!isHost || !timerActive)
@@ -607,8 +640,20 @@ public class MultiplayerQuizManager : MonoBehaviour
             return;
         }
 
-        int playerCount = MultiplayerSessionManager.Instance?.ConnectedPlayerCount ?? 1;
-        if (playerCount <= 0 || pendingAnswers.Count < playerCount)
+        if (expectedAnswerClientIds.Count == 0)
+        {
+            CaptureExpectedAnswerParticipants();
+        }
+
+        foreach (string clientId in expectedAnswerClientIds)
+        {
+            if (!pendingAnswers.ContainsKey(clientId))
+            {
+                return;
+            }
+        }
+
+        if (pendingAnswers.Count == 0)
         {
             return;
         }
