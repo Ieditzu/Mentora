@@ -9,6 +9,7 @@ using UnityEngine.XR;
 using Mentora.Network;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 
 using XRCommonUsages = UnityEngine.XR.CommonUsages;
@@ -80,6 +81,8 @@ public class PauseMenuManager : MonoBehaviour
     private long loggedInChildId = -1;
     private string loggedInChildName = "";
     private int loggedInChildPoints = 0;
+    private string loggedInChildGameStatsJson = string.Empty;
+    private string loggedInChildProgrammingProfileSummary = string.Empty;
 
     private GameObject taskListContainer;
     private List<FetchTasksResponsePacket.TaskDto> availableTasks = new List<FetchTasksResponsePacket.TaskDto>();
@@ -214,6 +217,9 @@ public class PauseMenuManager : MonoBehaviour
                 {
                     loggedInChildId = authResp.ChildId;
                     loggedInChildName = authResp.ChildName;
+                    PlayerPrefs.SetString("loggedInChildId", authResp.ChildId.ToString());
+                    PlayerPrefs.SetString("loggedInChildName", authResp.ChildName ?? string.Empty);
+                    PlayerPrefs.Save();
                     
                     // Save session locally
                     try {
@@ -225,6 +231,7 @@ public class PauseMenuManager : MonoBehaviour
                     }
 
                     _ = GameClient.Instance.SendPacket(new FetchChildStatsPacket());
+                    _ = GameClient.Instance.SendPacket(new FetchProgrammingProfileSummaryPacket());
                     _ = GameClient.Instance.SendPacket(new FetchTasksPacket());
                     _ = GameClient.Instance.SendPacket(new FetchGoalsPacket(-1));
 
@@ -245,13 +252,42 @@ public class PauseMenuManager : MonoBehaviour
         {
             UnityMainThreadDispatcher.Instance().Enqueue(() => {
                 loggedInChildPoints = statsResp.TotalPoints;
+                loggedInChildGameStatsJson = statsResp.GameStatsJson ?? string.Empty;
                 serverStreak = statsResp.Streak;
                 serverCompletedTaskCount = statsResp.CompletedTaskCount;
                 serverTotalTaskCount = statsResp.TotalTaskCount;
+                PlayerPrefs.SetString("loggedInChildName", statsResp.Name ?? loggedInChildName ?? string.Empty);
+                PlayerPrefs.SetString("loggedInChildPoints", statsResp.TotalPoints.ToString());
+                PlayerPrefs.SetString("loggedInChildGameStatsJson", loggedInChildGameStatsJson);
+                PlayerPrefs.Save();
                 if (qrStatusText != null)
                     qrStatusText.text = statsResp.Name + " | " + statsResp.TotalPoints + " pts";
                 UpdateProgressBar();
                 UpdateStreakDisplay();
+            });
+        }
+        else if (packet is FetchProgrammingProfileSummaryResponsePacket programmingProfileResp)
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() => {
+                loggedInChildProgrammingProfileSummary = programmingProfileResp.ProfileSummary ?? string.Empty;
+                PlayerPrefs.SetString("loggedInChildProgrammingProfileSummary", loggedInChildProgrammingProfileSummary);
+                PlayerPrefs.Save();
+
+                if (!string.IsNullOrWhiteSpace(programmingProfileResp.ChildName))
+                {
+                    loggedInChildName = programmingProfileResp.ChildName;
+                }
+
+                loggedInChildPoints = programmingProfileResp.TotalPoints;
+
+                MultiplayerSessionManager.Instance?.SetLocalProgrammingProfile(
+                    programmingProfileResp.ChildId,
+                    programmingProfileResp.ChildName,
+                    programmingProfileResp.TotalPoints,
+                    programmingProfileResp.Streak,
+                    programmingProfileResp.CompletedTaskCount,
+                    programmingProfileResp.TotalTaskCount,
+                    programmingProfileResp.ProfileSummary);
             });
         }
         else if (packet is FetchTasksResponsePacket tasksResp)
@@ -1066,16 +1102,20 @@ public class PauseMenuManager : MonoBehaviour
         qopFetchBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
         qopFetchBtn.GetComponentInChildren<Text>().fontSize = 14;
 
-        Button qopStartBtn = CreateButton(qopLeft.transform, "StartBtn", "▶  Start Quiz", new Vector2(0f, 12f), new Color(0.18f, 0.63f, 0.30f, 1f));
+        Button qopAiBtn = CreateButton(qopLeft.transform, "AiQuizBtn", "✦  AI Profile Quiz", new Vector2(0f, 12f), new Color(0.78f, 0.45f, 0.16f, 1f));
+        qopAiBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
+        qopAiBtn.GetComponentInChildren<Text>().fontSize = 14;
+
+        Button qopStartBtn = CreateButton(qopLeft.transform, "StartBtn", "▶  Start Quiz", new Vector2(0f, -42f), new Color(0.18f, 0.63f, 0.30f, 1f));
         qopStartBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(220f, 44f);
         qopStartBtn.GetComponentInChildren<Text>().fontSize = 14;
         qopStartBtn.interactable = false;
 
-        Button qopPrevBtn = CreateButton(qopLeft.transform, "PrevBtn", "◀", new Vector2(-70f, -42f), new Color(0.25f, 0.30f, 0.42f, 1f));
+        Button qopPrevBtn = CreateButton(qopLeft.transform, "PrevBtn", "◀", new Vector2(-70f, -96f), new Color(0.25f, 0.30f, 0.42f, 1f));
         qopPrevBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(64f, 36f);
         qopPrevBtn.gameObject.SetActive(false);
 
-        Button qopNextBtn = CreateButton(qopLeft.transform, "NextBtn", "▶", new Vector2(70f, -42f), new Color(0.25f, 0.30f, 0.42f, 1f));
+        Button qopNextBtn = CreateButton(qopLeft.transform, "NextBtn", "▶", new Vector2(70f, -96f), new Color(0.25f, 0.30f, 0.42f, 1f));
         qopNextBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(64f, 36f);
         qopNextBtn.gameObject.SetActive(false);
 
@@ -1106,7 +1146,7 @@ public class PauseMenuManager : MonoBehaviour
 
         // Wire all quiz UI refs into MultiplayerQuizManager
         MultiplayerQuizManager.InjectQuizUI(qopStatusTxt, qopCourseTxt, qopSelectedTxt,
-                                             qopFetchBtn, qopStartBtn, qopPrevBtn, qopNextBtn);
+                                             qopFetchBtn, qopAiBtn, qopStartBtn, qopPrevBtn, qopNextBtn);
         qopStartBtn.onClick.AddListener(MultiplayerQuizManager.HostStartQuiz);
 
         goalsPanel = CreateUiObject("GoalsPanel", canvas.transform);
@@ -1863,6 +1903,8 @@ public class PauseMenuManager : MonoBehaviour
         loggedInChildId = -1;
         loggedInChildName = "";
         loggedInChildPoints = 0;
+        loggedInChildGameStatsJson = string.Empty;
+        loggedInChildProgrammingProfileSummary = string.Empty;
         childGoals.Clear();
         RebuildGoalList();
         if (qrStatusText != null) qrStatusText.text = "Not logged in";
@@ -1880,6 +1922,14 @@ public class PauseMenuManager : MonoBehaviour
         {
             Debug.LogError("Failed to clear session file: " + e.Message);
         }
+
+        PlayerPrefs.DeleteKey("loggedInChildId");
+        PlayerPrefs.DeleteKey("loggedInChildName");
+        PlayerPrefs.DeleteKey("loggedInChildPoints");
+        PlayerPrefs.DeleteKey("loggedInChildGameStatsJson");
+        PlayerPrefs.DeleteKey("loggedInChildProgrammingProfileSummary");
+        PlayerPrefs.Save();
+        MultiplayerSessionManager.Instance?.ClearLocalProgrammingProfile();
     }
 
     private void PauseGame()
@@ -1964,6 +2014,103 @@ public class PauseMenuManager : MonoBehaviour
     }
 
     public static string GetLoggedInChildName() => instance != null ? instance.loggedInChildName : string.Empty;
+
+    public static long GetLoggedInChildId()
+    {
+        if (instance != null && instance.loggedInChildId > 0)
+        {
+            return instance.loggedInChildId;
+        }
+
+        string stored = PlayerPrefs.GetString("loggedInChildId", "-1");
+        return long.TryParse(stored, out long parsed) ? parsed : -1;
+    }
+
+    public static string BuildAiQuizProfileContext()
+    {
+        MultiplayerSessionManager session = MultiplayerSessionManager.Instance;
+        if (session != null)
+        {
+            string mergedProfileContext = session.BuildMergedProgrammingProfileContext();
+            if (!string.IsNullOrWhiteSpace(mergedProfileContext))
+            {
+                return mergedProfileContext;
+            }
+        }
+
+        StringBuilder builder = new StringBuilder();
+        string name = instance != null && !string.IsNullOrWhiteSpace(instance.loggedInChildName)
+            ? instance.loggedInChildName
+            : PlayerPrefs.GetString("loggedInChildName", "Player");
+        int points = instance != null ? instance.loggedInChildPoints : ParseStoredInt("loggedInChildPoints");
+        string statsJson = instance != null ? instance.loggedInChildGameStatsJson : PlayerPrefs.GetString("loggedInChildGameStatsJson", string.Empty);
+        string programmingProfileSummary = instance != null
+            ? instance.loggedInChildProgrammingProfileSummary
+            : PlayerPrefs.GetString("loggedInChildProgrammingProfileSummary", string.Empty);
+
+        builder.AppendLine("Child name: " + name);
+        builder.AppendLine("Total points: " + points);
+        if (!string.IsNullOrWhiteSpace(programmingProfileSummary))
+        {
+            builder.AppendLine("Programming profile summary:");
+            builder.AppendLine(programmingProfileSummary);
+        }
+
+        if (instance != null)
+        {
+            builder.AppendLine("Streak: " + instance.serverStreak);
+            builder.AppendLine("Completed tasks: " + instance.serverCompletedTaskCount + " / " + instance.serverTotalTaskCount);
+
+            if (instance.availableTasks != null && instance.availableTasks.Count > 0)
+            {
+                builder.AppendLine("Known tasks:");
+                int maxTasks = Mathf.Min(8, instance.availableTasks.Count);
+                for (int i = 0; i < maxTasks; i++)
+                {
+                    builder.AppendLine("- " + instance.availableTasks[i].Title + " (" + instance.availableTasks[i].Points + " pts)");
+                }
+            }
+
+            if (instance.childGoals != null && instance.childGoals.Count > 0)
+            {
+                builder.AppendLine("Parent goals:");
+                int maxGoals = Mathf.Min(6, instance.childGoals.Count);
+                for (int i = 0; i < maxGoals; i++)
+                {
+                    var goal = instance.childGoals[i];
+                    builder.AppendLine("- " + goal.Title + " | reward: " + goal.Reward + " | completed: " + (goal.IsCompleted ? "yes" : "no"));
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(statsJson))
+        {
+            builder.AppendLine("Game stats JSON:");
+            builder.AppendLine(statsJson);
+        }
+
+        if (session != null)
+        {
+            List<string> ids = session.GetConnectedPlayerIds();
+            if (ids != null && ids.Count > 0)
+            {
+                builder.AppendLine("Connected multiplayer lobby:");
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    builder.AppendLine("- " + session.ResolvePlayerName(ids[i]));
+                }
+                builder.AppendLine("Use the whole lobby roster as the group learning context for the quiz.");
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static int ParseStoredInt(string key)
+    {
+        string stored = PlayerPrefs.GetString(key, "0");
+        return int.TryParse(stored, out int value) ? value : 0;
+    }
 
     private void QuitGame()
     {

@@ -237,6 +237,24 @@ public class LearningProfileService {
     }
 
     @Transactional(readOnly = true)
+    public String buildMultiplayerProgrammingProfileSummary(final Long childId) {
+        if (childId == null) {
+            return "";
+        }
+
+        String context = buildAiHelpProfileContext(childId, null);
+        if (context == null || context.isBlank()) {
+            return "No tracked programming profile yet.";
+        }
+
+        return context
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+    }
+
+    @Transactional(readOnly = true)
     public String generateWeeklyParentReport(final Long childId) {
         if (childId == null) {
             return "";

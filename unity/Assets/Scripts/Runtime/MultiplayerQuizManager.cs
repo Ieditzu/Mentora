@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using Mentora.Network;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 /// <summary>
@@ -48,6 +50,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     // Host panel — UI references injected by PauseMenuManager
     private Text   hostStatusText;
     private Text   courseListText;
+    private Button generateAiQuizButton;
     private Button startQuizButton;
     private Button prevCourseButton;
     private Button nextCourseButton;
@@ -55,16 +58,18 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     // Called by PauseMenuManager after it builds the quiz options panel
     public static void InjectQuizUI(Text status, Text courseList, Text selectedLabel,
-                                     Button fetch, Button start, Button prev, Button next)
+                                     Button fetch, Button generateAi, Button start, Button prev, Button next)
     {
         if (instance == null) return;
         instance.hostStatusText      = status;
         instance.courseListText      = courseList;
+        instance.generateAiQuizButton = generateAi;
         instance.selectedCourseLabel = selectedLabel;
         instance.startQuizButton     = start;
         instance.prevCourseButton    = prev;
         instance.nextCourseButton    = next;
         if (fetch != null) fetch.onClick.AddListener(instance.OnFetchCommunityClicked);
+        if (generateAi != null) generateAi.onClick.AddListener(instance.OnGenerateAiQuizClicked);
         if (start != null) start.onClick.AddListener(instance.OnStartQuizClicked);
         if (prev  != null) prev.onClick.AddListener(instance.OnPrevCourse);
         if (next  != null) next.onClick.AddListener(instance.OnNextCourse);
@@ -76,6 +81,7 @@ public class MultiplayerQuizManager : MonoBehaviour
     private CommunityQuizData fetchedCourse;
     private bool             fetchInProgress;
     private bool             packetSubscribed;
+    private string           fetchedCourseSummary = string.Empty;
 
     // Quiz session
     private bool   isHost;
@@ -399,15 +405,40 @@ public class MultiplayerQuizManager : MonoBehaviour
         catch (Exception ex) { fetchInProgress = false; SetHostStatus("Load failed: " + ex.Message); }
     }
 
+    private void OnGenerateAiQuizClicked()
+    {
+        if (fetchInProgress)
+        {
+            return;
+        }
+
+        isHost = true;
+        StartCoroutine(GenerateAiQuizRoutine());
+    }
+
     private void SetHostStatus(string msg)
     {
         if (hostStatusText != null) hostStatusText.text = msg;
+    }
+
+    private void SetQuizActionButtonsInteractable(bool enabled)
+    {
+        if (generateAiQuizButton != null)
+        {
+            generateAiQuizButton.interactable = enabled;
+        }
+
+        if (startQuizButton != null)
+        {
+            startQuizButton.interactable = enabled && fetchedCourse != null && fetchedCourse.questions != null && fetchedCourse.questions.Length > 0;
+        }
     }
 
     // ── Quiz Flow (host) ─────────────────────────────────────────────────────
 
     private void StartQuiz(QuizQuestion[] qs)
     {
+        fetchInProgress = false;
         questions            = qs;
         totalQuestions       = qs.Length;
         currentQuestionIndex = 0;
@@ -795,6 +826,7 @@ public class MultiplayerQuizManager : MonoBehaviour
             if (prevCourseButton != null) prevCourseButton.gameObject.SetActive(wrapper.items.Length > 1);
             if (nextCourseButton != null) nextCourseButton.gameObject.SetActive(wrapper.items.Length > 1);
             if (startQuizButton  != null) startQuizButton.interactable = true;
+            if (generateAiQuizButton != null) generateAiQuizButton.interactable = true;
 
             RefreshCourseSelection();
             SetHostStatus("Pick a quiz and press Start Quiz.");
@@ -817,9 +849,293 @@ public class MultiplayerQuizManager : MonoBehaviour
                 list.Add(new QuizQuestion { prompt = q.prompt, options = q.options, correctIndex = q.correctIndex });
 
             fetchedCourse = new CommunityQuizData { title = detail.title, questions = list.ToArray() };
+            fetchedCourseSummary = fetchedCourse.title;
             StartQuiz(fetchedCourse.questions);
         }
         catch (Exception ex) { SetHostStatus("Parse error: " + ex.Message); if (startQuizButton != null) startQuizButton.interactable = true; }
+    }
+
+    private IEnumerator GenerateAiQuizRoutine()
+    {
+        fetchInProgress = true;
+        fetchedCourse = null;
+        fetchedCourseSummary = string.Empty;
+        SetQuizActionButtonsInteractable(false);
+
+        string profileContext = PauseMenuManager.BuildAiQuizProfileContext();
+        long childId = PauseMenuManager.GetLoggedInChildId();
+        if (childId <= 0 || string.IsNullOrWhiteSpace(profileContext))
+        {
+            fetchInProgress = false;
+            SetHostStatus("Log into a child profile first.");
+            if (generateAiQuizButton != null) generateAiQuizButton.interactable = true;
+            yield break;
+        }
+
+        SetHostStatus("Generating a quiz from the player profile…");
+        CommunityQuizData aiQuiz = null;
+        string error = string.Empty;
+        string apiKey = PlayerPrefs.GetString(RobotVoiceBridge.OpenAiApiKeyPrefKey, string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            bool completed = false;
+            yield return StartCoroutine(RequestOpenAiQuizRoutine(profileContext, apiKey,
+                result =>
+                {
+                    aiQuiz = result;
+                    completed = true;
+                },
+                failure =>
+                {
+                    error = failure;
+                    completed = true;
+                }));
+
+            if (!completed && aiQuiz == null && string.IsNullOrWhiteSpace(error))
+            {
+                error = "AI quiz generation did not complete.";
+            }
+        }
+        else
+        {
+            error = "No OpenAI key configured.";
+        }
+
+        if (aiQuiz == null)
+        {
+            aiQuiz = BuildFallbackAiQuiz(profileContext);
+            if (string.IsNullOrWhiteSpace(error))
+            {
+                error = "AI quiz generation failed, using a local profile-based fallback.";
+            }
+        }
+
+        fetchedCourse = aiQuiz;
+        fetchedCourseSummary = BuildFetchedCourseSummary(aiQuiz);
+        fetchInProgress = false;
+
+        if (prevCourseButton != null) prevCourseButton.gameObject.SetActive(false);
+        if (nextCourseButton != null) nextCourseButton.gameObject.SetActive(false);
+        if (courseListText != null) courseListText.text = fetchedCourseSummary;
+        if (selectedCourseLabel != null) selectedCourseLabel.text = "Selected: " + (aiQuiz != null ? aiQuiz.title : "AI Quiz");
+
+        if (generateAiQuizButton != null) generateAiQuizButton.interactable = true;
+        if (startQuizButton != null) startQuizButton.interactable = aiQuiz != null && aiQuiz.questions != null && aiQuiz.questions.Length > 0;
+
+        if (aiQuiz != null && aiQuiz.questions != null && aiQuiz.questions.Length > 0)
+        {
+            bool usedFallback = !string.IsNullOrWhiteSpace(error);
+            SetHostStatus((usedFallback ? error + " " : string.Empty) + "Press Start Quiz.");
+        }
+        else
+        {
+            SetHostStatus("Could not generate a quiz.");
+        }
+    }
+
+    private IEnumerator RequestOpenAiQuizRoutine(string profileContext, string apiKey, Action<CommunityQuizData> onSuccess, Action<string> onFailure)
+    {
+        const string url = "https://api.openai.com/v1/chat/completions";
+        OpenAiChatRequest payload = new OpenAiChatRequest
+        {
+            model = "gpt-4o-mini",
+            temperature = 0.8f,
+            messages = new[]
+            {
+                new OpenAiChatMessage
+                {
+                    role = "system",
+                    content = "Generate kid-friendly PROGRAMMING-ONLY multiple-choice quiz JSON only. Return strict JSON with this shape: {\"title\":\"...\",\"questions\":[{\"prompt\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"correctIndex\":0}]}. Use exactly 5 questions. Every question must have exactly 4 options and a valid correctIndex from 0 to 3. The quiz must be only about programming fundamentals like variables, loops, conditions, output, debugging, Python, C++, and logic. Do not include general school trivia, motivation, or non-programming life questions. Personalize the quiz using the full lobby profile context and the connected player roster."
+                },
+                new OpenAiChatMessage
+                {
+                    role = "user",
+                    content = "Create a personalized multiplayer programming quiz for this whole lobby profile:\n" + profileContext
+                }
+            }
+        };
+
+        byte[] body = Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload));
+        using (UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+        {
+            request.uploadHandler = new UploadHandlerRaw(body);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Authorization", "Bearer " + apiKey);
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                onFailure?.Invoke("AI quiz request failed: " + request.error);
+                yield break;
+            }
+
+            string json = request.downloadHandler.text ?? string.Empty;
+            OpenAiChatResponse response = JsonUtility.FromJson<OpenAiChatResponse>(json);
+            string rawContent = response != null && response.choices != null && response.choices.Length > 0 && response.choices[0].message != null
+                ? response.choices[0].message.content
+                : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(rawContent))
+            {
+                onFailure?.Invoke("AI quiz response was empty.");
+                yield break;
+            }
+
+            string cleanedJson = ExtractJsonObject(rawContent);
+            AiQuizPayload payloadResult = JsonUtility.FromJson<AiQuizPayload>(cleanedJson);
+            CommunityQuizData quiz = ConvertAiPayloadToQuiz(payloadResult);
+            if (quiz == null || quiz.questions == null || quiz.questions.Length == 0)
+            {
+                onFailure?.Invoke("AI quiz JSON could not be parsed.");
+                yield break;
+            }
+
+            onSuccess?.Invoke(quiz);
+        }
+    }
+
+    private static string ExtractJsonObject(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "{}";
+        }
+
+        string trimmed = raw.Trim();
+        int firstBrace = trimmed.IndexOf('{');
+        int lastBrace = trimmed.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+        {
+            return trimmed.Substring(firstBrace, lastBrace - firstBrace + 1);
+        }
+
+        return trimmed;
+    }
+
+    private CommunityQuizData ConvertAiPayloadToQuiz(AiQuizPayload payload)
+    {
+        if (payload == null || payload.questions == null || payload.questions.Length == 0)
+        {
+            return null;
+        }
+
+        List<QuizQuestion> list = new List<QuizQuestion>();
+        for (int i = 0; i < payload.questions.Length; i++)
+        {
+            AiQuizQuestion q = payload.questions[i];
+            if (q == null || string.IsNullOrWhiteSpace(q.prompt) || q.options == null || q.options.Length != 4)
+            {
+                continue;
+            }
+
+            list.Add(new QuizQuestion
+            {
+                prompt = q.prompt.Trim(),
+                options = new[]
+                {
+                    q.options[0] ?? string.Empty,
+                    q.options[1] ?? string.Empty,
+                    q.options[2] ?? string.Empty,
+                    q.options[3] ?? string.Empty
+                },
+                correctIndex = Mathf.Clamp(q.correctIndex, 0, 3)
+            });
+        }
+
+        if (list.Count == 0)
+        {
+            return null;
+        }
+
+        return new CommunityQuizData
+        {
+            title = string.IsNullOrWhiteSpace(payload.title) ? "AI Profile Quiz" : payload.title.Trim(),
+            questions = list.ToArray()
+        };
+    }
+
+    private CommunityQuizData BuildFallbackAiQuiz(string profileContext)
+    {
+        string childName = PauseMenuManager.GetLoggedInChildName();
+        if (string.IsNullOrWhiteSpace(childName))
+        {
+            childName = "Player";
+        }
+
+        string focusTopic = GuessProfileTopic(profileContext);
+        return new CommunityQuizData
+        {
+            title = childName + "'s Programming Profile Quiz",
+            questions = new[]
+            {
+                new QuizQuestion
+                {
+                    prompt = childName + "'s lobby has been practicing " + focusTopic + ". Which line best represents assigning the number 5 to a variable in code?",
+                    options = new[] { "score = 5", "score == 5?", "print(score = 5 =)", "if 5 score" },
+                    correctIndex = 0
+                },
+                new QuizQuestion
+                {
+                    prompt = "Which programming idea is used when you want to repeat a block of code several times?",
+                    options = new[] { "A loop", "A comment", "A texture", "A score table" },
+                    correctIndex = 0
+                },
+                new QuizQuestion
+                {
+                    prompt = "What will this print? x = 3; x = x + 2; print(x)",
+                    options = new[] { "1", "3", "5", "32" },
+                    correctIndex = 1
+                },
+                new QuizQuestion
+                {
+                    prompt = "Which option best describes an if statement?",
+                    options = new[] { "It checks a condition before choosing a path", "It stores every image in memory", "It creates multiplayer voice chat", "It makes the code run backward" },
+                    correctIndex = 0
+                },
+                new QuizQuestion
+                {
+                    prompt = "If code gives the wrong answer, what is debugging?",
+                    options = new[] { "Finding and fixing the mistake", "Making the font bigger", "Deleting the whole project", "Turning the screen off" },
+                    correctIndex = 0
+                }
+            }
+        };
+    }
+
+    private string BuildFetchedCourseSummary(CommunityQuizData quiz)
+    {
+        if (quiz == null || quiz.questions == null)
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.AppendLine(quiz.title);
+        builder.AppendLine(string.Empty);
+        builder.AppendLine("Questions: " + quiz.questions.Length);
+        for (int i = 0; i < quiz.questions.Length; i++)
+        {
+            builder.AppendLine((i + 1) + ". " + quiz.questions[i].prompt);
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string GuessProfileTopic(string profileContext)
+    {
+        if (string.IsNullOrWhiteSpace(profileContext))
+        {
+            return "coding";
+        }
+
+        string lower = profileContext.ToLowerInvariant();
+        if (lower.Contains("python")) return "Python";
+        if (lower.Contains("c++") || lower.Contains("cpp")) return "C++";
+        if (lower.Contains("logic")) return "logic";
+        if (lower.Contains("quiz")) return "quizzes";
+        return "coding";
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -899,6 +1215,12 @@ public class MultiplayerQuizManager : MonoBehaviour
 
     [Serializable] private class QuizQuestion { public string prompt; public string[] options; public int correctIndex; }
     private class CommunityQuizData { public string title; public QuizQuestion[] questions; }
+    [Serializable] private class AiQuizPayload { public string title; public AiQuizQuestion[] questions; }
+    [Serializable] private class AiQuizQuestion { public string prompt; public string[] options; public int correctIndex; }
+    [Serializable] private class OpenAiChatRequest { public string model; public float temperature; public OpenAiChatMessage[] messages; }
+    [Serializable] private class OpenAiChatMessage { public string role; public string content; }
+    [Serializable] private class OpenAiChatResponse { public OpenAiChatChoice[] choices; }
+    [Serializable] private class OpenAiChatChoice { public OpenAiChatMessage message; }
 
     [Serializable] private class CourseListWrapper   { public CourseItemDto[] items; }
     [Serializable] private class CourseItemDto       { public long id; public string title; }

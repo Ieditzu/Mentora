@@ -84,6 +84,19 @@ public class MultiplayerSessionManager : MonoBehaviour
     public string LocalPlayerName => localPlayerName;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
 
+    public sealed class ProgrammingProfileSnapshot
+    {
+        public string ClientId;
+        public string PlayerName;
+        public long ChildId;
+        public string ChildName;
+        public int TotalPoints;
+        public int Streak;
+        public int CompletedTaskCount;
+        public int TotalTaskCount;
+        public string ProfileSummary;
+    }
+
     public List<string> GetConnectedPlayerIds(string localFallbackId = null)
     {
         List<string> ids = new List<string>();
@@ -146,6 +159,27 @@ public class MultiplayerSessionManager : MonoBehaviour
         }
 
         return "Player";
+    }
+
+    private void StoreRemoteProgrammingProfile(string clientId, string playerName, long childId, string childName, int totalPoints, int streak, int completedTaskCount, int totalTaskCount, string profileSummary)
+    {
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            return;
+        }
+
+        remoteProgrammingProfiles[clientId] = new ProgrammingProfileSnapshot
+        {
+            ClientId = clientId,
+            PlayerName = NormalizePlayerName(playerName),
+            ChildId = childId,
+            ChildName = string.IsNullOrWhiteSpace(childName) ? ResolvePlayerName(clientId) : childName.Trim(),
+            TotalPoints = totalPoints,
+            Streak = streak,
+            CompletedTaskCount = completedTaskCount,
+            TotalTaskCount = totalTaskCount,
+            ProfileSummary = profileSummary ?? string.Empty
+        };
     }
     public bool IsHosting => mode == SessionMode.Hosting;
     public bool IsConnectedToSession => !string.IsNullOrEmpty(localClientId);
@@ -324,6 +358,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private readonly ConcurrentDictionary<string, RemoteAvatar> remoteAvatars = new ConcurrentDictionary<string, RemoteAvatar>();
     private readonly ConcurrentDictionary<string, NetworkPeer> serverPeers = new ConcurrentDictionary<string, NetworkPeer>();
     private readonly ConcurrentDictionary<string, FriendSessionRecord> discoveredFriendSessions = new ConcurrentDictionary<string, FriendSessionRecord>();
+    private readonly ConcurrentDictionary<string, ProgrammingProfileSnapshot> remoteProgrammingProfiles = new ConcurrentDictionary<string, ProgrammingProfileSnapshot>();
     private readonly string discoveryInstanceId = Guid.NewGuid().ToString("N");
 
     private SessionMode mode = SessionMode.Idle;
@@ -383,6 +418,7 @@ public class MultiplayerSessionManager : MonoBehaviour
     private float localVoiceLevel;
     private int externalVoiceCaptureRequests;
     private string currentStatus = "Offline";
+    private ProgrammingProfileSnapshot localProgrammingProfile;
 
     public string CurrentStatus => currentStatus;
     public bool IsVoiceChatEnabled => voiceMode != VoiceChatMode.Muted;
@@ -403,6 +439,130 @@ public class MultiplayerSessionManager : MonoBehaviour
             string[] devices = GetMicrophoneDevices();
             return devices.Length > 0 ? "Default (" + devices[0] + ")" : "No microphone";
         }
+    }
+
+    public void SetLocalProgrammingProfile(long childId, string childName, int totalPoints, int streak, int completedTaskCount, int totalTaskCount, string profileSummary)
+    {
+        localProgrammingProfile = new ProgrammingProfileSnapshot
+        {
+            ClientId = localClientId,
+            PlayerName = NormalizePlayerName(localPlayerName),
+            ChildId = childId,
+            ChildName = string.IsNullOrWhiteSpace(childName) ? "Player" : childName.Trim(),
+            TotalPoints = totalPoints,
+            Streak = streak,
+            CompletedTaskCount = completedTaskCount,
+            TotalTaskCount = totalTaskCount,
+            ProfileSummary = profileSummary ?? string.Empty
+        };
+
+        TrySendLocalProgrammingProfileToHost();
+    }
+
+    public void ClearLocalProgrammingProfile()
+    {
+        localProgrammingProfile = null;
+        remoteProgrammingProfiles.Clear();
+    }
+
+    public string BuildMergedProgrammingProfileContext()
+    {
+        List<string> ids = GetConnectedPlayerIds();
+        if ((localProgrammingProfile == null || string.IsNullOrWhiteSpace(localProgrammingProfile.ProfileSummary)) &&
+            (ids == null || ids.Count == 0 || remoteProgrammingProfiles.IsEmpty))
+        {
+            return string.Empty;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.AppendLine("Programming lobby profile:");
+
+        HashSet<string> emitted = new HashSet<string>(StringComparer.Ordinal);
+        if (localProgrammingProfile != null && !string.IsNullOrWhiteSpace(localProgrammingProfile.ProfileSummary))
+        {
+            emitted.Add(string.IsNullOrWhiteSpace(localClientId) ? "__local__" : localClientId);
+            AppendProgrammingProfile(builder, localProgrammingProfile, true);
+        }
+
+        if (ids != null)
+        {
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string clientId = ids[i];
+                if (string.IsNullOrWhiteSpace(clientId) || emitted.Contains(clientId))
+                {
+                    continue;
+                }
+
+                if (remoteProgrammingProfiles.TryGetValue(clientId, out ProgrammingProfileSnapshot snapshot) &&
+                    snapshot != null &&
+                    !string.IsNullOrWhiteSpace(snapshot.ProfileSummary))
+                {
+                    emitted.Add(clientId);
+                    AppendProgrammingProfile(builder, snapshot, false);
+                }
+                else
+                {
+                    builder.AppendLine("- " + ResolvePlayerName(clientId) + ": connected, programming profile summary still syncing.");
+                }
+            }
+        }
+
+        builder.AppendLine("Use every player summary above when generating the multiplayer programming quiz.");
+        return builder.ToString().Trim();
+    }
+
+    private void AppendProgrammingProfile(StringBuilder builder, ProgrammingProfileSnapshot snapshot, bool isLocal)
+    {
+        if (snapshot == null)
+        {
+            return;
+        }
+
+        string displayName = !string.IsNullOrWhiteSpace(snapshot.ChildName)
+            ? snapshot.ChildName.Trim()
+            : ResolvePlayerName(snapshot.ClientId);
+        string lobbyName = !string.IsNullOrWhiteSpace(snapshot.PlayerName)
+            ? snapshot.PlayerName.Trim()
+            : ResolvePlayerName(snapshot.ClientId);
+
+        builder.AppendLine("- " + displayName + (isLocal ? " (local player)" : " (lobby player)") +
+                           " | lobby name: " + lobbyName +
+                           " | points: " + snapshot.TotalPoints +
+                           " | streak: " + snapshot.Streak +
+                           " | completed tasks: " + snapshot.CompletedTaskCount + "/" + snapshot.TotalTaskCount);
+        builder.AppendLine("  " + (snapshot.ProfileSummary ?? string.Empty).Replace("\n", " ").Replace("\r", " ").Trim());
+    }
+
+    private void TrySendLocalProgrammingProfileToHost()
+    {
+        if (localProgrammingProfile == null || string.IsNullOrWhiteSpace(localProgrammingProfile.ProfileSummary))
+        {
+            return;
+        }
+
+        localProgrammingProfile.ClientId = localClientId;
+        localProgrammingProfile.PlayerName = NormalizePlayerName(localPlayerName);
+
+        if (mode == SessionMode.Hosting)
+        {
+            return;
+        }
+
+        if (!IsClientConnected || string.IsNullOrWhiteSpace(localClientId))
+        {
+            return;
+        }
+
+        _ = SendClientPacketAsync(new MultiplayerProfileSummaryPacket(
+            localClientId,
+            localProgrammingProfile.ChildId,
+            localProgrammingProfile.ChildName,
+            localProgrammingProfile.TotalPoints,
+            localProgrammingProfile.Streak,
+            localProgrammingProfile.CompletedTaskCount,
+            localProgrammingProfile.TotalTaskCount,
+            localProgrammingProfile.ProfileSummary), reportFailure: false);
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -960,6 +1120,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             catch { }
         }
         serverPeers.Clear();
+        remoteProgrammingProfiles.Clear();
 
         foreach (var avatar in remoteAvatars.Values)
         {
@@ -981,6 +1142,7 @@ public class MultiplayerSessionManager : MonoBehaviour
 
         localLabelAttached = false;
         DestroyLocalVoiceHud();
+        localProgrammingProfile = null;
         SetStatus("Offline");
     }
 
@@ -1490,6 +1652,25 @@ public class MultiplayerSessionManager : MonoBehaviour
                         BroadcastServerPacket(codeWorldCursor);
                         break;
 
+                    case MultiplayerProfileSummaryPacket profilePacket:
+                        if (string.IsNullOrWhiteSpace(peer.ClientId))
+                        {
+                            break;
+                        }
+
+                        profilePacket.ClientId = peer.ClientId;
+                        EnqueueMainThread(() => StoreRemoteProgrammingProfile(
+                            peer.ClientId,
+                            peer.PlayerName,
+                            profilePacket.ChildId,
+                            profilePacket.ChildName,
+                            profilePacket.TotalPoints,
+                            profilePacket.Streak,
+                            profilePacket.CompletedTaskCount,
+                            profilePacket.TotalTaskCount,
+                            profilePacket.ProfileSummary));
+                        break;
+
                     case MultiplayerVoicePacket voicePacket:
                         if (string.IsNullOrEmpty(peer.ClientId))
                         {
@@ -1511,6 +1692,7 @@ public class MultiplayerSessionManager : MonoBehaviour
             if (!string.IsNullOrEmpty(peer.ClientId))
             {
                 serverPeers.TryRemove(peer.ClientId, out _);
+                remoteProgrammingProfiles.TryRemove(peer.ClientId, out _);
                 BroadcastServerPacket(new MultiplayerPlayerLeftPacket(peer.ClientId), excludeClientId: peer.ClientId);
                 EnqueueMainThread(() => RemoveRemoteAvatar(peer.ClientId));
             }
@@ -1577,6 +1759,7 @@ public class MultiplayerSessionManager : MonoBehaviour
                 localClientId = welcomePacket.ClientId;
                 localPlayerName = NormalizePlayerName(welcomePacket.PlayerName);
                 SendUdpHello();
+                TrySendLocalProgrammingProfileToHost();
                 EnqueueMainThread(() =>
                 {
                     RefreshLocalNameLabel();
@@ -1601,7 +1784,11 @@ public class MultiplayerSessionManager : MonoBehaviour
                 break;
 
             case MultiplayerPlayerLeftPacket leftPacket:
-                EnqueueMainThread(() => RemoveRemoteAvatar(leftPacket.ClientId));
+                EnqueueMainThread(() =>
+                {
+                    remoteProgrammingProfiles.TryRemove(leftPacket.ClientId, out _);
+                    RemoveRemoteAvatar(leftPacket.ClientId);
+                });
                 break;
 
             case QuizStartPacket _:

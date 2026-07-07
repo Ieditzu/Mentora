@@ -82,6 +82,8 @@ public class PacketManager {
             case 68 -> new ParentChallengeCompletedPacket();
             case 69 -> new FetchWeeklyReportPacket();
             case 70 -> new WeeklyReportResponsePacket();
+            case 71 -> new FetchProgrammingProfileSummaryPacket();
+            case 72 -> new FetchProgrammingProfileSummaryResponsePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

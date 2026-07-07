@@ -303,6 +303,33 @@ public class ClientHandler {
                     connection.send(new FetchChildStatsResponsePacket(child.getName(), child.getTotalPoints(), json, streak, completedCount, totalTasks).encode());
                 }
 
+                case FetchProgrammingProfileSummaryPacket fetchProgrammingProfileSummaryPacket -> {
+                    if (client.getChildId() == null) {
+                        throw new RuntimeException("Not logged in as a child.");
+                    }
+
+                    final var child = Server.getInstance().getChildService().findById(client.getChildId())
+                            .orElseThrow(() -> new RuntimeException("Child not found"));
+
+                    Server.getInstance().getLearningProfileService().ensureAiSummaries(child.getId());
+
+                    int streak = Server.getInstance().getChildService().updateStreak(client.getChildId());
+                    int completedCount = Server.getInstance().getChildService().getCompletedTasks(client.getChildId()).size();
+                    int totalTasks = Server.getInstance().getTaskService().getAllTasks().size();
+                    String profileSummary = Server.getInstance().getLearningProfileService()
+                            .buildMultiplayerProgrammingProfileSummary(child.getId());
+
+                    connection.send(new FetchProgrammingProfileSummaryResponsePacket(
+                            child.getId(),
+                            child.getName(),
+                            child.getTotalPoints(),
+                            streak,
+                            completedCount,
+                            totalTasks,
+                            profileSummary
+                    ).encode());
+                }
+
                 case FetchChildrenPacket fetchChildrenPacket -> {
                     System.out.println("Fetch Children for Parent: " + client.getParentId());
                     final var children = Server.getInstance().getParentService().getChildren(client.getParentId());

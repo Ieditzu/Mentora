@@ -66,6 +66,9 @@ namespace Mentora.Network
                 63 => new CodeWorldCursorPacket(),
                 65 => new LiveSessionUpdatePacket(),
                 67 => new ParentChallengePacket(),
+                71 => new FetchProgrammingProfileSummaryPacket(),
+                72 => new FetchProgrammingProfileSummaryResponsePacket(),
+                73 => new MultiplayerProfileSummaryPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -771,6 +774,95 @@ namespace Mentora.Network
             ChildId = BitConverter.ToInt64(childBytes, 0);
             Message = ReadString(reader);
             SentAt = ReadString(reader);
+        }
+    }
+
+    public class FetchProgrammingProfileSummaryPacket : Packet
+    {
+        public FetchProgrammingProfileSummaryPacket() : base(71) { }
+        protected override void Write(BinaryWriter writer) { }
+        protected override void Read(BinaryReader reader) { }
+    }
+
+    public class FetchProgrammingProfileSummaryResponsePacket : Packet
+    {
+        public long ChildId;
+        public string ChildName;
+        public int TotalPoints;
+        public int Streak;
+        public int CompletedTaskCount;
+        public int TotalTaskCount;
+        public string ProfileSummary;
+
+        public FetchProgrammingProfileSummaryResponsePacket() : base(72) { }
+
+        protected override void Write(BinaryWriter writer) { }
+
+        protected override void Read(BinaryReader reader)
+        {
+            byte[] childBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            ChildId = BitConverter.ToInt64(childBytes, 0);
+            ChildName = ReadString(reader);
+            TotalPoints = ReadInt32BigEndian(reader);
+            Streak = ReadInt32BigEndian(reader);
+            CompletedTaskCount = ReadInt32BigEndian(reader);
+            TotalTaskCount = ReadInt32BigEndian(reader);
+            ProfileSummary = ReadString(reader);
+        }
+    }
+
+    public class MultiplayerProfileSummaryPacket : Packet
+    {
+        public string ClientId;
+        public long ChildId;
+        public string ChildName;
+        public int TotalPoints;
+        public int Streak;
+        public int CompletedTaskCount;
+        public int TotalTaskCount;
+        public string ProfileSummary;
+
+        public MultiplayerProfileSummaryPacket(string clientId, long childId, string childName, int totalPoints, int streak, int completedTaskCount, int totalTaskCount, string profileSummary) : base(73)
+        {
+            ClientId = clientId;
+            ChildId = childId;
+            ChildName = childName;
+            TotalPoints = totalPoints;
+            Streak = streak;
+            CompletedTaskCount = completedTaskCount;
+            TotalTaskCount = totalTaskCount;
+            ProfileSummary = profileSummary;
+        }
+
+        public MultiplayerProfileSummaryPacket() : base(73) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, ClientId ?? string.Empty);
+            byte[] childBytes = BitConverter.GetBytes(ChildId);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            writer.Write(childBytes);
+            PutString(writer, ChildName ?? string.Empty);
+            WriteInt32BigEndian(writer, TotalPoints);
+            WriteInt32BigEndian(writer, Streak);
+            WriteInt32BigEndian(writer, CompletedTaskCount);
+            WriteInt32BigEndian(writer, TotalTaskCount);
+            PutString(writer, ProfileSummary ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            ClientId = ReadString(reader);
+            byte[] childBytes = reader.ReadBytes(8);
+            if (BitConverter.IsLittleEndian) Array.Reverse(childBytes);
+            ChildId = BitConverter.ToInt64(childBytes, 0);
+            ChildName = ReadString(reader);
+            TotalPoints = ReadInt32BigEndian(reader);
+            Streak = ReadInt32BigEndian(reader);
+            CompletedTaskCount = ReadInt32BigEndian(reader);
+            TotalTaskCount = ReadInt32BigEndian(reader);
+            ProfileSummary = ReadString(reader);
         }
     }
 
