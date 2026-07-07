@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -77,14 +78,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.ReaderException
+import com.google.zxing.common.HybridBinarizer
 import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -128,7 +133,7 @@ fun MainDashboard(viewModel: SocketViewModel) {
                 CenterAlignedTopAppBar(
                     title = { 
                         Text(
-                            "NEURO KEY",
+                            "MENTORA",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp,
@@ -370,46 +375,47 @@ fun QRScannerView(onCodeScanned: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    var scanned by remember { mutableStateOf(false) }
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val scanned = remember { AtomicBoolean(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching {
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+            }
+            executor.shutdown()
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
             val previewView = PreviewView(ctx)
-            val executor = Executors.newSingleThreadExecutor()
+            val mainExecutor = ContextCompat.getMainExecutor(ctx)
             
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
-
-                val scanner = BarcodeScanning.getClient(
-                    BarcodeScannerOptions.Builder()
-                        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                        .build()
-                )
                 
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
 
                 imageAnalysis.setAnalyzer(executor) { imageProxy ->
-                    val mediaImage = imageProxy.image
-                    if (mediaImage != null && !scanned) {
-                        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                        scanner.process(image)
-                            .addOnSuccessListener { barcodes ->
-                                for (barcode in barcodes) {
-                                    barcode.rawValue?.let { code ->
-                                        if (!scanned) {
-                                            scanned = true
-                                            onCodeScanned(code)
-                                        }
-                                    }
-                                }
-                            }
-                            .addOnCompleteListener { imageProxy.close() }
-                    } else {
+                    if (scanned.get()) {
+                        imageProxy.close()
+                        return@setAnalyzer
+                    }
+
+                    try {
+                        val code = decodeQrCode(imageProxy)
+                        if (code != null && scanned.compareAndSet(false, true)) {
+                            mainExecutor.execute { onCodeScanned(code) }
+                        }
+                    } finally {
                         imageProxy.close()
                     }
                 }
@@ -426,6 +432,50 @@ fun QRScannerView(onCodeScanned: (String) -> Unit) {
         },
         modifier = Modifier.fillMaxSize()
     )
+}
+
+private fun decodeQrCode(imageProxy: ImageProxy): String? {
+    val image = imageProxy.image ?: return null
+    val yPlane = image.planes.firstOrNull() ?: return null
+    val buffer = yPlane.buffer.duplicate()
+    val yData = ByteArray(buffer.remaining())
+    buffer.get(yData)
+
+    val width = image.width
+    val height = image.height
+    val rowStride = yPlane.rowStride
+    val pixelStride = yPlane.pixelStride
+    val luminance = ByteArray(width * height)
+
+    for (row in 0 until height) {
+        val inputRow = row * rowStride
+        val outputRow = row * width
+        for (col in 0 until width) {
+            val inputIndex = inputRow + col * pixelStride
+            if (inputIndex < yData.size) {
+                luminance[outputRow + col] = yData[inputIndex]
+            }
+        }
+    }
+
+    val source = PlanarYUVLuminanceSource(luminance, width, height, 0, 0, width, height, false)
+    val bitmap = BinaryBitmap(HybridBinarizer(source))
+    val reader = MultiFormatReader().apply {
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true
+            )
+        )
+    }
+
+    return try {
+        reader.decodeWithState(bitmap).text
+    } catch (_: ReaderException) {
+        null
+    } finally {
+        reader.reset()
+    }
 }
 
 @Composable

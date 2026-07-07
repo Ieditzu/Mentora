@@ -72,7 +72,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
         ) {
             Image(
                 painter = painterResource(id = R.drawable.logo),
-                contentDescription = "Neuro Key Logo",
+                contentDescription = "Mentora Logo",
                 modifier = Modifier
                     .size(150.dp)
                     .shadow(30.dp, RoundedCornerShape(40.dp))
@@ -84,7 +84,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Neuro Key",
+                text = "Mentora",
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Black
