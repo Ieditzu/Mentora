@@ -320,6 +320,12 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
 
         string myId = MultiplayerSessionManager.Instance?.LocalClientId ?? string.Empty;
+        if (isHost && !string.IsNullOrEmpty(myId))
+        {
+            pendingAnswers[myId] = idx;
+            TryFinishQuestionEarly();
+        }
+
         if (!string.IsNullOrEmpty(myId))
             MultiplayerSessionManager.Instance?.SendQuizPacketToHost(new QuizAnswerPacket(myId, idx));
     }
@@ -544,7 +550,11 @@ public class MultiplayerQuizManager : MonoBehaviour
 
             case QuizAnswerPacket p:
                 // Only host accumulates answers
-                if (isHost) pendingAnswers[p.ClientId] = p.AnswerIndex;
+                if (isHost)
+                {
+                    pendingAnswers[p.ClientId] = p.AnswerIndex;
+                    TryFinishQuestionEarly();
+                }
                 break;
 
             case QuizResultPacket p:
@@ -588,6 +598,23 @@ public class MultiplayerQuizManager : MonoBehaviour
     {
         yield return new WaitForSeconds(2f);
         ShowScoresOnTheater(map);
+    }
+
+    private void TryFinishQuestionEarly()
+    {
+        if (!isHost || !timerActive)
+        {
+            return;
+        }
+
+        int playerCount = MultiplayerSessionManager.Instance?.ConnectedPlayerCount ?? 1;
+        if (playerCount <= 0 || pendingAnswers.Count < playerCount)
+        {
+            return;
+        }
+
+        timerActive = false;
+        BroadcastResults();
     }
 
     private void OnCommunityPacket(Packet packet)
