@@ -84,6 +84,45 @@ public class MultiplayerSessionManager : MonoBehaviour
     public string LocalPlayerName => localPlayerName;
     public int ConnectedPlayerCount => remoteAvatars.Count + 1; // remotes + self
 
+    public List<string> GetConnectedPlayerIds(string localFallbackId = null)
+    {
+        List<string> ids = new List<string>();
+
+        string localId = !string.IsNullOrWhiteSpace(localClientId) ? localClientId : localFallbackId;
+        if (!string.IsNullOrWhiteSpace(localId))
+        {
+            ids.Add(localId);
+        }
+
+        foreach (string clientId in serverPeers.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                continue;
+            }
+
+            if (!ids.Contains(clientId))
+            {
+                ids.Add(clientId);
+            }
+        }
+
+        foreach (string clientId in remoteAvatars.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                continue;
+            }
+
+            if (!ids.Contains(clientId))
+            {
+                ids.Add(clientId);
+            }
+        }
+
+        return ids;
+    }
+
     public string ResolvePlayerName(string clientId)
     {
         if (string.IsNullOrWhiteSpace(clientId))
