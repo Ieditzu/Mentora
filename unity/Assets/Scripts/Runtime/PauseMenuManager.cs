@@ -1046,20 +1046,20 @@ public class PauseMenuManager : MonoBehaviour
         // Description under Quiz Island
         CreateText("QuizIslandDesc", hostGamePanel.transform, "Host on the Quiz Island. All players will spawn there.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.75f, 0.6f, 1f), new Vector2(0f, -98f), new Vector2(500f, 26f));
 
-        Button codeWorldBtn = CreateButton(hostGamePanel.transform, "CodeWorldBtn", "Your Code Controls The World", new Vector2(0f, -180f), new Color(0.96f, 0.48f, 0.18f, 1f));
+        Button codeWorldBtn = CreateButton(hostGamePanel.transform, "CodeWorldBtn", "Code Quest Island", new Vector2(0f, -180f), new Color(0.96f, 0.48f, 0.18f, 1f));
         codeWorldBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 72f);
-        codeWorldBtn.GetComponentInChildren<Text>().fontSize = 20;
+        codeWorldBtn.GetComponentInChildren<Text>().fontSize = 22;
         codeWorldBtn.onClick.AddListener(() => {
+            CodeWorldRuntime.DeactivateLocal();
             HostMultiplayerGame();
-            TeleportPlayerToCodeWorld();
-            CodeWorldRuntime.ActivateForHost();
+            TeleportPlayerToCodeQuestIsland();
             if (quizOptionsButton != null) quizOptionsButton.gameObject.SetActive(false);
-            PlayerPrefs.SetString("MP_HostMode", "codeworld");
+            PlayerPrefs.SetString("MP_HostMode", "codequest");
             PlayerPrefs.Save();
             ShowPanel(multiplayerPanel);
         });
 
-        CreateText("CodeWorldDesc", hostGamePanel.transform, "Open the editor with `, type commands, and build the scene entirely from code while flying in noclip.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.98f, 0.8f, 0.62f), new Vector2(0f, -228f), new Vector2(560f, 44f));
+        CreateText("CodeWorldDesc", hostGamePanel.transform, "Host the Code Quest hub. Pick Easy, Medium, Hard, AI Profile, or Free Sandbox portals there.", 15, FontStyle.Italic, TextAnchor.MiddleCenter, new Color(0.98f, 0.8f, 0.62f), new Vector2(0f, -228f), new Vector2(560f, 44f));
 
         // Back button
         Button hgBackBtn = CreateButton(hostGamePanel.transform, "HGBackBtn", "Back", new Vector2(0f, -250f), new Color(0.4f, 0.4f, 0.4f));
@@ -1579,6 +1579,31 @@ public class PauseMenuManager : MonoBehaviour
         PlayerPrefs.SetFloat("MP_SpawnX", CodeWorldRuntime.SpawnPosition.x);
         PlayerPrefs.SetFloat("MP_SpawnY", CodeWorldRuntime.SpawnPosition.y);
         PlayerPrefs.SetFloat("MP_SpawnZ", CodeWorldRuntime.SpawnPosition.z);
+        PlayerPrefs.SetInt("MP_UseCustomSpawn", 1);
+        PlayerPrefs.Save();
+    }
+
+    private static void TeleportPlayerToCodeQuestIsland()
+    {
+        Vector3 spawnPosition = CodeWorldQuestIsland.SpawnPosition;
+        Quaternion spawnRotation = CodeWorldQuestIsland.SpawnRotation;
+        FirstPersonControllerSimple fps = PlayerCache.GetFps();
+        if (fps != null)
+        {
+            fps.TeleportTo(spawnPosition, spawnRotation);
+        }
+        else
+        {
+            Transform player = PlayerCache.ResolvePlayerTransform();
+            if (player != null)
+            {
+                player.SetPositionAndRotation(spawnPosition, spawnRotation);
+            }
+        }
+
+        PlayerPrefs.SetFloat("MP_SpawnX", spawnPosition.x);
+        PlayerPrefs.SetFloat("MP_SpawnY", spawnPosition.y);
+        PlayerPrefs.SetFloat("MP_SpawnZ", spawnPosition.z);
         PlayerPrefs.SetInt("MP_UseCustomSpawn", 1);
         PlayerPrefs.Save();
     }

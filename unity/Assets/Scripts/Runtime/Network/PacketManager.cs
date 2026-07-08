@@ -872,7 +872,7 @@ namespace Mentora.Network
 
     public class GenerateAiTaskPacket : Packet
     {
-        public string Language; // "python" or "cpp"
+        public string Language; // "python", "cpp", or "codeworld"
         public GenerateAiTaskPacket(string language = "python") : base(45) { Language = language; }
         public GenerateAiTaskPacket() : base(45) { Language = "python"; }
         protected override void Write(BinaryWriter writer) { PutString(writer, Language ?? "python"); }
