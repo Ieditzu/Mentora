@@ -482,14 +482,10 @@ public static class CodeWorldQuestDefinitions
             Description = "Build a red beacon near the marker. It needs a tall object named beacon.",
             StarterCode =
                 "from mentora_world import *\n\n" +
-                "# Easy goal: build a tall red beacon near the yellow marker.\n" +
-                "# The checker looks for an object named \"beacon\".\n\n" +
-                "marker_position = vector(220, 33, 526)\n\n" +
-                "# TODO: create beacon at marker_position.\n" +
-                "# TODO: make it tall enough.\n" +
-                "# TODO: color it red.\n" +
-                "# Example shape line:\n" +
-                "# cube(\"beacon\", marker_position, scale=vector(1, 1, 1))\n"
+                "# Easy goal: fix this beacon so it passes the checklist.\n" +
+                "# Hint: it is in the right place, but two values are wrong.\n" +
+                "cube(\"beacon\", vector(220, 33, 526), scale=vector(1.5, 1.2, 1.5))\n" +
+                "color(\"beacon\", \"blue\")\n"
         };
         definition.SetupCommands = new[] { "cylinder marker 220 32.6 526 2.5 0.2 2.5", "color marker yellow" };
         definition.Requirements.Add(CodeWorldChallengeRequirement.Exists("beacon", "Create an object named beacon"));
@@ -508,19 +504,14 @@ public static class CodeWorldQuestDefinitions
             Description = "Clear the rubble and build at least three planks named plank_1, plank_2, etc. Add a green finish_flag.",
             StarterCode =
                 "from mentora_world import *\n\n" +
-                "# Medium goal: repair the bridge.\n" +
-                "# Requirements:\n" +
-                "# - delete the object named \"rubble\"\n" +
-                "# - create plank_1, plank_2, and plank_3\n" +
-                "# - create a green object named finish_flag\n\n" +
-                "plank_start = vector(216, 33, 530)\n" +
-                "plank_spacing = 4\n\n" +
-                "# TODO: delete(\"rubble\")\n" +
-                "# TODO: use a loop to create the plank_ objects.\n" +
-                "# TODO: add finish_flag and color it green.\n" +
-                "# Example loop shape:\n" +
-                "# for i in range(3):\n" +
-                "#     cube(f\"plank_{i + 1}\", vector(plank_start.x + i * plank_spacing, plank_start.y, plank_start.z), scale=vector(3, 0.3, 1))\n"
+                "# Medium goal: repair this unfinished bridge script.\n" +
+                "# Hint: the rubble is handled, but the bridge is incomplete and the flag color is wrong.\n" +
+                "delete(\"rubble\")\n" +
+                "for i in range(2):\n" +
+                "    cube(f\"plank_{i + 1}\", vector(216 + i * 4, 33, 530), scale=vector(3.2, 0.35, 1.4))\n" +
+                "    color(f\"plank_{i + 1}\", \"orange\")\n" +
+                "cube(\"finish_flag\", vector(228, 34, 530), scale=vector(0.7, 2.5, 0.7))\n" +
+                "color(\"finish_flag\", \"yellow\")\n"
         };
         definition.SetupCommands = new[] { "cube rubble 220 33 530 4 0.75 3", "color rubble gray" };
         definition.Requirements.Add(CodeWorldChallengeRequirement.Missing("rubble", "Delete the rubble"));
@@ -539,11 +530,11 @@ public static class CodeWorldQuestDefinitions
             Description = "Remove the broken core, build a cyan power_core, and create four shield_ objects around it.",
             StarterCode =
                 "from mentora_world import *\n\n" +
-                "# Hard goal: restore the core room.\n" +
+                "# Hard goal: write the restore script.\n" +
                 "# Requirements:\n" +
                 "# - delete broken_core\n" +
-                "# - create a cyan sphere named power_core\n" +
-                "# - create four objects named shield_1 through shield_4\n\n" +
+                "# - create a cyan sphere named power_core near core_position\n" +
+                "# - create four shield_ objects using shield_positions\n\n" +
                 "core_position = vector(220, 35, 536)\n" +
                 "shield_positions = [\n" +
                 "    vector(216, 33, 536),\n" +
@@ -551,9 +542,7 @@ public static class CodeWorldQuestDefinitions
                 "    vector(220, 33, 532),\n" +
                 "    vector(220, 33, 540),\n" +
                 "]\n\n" +
-                "# TODO: delete(\"broken_core\")\n" +
-                "# TODO: create power_core at core_position and color it cyan.\n" +
-                "# TODO: loop over shield_positions and create shield_ objects.\n"
+                "# Write your solution below this line.\n"
         };
         definition.SetupCommands = new[] { "sphere broken_core 220 34 536 2 2 2", "color broken_core red" };
         definition.Requirements.Add(CodeWorldChallengeRequirement.Missing("broken_core", "Delete broken_core"));
@@ -597,13 +586,11 @@ public static class CodeWorldQuestDefinitions
 
         return
             "from mentora_world import *\n\n" +
-            "# Fallback AI profile quest: build a mini scene about what you are learning.\n" +
+            "# Fallback AI profile quest: finish this mini scene about what you are learning.\n" +
             "# Requirements: create profile_goal and at least 3 objects total.\n\n" +
-            "center = vector(220, 33, 526)\n\n" +
-            "# TODO: create an object named profile_goal.\n" +
-            "# TODO: add at least two more objects that show your learning goal.\n" +
-            "# TODO: use colors to make the scene readable.\n" +
-            "# Example shape line:\n" +
-            "# cube(\"profile_goal\", center, scale=vector(2, 2, 2))\n";
+            "center = vector(220, 33, 526)\n" +
+            "cube(\"profile_goal\", center, scale=vector(2, 2, 2))\n" +
+            "color(\"profile_goal\", \"purple\")\n\n" +
+            "# Add at least two more objects below.\n";
     }
 }
