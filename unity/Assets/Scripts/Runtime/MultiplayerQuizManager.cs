@@ -93,8 +93,14 @@ public class MultiplayerQuizManager : MonoBehaviour
     private bool   timerActive;
     private Coroutine pendingEarlyFinishRoutine;
     private Coroutine countdownAudioRoutine;
-    private readonly Dictionary<string, int> scores         = new Dictionary<string, int>();
-    private readonly Dictionary<string, int> pendingAnswers = new Dictionary<string, int>();
+    private sealed class AnswerSubmission
+    {
+        public int AnswerIndex;
+        public int ResponseTimeMs;
+    }
+
+    private readonly Dictionary<string, int> scores = new Dictionary<string, int>();
+    private readonly Dictionary<string, AnswerSubmission> pendingAnswers = new Dictionary<string, AnswerSubmission>();
     private readonly HashSet<string> expectedAnswerClientIds = new HashSet<string>();
 
     // ── Static entry point called from PauseMenuManager ──────────────────────
@@ -331,14 +337,19 @@ public class MultiplayerQuizManager : MonoBehaviour
         }
 
         string myId = GetLocalQuizParticipantId();
+        int responseTimeMs = Mathf.Max(0, Mathf.RoundToInt((QuizTimerSeconds - Mathf.Clamp(timerRemaining, 0f, QuizTimerSeconds)) * 1000f));
         if (isHost)
         {
-            pendingAnswers[myId] = idx;
+            pendingAnswers[myId] = new AnswerSubmission
+            {
+                AnswerIndex = idx,
+                ResponseTimeMs = responseTimeMs
+            };
             TryFinishQuestionEarly();
         }
 
         if (!string.IsNullOrEmpty(MultiplayerSessionManager.Instance?.LocalClientId))
-            MultiplayerSessionManager.Instance?.SendQuizPacketToHost(new QuizAnswerPacket(myId, idx));
+            MultiplayerSessionManager.Instance?.SendQuizPacketToHost(new QuizAnswerPacket(myId, idx, responseTimeMs));
     }
 
     // ── Quiz course controls ──────────────────────────────────────────────────
@@ -518,10 +529,10 @@ public class MultiplayerQuizManager : MonoBehaviour
 
         foreach (var kv in pendingAnswers)
         {
-            if (kv.Value == correct)
+            if (kv.Value != null && kv.Value.AnswerIndex == correct)
             {
                 if (!scores.ContainsKey(kv.Key)) scores[kv.Key] = 0;
-                scores[kv.Key] += 1000;
+                scores[kv.Key] += CalculateQuestionScore(kv.Value.ResponseTimeMs);
             }
         }
 
@@ -600,7 +611,11 @@ public class MultiplayerQuizManager : MonoBehaviour
                 // Only host accumulates answers
                 if (isHost)
                 {
-                    pendingAnswers[p.ClientId] = p.AnswerIndex;
+                    pendingAnswers[p.ClientId] = new AnswerSubmission
+                    {
+                        AnswerIndex = p.AnswerIndex,
+                        ResponseTimeMs = p.ResponseTimeMs
+                    };
                     TryFinishQuestionEarly();
                 }
                 break;
@@ -780,6 +795,14 @@ public class MultiplayerQuizManager : MonoBehaviour
         timerActive = false;
         CancelPendingEarlyFinish();
         pendingEarlyFinishRoutine = StartCoroutine(DelayedBroadcastResults(2f));
+    }
+
+    private int CalculateQuestionScore(int responseTimeMs)
+    {
+        int clampedMs = Mathf.Clamp(responseTimeMs, 0, QuizTimerSeconds * 1000);
+        float normalized = 1f - (clampedMs / (QuizTimerSeconds * 1000f));
+        int timeBonus = Mathf.RoundToInt(normalized * 500f);
+        return 500 + Mathf.Clamp(timeBonus, 0, 500);
     }
 
     private void OnCommunityPacket(Packet packet)

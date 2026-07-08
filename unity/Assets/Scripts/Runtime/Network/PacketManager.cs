@@ -1308,20 +1308,25 @@ namespace Mentora.Network
     {
         public string ClientId;
         public int AnswerIndex;
+        public int ResponseTimeMs;
 
-        public QuizAnswerPacket(string clientId, int answerIndex) : base(54)
-        { ClientId = clientId; AnswerIndex = answerIndex; }
+        public QuizAnswerPacket(string clientId, int answerIndex, int responseTimeMs = 0) : base(54)
+        { ClientId = clientId; AnswerIndex = answerIndex; ResponseTimeMs = responseTimeMs; }
         public QuizAnswerPacket() : base(54) { }
 
         protected override void Write(BinaryWriter writer)
         {
             PutString(writer, ClientId ?? string.Empty);
             WriteInt32BigEndian(writer, AnswerIndex);
+            WriteInt32BigEndian(writer, ResponseTimeMs);
         }
         protected override void Read(BinaryReader reader)
         {
             ClientId = ReadString(reader);
             AnswerIndex = ReadInt32BigEndian(reader);
+            ResponseTimeMs = reader.BaseStream.Position + 4 <= reader.BaseStream.Length
+                ? ReadInt32BigEndian(reader)
+                : 0;
         }
     }
 
