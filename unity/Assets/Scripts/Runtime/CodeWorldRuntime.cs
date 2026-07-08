@@ -60,6 +60,14 @@ public class CodeWorldRuntime : MonoBehaviour
     private Button runButton;
     private Button aiOpenButton;
     private Button aiCloseButton;
+    private GameObject challengePanel;
+    private Text challengeTitleText;
+    private Text challengeDescriptionText;
+    private Text challengeChecklistText;
+    private Button challengeVerifyButton;
+    private Button challengeResetButton;
+    private Button challengeSandboxButton;
+    private CodeWorldChallengeDefinition activeChallenge;
     private readonly Stack<string> editorUndoStack = new Stack<string>();
     private readonly List<string> aiChatLines = new List<string>();
     private bool suppressBackquoteTextMutation;
@@ -145,6 +153,22 @@ public class CodeWorldRuntime : MonoBehaviour
         EnsureInstance().ActivateAsHost();
     }
 
+    public static void StartSandboxFromPortal()
+    {
+        EnsureInstance().StartSandboxMode();
+    }
+
+    public static void StartChallengeFromPortal(CodeWorldChallengeDefinition definition)
+    {
+        if (definition == null)
+        {
+            StartSandboxFromPortal();
+            return;
+        }
+
+        EnsureInstance().StartChallengeMode(definition);
+    }
+
     public static bool ShouldShowMobileToggle
     {
         get
@@ -207,7 +231,6 @@ public class CodeWorldRuntime : MonoBehaviour
 
         GameObject root = new GameObject("CodeWorldRuntime");
         instance = root.AddComponent<CodeWorldRuntime>();
-        DontDestroyOnLoad(root);
         return instance;
     }
 
@@ -220,6 +243,11 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         instance = this;
+        if (transform.parent != null)
+        {
+            transform.SetParent(null);
+        }
+
         DontDestroyOnLoad(gameObject);
         editorHintDismissed = false;
         AcquireSessionManager();
@@ -568,12 +596,81 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private void ActivateAsHost()
     {
+        activeChallenge = null;
         ActivateLocal(true, true);
         commandHistory.Clear();
         ClearSpawnedObjects();
         RefreshHistoryText();
+        RefreshChallengeUi();
         UpdateEditorVisibility(false);
         BroadcastStateToRemotes();
+    }
+
+    private void StartSandboxMode()
+    {
+        activeChallenge = null;
+        ActivateLocal(true, false);
+        commandHistory.Clear();
+        ClearSpawnedObjects();
+        SetEditorText(BuildStarterScript());
+        RefreshHistoryText();
+        RefreshChallengeUi();
+        BroadcastStateToRemotes();
+        UpdateEditorVisibility(true);
+        SetStatus("Sandbox ready. Build anything with Python.");
+    }
+
+    private void StartChallengeMode(CodeWorldChallengeDefinition definition)
+    {
+        activeChallenge = definition;
+        ActivateLocal(true, false);
+        ResetActiveChallengeWorld();
+        RefreshChallengeUi();
+        BroadcastStateToRemotes();
+        UpdateEditorVisibility(true);
+        SetStatus("Challenge loaded: " + definition.Title);
+    }
+
+    private void ResetActiveChallengeWorld()
+    {
+        commandHistory.Clear();
+        ClearSpawnedObjects();
+        RefreshHistoryText();
+
+        if (activeChallenge == null)
+        {
+            SetEditorText(BuildStarterScript());
+            RefreshChallengeUi();
+            return;
+        }
+
+        ApplyChallengeSetupCommands(activeChallenge);
+        SetEditorText(string.IsNullOrWhiteSpace(activeChallenge.StarterCode) ? BuildStarterScript() : activeChallenge.StarterCode);
+        RefreshHistoryText();
+        RefreshChallengeUi();
+        BroadcastStateToRemotes();
+    }
+
+    private void ApplyChallengeSetupCommands(CodeWorldChallengeDefinition definition)
+    {
+        if (definition == null || definition.SetupCommands == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < definition.SetupCommands.Length; i++)
+        {
+            string setupCommand = NormalizeCommand(definition.SetupCommands[i]);
+            if (string.IsNullOrWhiteSpace(setupCommand))
+            {
+                continue;
+            }
+
+            if (TryRunCommand(setupCommand, true, out _, out bool mutatedWorld) && mutatedWorld)
+            {
+                commandHistory.Add(setupCommand);
+            }
+        }
     }
 
     private void ActivateLocal(bool teleportPlayer, bool persistPrefs)
@@ -631,10 +728,12 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (!packet.IsActive)
         {
+            activeChallenge = null;
             DisableMode(true);
             return;
         }
 
+        activeChallenge = null;
         ActivateLocal(true, false);
         ClearSpawnedObjects();
         commandHistory.Clear();
@@ -865,6 +964,7 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         RefreshHistoryText();
+        RefreshChallengeUi();
         if (editorInput != null)
         {
             lastEditorTrackedText = editorInput.text;
@@ -2780,7 +2880,14 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         Material material = new Material(shader);
-        material.color = color;
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", color);
+        }
         renderer.sharedMaterial = material;
     }
 
@@ -2851,7 +2958,6 @@ public class CodeWorldRuntime : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
 
         editorCanvasRaycaster = canvasObject.AddComponent<GraphicRaycaster>();
-        DontDestroyOnLoad(canvasObject);
 
         editorPanel = CreateUiObject("EditorPanel", editorCanvas.transform, new Vector2(640f, 560f), Vector2.zero);
         editorPanelRect = editorPanel.GetComponent<RectTransform>();
@@ -2983,6 +3089,7 @@ public class CodeWorldRuntime : MonoBehaviour
 
         SetupVrPointer();
         BuildAiUi();
+        BuildChallengeUi();
         UpdateEditorCanvasMode(true);
     }
 
@@ -3039,6 +3146,7 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         UpdateAiVisibility(aiVisible);
+        UpdateChallengeVisibility();
         UpdateRemoteCursorVisibility();
     }
 
@@ -3999,6 +4107,269 @@ public class CodeWorldRuntime : MonoBehaviour
         UpdateAiVisibility(false);
     }
 
+    private void BuildChallengeUi()
+    {
+        challengePanel = CreateUiObject("ChallengePanel", editorCanvas.transform, new Vector2(520f, 420f), new Vector2(-470f, 34f));
+        challengePanel.AddComponent<Image>().color = new Color(0.06f, 0.08f, 0.13f, 0.96f);
+        Outline outline = challengePanel.AddComponent<Outline>();
+        outline.effectColor = new Color(0.96f, 0.66f, 0.24f, 0.7f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        GameObject titleBar = CreateUiObject("ChallengeTitleBar", challengePanel.transform, new Vector2(520f, 56f), new Vector2(0f, 182f));
+        titleBar.AddComponent<Image>().color = new Color(0.16f, 0.11f, 0.05f, 1f);
+        DraggableWindowHandle dragHandle = titleBar.AddComponent<DraggableWindowHandle>();
+        dragHandle.Configure(challengePanel.GetComponent<RectTransform>());
+
+        challengeTitleText = CreateText("ChallengeTitle", titleBar.transform, "CODE QUEST", 21, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(450f, 34f));
+        challengeTitleText.raycastTarget = false;
+
+        challengeDescriptionText = CreateText("ChallengeDescription", challengePanel.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.92f, 0.96f, 1f), new Vector2(0f, 112f), new Vector2(456f, 116f));
+        challengeDescriptionText.raycastTarget = false;
+
+        GameObject checklistBox = CreateUiObject("ChallengeChecklistBox", challengePanel.transform, new Vector2(456f, 150f), new Vector2(0f, -42f));
+        checklistBox.AddComponent<Image>().color = new Color(0.1f, 0.13f, 0.2f, 0.98f);
+        Outline checklistOutline = checklistBox.AddComponent<Outline>();
+        checklistOutline.effectColor = new Color(0.95f, 0.62f, 0.22f, 0.45f);
+        checklistOutline.effectDistance = new Vector2(1f, -1f);
+
+        challengeChecklistText = CreateText("ChallengeChecklist", checklistBox.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.95f, 0.97f, 1f), Vector2.zero, new Vector2(426f, 126f));
+        challengeChecklistText.raycastTarget = false;
+
+        challengeVerifyButton = CreateButton("ChallengeVerifyButton", challengePanel.transform, "VERIFY", new Vector2(146f, -174f), new Vector2(112f, 40f), new Color(0.18f, 0.68f, 0.32f, 1f), 14);
+        challengeVerifyButton.onClick.AddListener(VerifyActiveChallenge);
+
+        challengeResetButton = CreateButton("ChallengeResetButton", challengePanel.transform, "RESET", new Vector2(22f, -174f), new Vector2(104f, 40f), new Color(0.78f, 0.32f, 0.2f, 1f), 14);
+        challengeResetButton.onClick.AddListener(() =>
+        {
+            ResetActiveChallengeWorld();
+            SetStatus(activeChallenge == null ? "Sandbox reset." : "Challenge reset.");
+        });
+
+        challengeSandboxButton = CreateButton("ChallengeSandboxButton", challengePanel.transform, "SANDBOX", new Vector2(-132f, -174f), new Vector2(130f, 40f), new Color(0.16f, 0.52f, 0.82f, 1f), 14);
+        challengeSandboxButton.onClick.AddListener(StartSandboxMode);
+
+        UpdateChallengeVisibility();
+    }
+
+    private void UpdateChallengeVisibility()
+    {
+        if (challengePanel == null)
+        {
+            return;
+        }
+
+        challengePanel.SetActive(editorVisible && modeActive && activeChallenge != null);
+        if (challengePanel.activeSelf)
+        {
+            RefreshChallengeUi();
+        }
+    }
+
+    private void RefreshChallengeUi()
+    {
+        if (challengePanel == null)
+        {
+            return;
+        }
+
+        if (activeChallenge == null)
+        {
+            challengePanel.SetActive(false);
+            return;
+        }
+
+        if (challengeTitleText != null)
+        {
+            challengeTitleText.text = string.IsNullOrWhiteSpace(activeChallenge.Title) ? "CODE QUEST" : activeChallenge.Title.Trim();
+        }
+
+        if (challengeDescriptionText != null)
+        {
+            challengeDescriptionText.text = string.IsNullOrWhiteSpace(activeChallenge.Description)
+                ? "Use Python to build the requested world objects, then press VERIFY."
+                : activeChallenge.Description.Trim();
+        }
+
+        if (challengeChecklistText != null)
+        {
+            challengeChecklistText.text = BuildChallengeChecklistText();
+        }
+    }
+
+    private string BuildChallengeChecklistText()
+    {
+        if (activeChallenge == null || activeChallenge.Requirements.Count == 0)
+        {
+            return "Checklist:\n□ Build at least one named object.";
+        }
+
+        StringBuilder builder = new StringBuilder("Checklist:\n");
+        for (int i = 0; i < activeChallenge.Requirements.Count; i++)
+        {
+            CodeWorldChallengeRequirement requirement = activeChallenge.Requirements[i];
+            bool passed = EvaluateChallengeRequirement(requirement);
+            builder.Append(passed ? "✓ " : "□ ");
+            builder.Append(string.IsNullOrWhiteSpace(requirement.Label) ? requirement.Kind.ToString() : requirement.Label.Trim());
+            if (i + 1 < activeChallenge.Requirements.Count)
+            {
+                builder.Append('\n');
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private void VerifyActiveChallenge()
+    {
+        if (activeChallenge == null)
+        {
+            SetStatus("No active challenge.");
+            return;
+        }
+
+        RefreshChallengeUi();
+        bool complete = activeChallenge.Requirements.Count > 0;
+        for (int i = 0; i < activeChallenge.Requirements.Count; i++)
+        {
+            if (!EvaluateChallengeRequirement(activeChallenge.Requirements[i]))
+            {
+                complete = false;
+                break;
+            }
+        }
+
+        SetStatus(complete ? "Challenge complete. Nice build." : "Not complete yet. Check the checklist.");
+    }
+
+    private bool EvaluateChallengeRequirement(CodeWorldChallengeRequirement requirement)
+    {
+        if (requirement == null)
+        {
+            return false;
+        }
+
+        switch (requirement.Kind)
+        {
+            case CodeWorldChallengeRequirementKind.ObjectExists:
+                return HasSpawnedObject(requirement.ObjectName);
+
+            case CodeWorldChallengeRequirementKind.ObjectMissing:
+                return !HasSpawnedObject(requirement.ObjectName);
+
+            case CodeWorldChallengeRequirementKind.ObjectNear:
+                return TryGetSpawnedObject(requirement.ObjectName, out GameObject nearObject) &&
+                       Vector3.Distance(nearObject.transform.position, requirement.VectorValue) <= Mathf.Max(0.05f, requirement.Tolerance);
+
+            case CodeWorldChallengeRequirementKind.ScaleAtLeast:
+                return TryGetSpawnedObject(requirement.ObjectName, out GameObject scaledObject) &&
+                       scaledObject.transform.localScale.x >= requirement.VectorValue.x &&
+                       scaledObject.transform.localScale.y >= requirement.VectorValue.y &&
+                       scaledObject.transform.localScale.z >= requirement.VectorValue.z;
+
+            case CodeWorldChallengeRequirementKind.ColorNear:
+                return TryGetSpawnedObject(requirement.ObjectName, out GameObject coloredObject) &&
+                       TryGetObjectColor(coloredObject, out Color objectColor) &&
+                       ColorDistance(objectColor, requirement.ColorValue) <= Mathf.Max(0.02f, requirement.Tolerance);
+
+            case CodeWorldChallengeRequirementKind.ObjectCountAtLeast:
+                return CountLiveSpawnedObjects() >= Mathf.Max(0, requirement.Count);
+
+            case CodeWorldChallengeRequirementKind.PrefixCountAtLeast:
+                return CountObjectsWithPrefix(requirement.Prefix) >= Mathf.Max(0, requirement.Count);
+
+            default:
+                return false;
+        }
+    }
+
+    private bool HasSpawnedObject(string objectName)
+    {
+        return TryGetSpawnedObject(objectName, out _);
+    }
+
+    private bool TryGetSpawnedObject(string objectName, out GameObject target)
+    {
+        target = null;
+        if (string.IsNullOrWhiteSpace(objectName))
+        {
+            return false;
+        }
+
+        return spawnedObjects.TryGetValue(objectName.Trim(), out target) && target != null;
+    }
+
+    private int CountLiveSpawnedObjects()
+    {
+        int count = 0;
+        foreach (KeyValuePair<string, GameObject> pair in spawnedObjects)
+        {
+            if (pair.Value != null)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private int CountObjectsWithPrefix(string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return 0;
+        }
+
+        int count = 0;
+        foreach (KeyValuePair<string, GameObject> pair in spawnedObjects)
+        {
+            if (pair.Value != null && pair.Key.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool TryGetObjectColor(GameObject target, out Color color)
+    {
+        color = Color.clear;
+        if (target == null)
+        {
+            return false;
+        }
+
+        Renderer renderer = target.GetComponent<Renderer>();
+        if (renderer == null || renderer.sharedMaterial == null)
+        {
+            return false;
+        }
+
+        Material material = renderer.sharedMaterial;
+        if (material.HasProperty("_BaseColor"))
+        {
+            color = material.GetColor("_BaseColor");
+            return true;
+        }
+
+        if (material.HasProperty("_Color"))
+        {
+            color = material.GetColor("_Color");
+            return true;
+        }
+
+        color = material.color;
+        return true;
+    }
+
+    private static float ColorDistance(Color first, Color second)
+    {
+        float dr = first.r - second.r;
+        float dg = first.g - second.g;
+        float db = first.b - second.b;
+        return Mathf.Sqrt(dr * dr + dg * dg + db * db);
+    }
+
     private void SetStatus(string message)
     {
         if (statusText != null)
@@ -4652,6 +5023,13 @@ public class CodeWorldRuntime : MonoBehaviour
         builder.Append("Use normal Python loops, variables, functions, lists, and math. Do not use Unity C# wrappers or new Vector3 syntax.\n");
         builder.Append("Object names should use letters, numbers, _ or -.\n");
         builder.Append("Colors can be names, hex, or RGB values.\n");
+        if (activeChallenge != null)
+        {
+            builder.Append("Active challenge:\n");
+            builder.Append(activeChallenge.Title ?? "CodeWorld challenge").Append('\n');
+            builder.Append(activeChallenge.Description ?? string.Empty).Append('\n');
+            builder.Append(BuildChallengeChecklistText()).Append('\n');
+        }
         builder.Append("Current editor code:\n");
         builder.Append(GetEditorText());
         return builder.ToString();
