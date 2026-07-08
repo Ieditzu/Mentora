@@ -22,6 +22,8 @@ import io.github.kawase.packet.impl.core.*;
 import io.github.kawase.packet.impl.game.*;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodePacket;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodeResponsePacket;
+import io.github.kawase.packet.impl.language.CodeWorldPythonRunPacket;
+import io.github.kawase.packet.impl.language.CodeWorldPythonResponsePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodeResponsePacket;
 import io.github.kawase.packet.impl.qr.*;
@@ -570,6 +572,18 @@ public class ClientHandler {
                             io.github.kawase.python.PythonExecutor.execute(executePythonCodePacket.getCode(), 120);
 
                     connection.send(new ExecutePythonCodeResponsePacket(executionResult.getOutput(), executionResult.getError()).encode());
+                }
+
+                case CodeWorldPythonRunPacket codeWorldPythonRunPacket -> {
+                    final io.github.kawase.python.CodeWorldPythonExecutor.ExecutionResult executionResult =
+                            io.github.kawase.python.CodeWorldPythonExecutor.execute(codeWorldPythonRunPacket.getCode(), 12);
+
+                    connection.send(new CodeWorldPythonResponsePacket(
+                            codeWorldPythonRunPacket.getRequestId(),
+                            executionResult.getCommandsText(),
+                            executionResult.getOutput(),
+                            executionResult.getError()
+                    ).encode());
                 }
 
                 case AskAiPacket askAiPacket -> {

@@ -1331,24 +1331,33 @@ public class CodeChallengePadCinematic : MonoBehaviour
 
     private string BuildAiChatContext()
     {
-        if (mode == ChallengeMode.Medium)
+        StringBuilder builder = new StringBuilder();
+        builder.Append(mode == ChallengeMode.Medium ? "cpp_medium_hint" : "cpp_hard_hint").Append('\n');
+        builder.Append("The student is solving a C++ coding challenge in Mentora.\n");
+        builder.Append("Use the active task and current editor code below as source of truth.\n");
+        builder.Append("Give hints based on the current code, not just the starter code.\n");
+        builder.Append("Do not reveal the complete solution unless the student explicitly asks for it.\n\n");
+        builder.Append("Active task:\n");
+        builder.Append(GetChallengePrompt(activeChallenge)).Append("\n\n");
+        builder.Append("Current editor code:\n");
+        builder.Append(codeInput != null ? codeInput.text ?? string.Empty : string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(lastExecutionOutput) || !string.IsNullOrWhiteSpace(lastExecutionError))
         {
-            return "cpp_medium_hint";
+            builder.Append("\n\nLast run output:\n");
+            builder.Append(string.IsNullOrWhiteSpace(lastExecutionOutput) ? "(no output)" : lastExecutionOutput.Trim());
+            builder.Append("\n\nLast run errors:\n");
+            builder.Append(string.IsNullOrWhiteSpace(lastExecutionError) ? "(none)" : lastExecutionError.Trim());
         }
 
-        return "cpp_hard_hint";
+        return builder.ToString();
     }
 
     private string BuildAiChatQuestion(string userMessage)
     {
-        string prompt = GetChallengePrompt(activeChallenge);
-        string code = codeInput != null ? codeInput.text : string.Empty;
-        string taskLabel = Localize("Cerinta", "Task");
-        string codeLabel = Localize("Cod elev", "Student code");
         string questionLabel = Localize("Intrebare", "Question");
         string instruction = Localize("Ofera un indiciu util fara sa dai solutia completa.", "Give a helpful hint without giving away the full solution.");
-        return taskLabel + ":\\n" + prompt + "\\n\\n" + codeLabel + ":\\n" + code + "\\n\\n" + questionLabel + ":\\n" + userMessage
-            + "\\n\\n" + instruction;
+        return questionLabel + ":\n" + userMessage + "\n\n" + instruction;
     }
 
     private void RecordLearningEvent(string eventType, string topic, int correctness, string details)
@@ -1531,6 +1540,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
         counterText.text = Localize("Intrebarea ", "Question ") + (currentIndex + 1) + " / " + total;
         promptText.text = GetChallengePrompt(challenge);
         codeInput.text = currentAnswer;
+        lastExecutionOutput = string.Empty;
+        lastExecutionError = string.Empty;
         feedbackText.text = Localize("Incercari ramase: ", "Attempts left: ") + attemptsLeft + " / " + GetAttemptsAllowed();
         feedbackText.color = textColor;
         if (outputText != null && mode == ChallengeMode.Medium)
@@ -1559,6 +1570,8 @@ public class CodeChallengePadCinematic : MonoBehaviour
             counterText.text = Localize("Refacere ", "Retry ") + (current + 1) + " / " + retryChallenges.Length;
             promptText.text = GetChallengePrompt(challenge);
             codeInput.text = retryAnswers[current];
+            lastExecutionOutput = string.Empty;
+            lastExecutionError = string.Empty;
             feedbackText.text = Localize("Incercari ramase: ", "Attempts left: ") + retryAttempts[current] + " / " + GetAttemptsAllowed();
             feedbackText.color = textColor;
             liveAttemptCount = GetAttemptsAllowed() - retryAttempts[current];

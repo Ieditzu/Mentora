@@ -69,6 +69,8 @@ namespace Mentora.Network
                 71 => new FetchProgrammingProfileSummaryPacket(),
                 72 => new FetchProgrammingProfileSummaryResponsePacket(),
                 73 => new MultiplayerProfileSummaryPacket(),
+                74 => new CodeWorldPythonRunPacket(),
+                75 => new CodeWorldPythonResponsePacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -1260,6 +1262,52 @@ namespace Mentora.Network
             CaretIndex = ReadInt32BigEndian(reader);
             PlayerName = ReadString(reader);
             AuthorClientId = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldPythonRunPacket : Packet
+    {
+        public string RequestId;
+        public string Code;
+
+        public CodeWorldPythonRunPacket(string requestId, string code) : base(74)
+        {
+            RequestId = requestId;
+            Code = code;
+        }
+
+        public CodeWorldPythonRunPacket() : base(74) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, RequestId ?? string.Empty);
+            PutString(writer, Code ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+            Code = ReadString(reader);
+        }
+    }
+
+    public class CodeWorldPythonResponsePacket : Packet
+    {
+        public string RequestId;
+        public string CommandsText;
+        public string Output;
+        public string Error;
+
+        public CodeWorldPythonResponsePacket() : base(75) { }
+
+        protected override void Write(BinaryWriter writer) { }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+            CommandsText = ReadString(reader);
+            Output = ReadString(reader);
+            Error = ReadString(reader);
         }
     }
 
