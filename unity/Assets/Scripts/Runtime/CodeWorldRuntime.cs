@@ -46,6 +46,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private RectTransform editorViewportRect;
     private Text statusText;
     private Text historyText;
+    private ScrollRect historyScrollRect;
+    private RectTransform historyContentRect;
+    private RectTransform historyViewportRect;
     private Text editorHintText;
     private GameObject aiPanel;
     private RectTransform aiPanelRect;
@@ -59,6 +62,11 @@ public class CodeWorldRuntime : MonoBehaviour
     private Button aiCloseButton;
     private readonly Stack<string> editorUndoStack = new Stack<string>();
     private readonly List<string> aiChatLines = new List<string>();
+    private bool suppressBackquoteTextMutation;
+    private string backquoteGuardText = string.Empty;
+    private int backquoteGuardAnchor;
+    private int backquoteGuardFocus;
+    private int backquoteGuardCaret;
     private bool modeActive;
     private bool editorVisible;
     private bool aiVisible;
@@ -72,6 +80,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private int lastLocalCaretIndex = -1;
     private bool awaitingAiResponse;
     private string pendingAiResponse = string.Empty;
+    private bool awaitingCodeWorldPythonResponse;
+    private string pendingCodeWorldRequestId = string.Empty;
+    private CodeWorldPythonResponsePacket pendingCodeWorldPythonResponse;
     private bool aiNetworkSubscribed;
     private bool editorHintDismissed;
     private Coroutine localExecutionRoutine;
@@ -271,7 +282,17 @@ public class CodeWorldRuntime : MonoBehaviour
 
         if (keyboard != null && keyboard.backquoteKey.wasPressedThisFrame)
         {
+            if (editorVisible)
+            {
+                BeginBackquoteTextGuard();
+            }
+            else
+            {
+                suppressBackquoteTextMutation = false;
+            }
+
             UpdateEditorVisibility(!editorVisible);
+            return;
         }
 
         if (!editorVisible)
@@ -362,6 +383,11 @@ public class CodeWorldRuntime : MonoBehaviour
             CopySelectedEditorText();
             currentEvent.Use();
         }
+
+        if (currentEvent.keyCode == KeyCode.BackQuote || currentEvent.character == '`')
+        {
+            currentEvent.Use();
+        }
     }
 
     private void AcquireSessionManager()
@@ -419,6 +445,28 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private void HandleAiNetworkPacket(Packet packet)
     {
+        if (packet is ActionResponsePacket actionResponse && actionResponse.RequestPacketId == 74)
+        {
+            if (!UnityMainThreadDispatcher.IsInitialized)
+            {
+                UnityMainThreadDispatcher.Initialize();
+            }
+
+            UnityMainThreadDispatcher.Instance().Enqueue(() => HandleCodeWorldActionResponse(actionResponse));
+            return;
+        }
+
+        if (packet is CodeWorldPythonResponsePacket codeWorldResponse)
+        {
+            if (!UnityMainThreadDispatcher.IsInitialized)
+            {
+                UnityMainThreadDispatcher.Initialize();
+            }
+
+            UnityMainThreadDispatcher.Instance().Enqueue(() => HandleCodeWorldPythonResponse(codeWorldResponse));
+            return;
+        }
+
         if (!(packet is AiResponsePacket aiResponse))
         {
             return;
@@ -430,6 +478,44 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         UnityMainThreadDispatcher.Instance().Enqueue(() => HandleAiResponse(aiResponse));
+    }
+
+    private void HandleCodeWorldPythonResponse(CodeWorldPythonResponsePacket response)
+    {
+        if (!awaitingCodeWorldPythonResponse || response == null)
+        {
+            return;
+        }
+
+        if (!string.Equals(response.RequestId ?? string.Empty, pendingCodeWorldRequestId ?? string.Empty, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        pendingCodeWorldPythonResponse = response;
+        awaitingCodeWorldPythonResponse = false;
+    }
+
+    private void HandleCodeWorldActionResponse(ActionResponsePacket response)
+    {
+        if (!awaitingCodeWorldPythonResponse || response == null)
+        {
+            return;
+        }
+
+        if (response.Success)
+        {
+            return;
+        }
+
+        pendingCodeWorldPythonResponse = new CodeWorldPythonResponsePacket
+        {
+            RequestId = pendingCodeWorldRequestId,
+            CommandsText = string.Empty,
+            Output = string.Empty,
+            Error = response.Message ?? "Code execution request failed."
+        };
+        awaitingCodeWorldPythonResponse = false;
     }
 
     private void HandleNetworkPacket(Packet packet)
@@ -670,7 +756,7 @@ public class CodeWorldRuntime : MonoBehaviour
     {
         StopLocalScriptExecution(false);
         localExecutionStopRequested = false;
-        localExecutionRoutine = StartCoroutine(RunLocalScriptRoutine(script));
+        localExecutionRoutine = StartCoroutine(RunServerPythonScriptRoutine(script));
     }
 
     private void StopLocalScriptExecution(bool updateStatus)
@@ -688,28 +774,94 @@ public class CodeWorldRuntime : MonoBehaviour
             SetStatus("Script stopped.");
         }
 
+        awaitingCodeWorldPythonResponse = false;
+        pendingCodeWorldRequestId = string.Empty;
+        pendingCodeWorldPythonResponse = null;
         localExecutionRunning = false;
     }
 
-    private IEnumerator RunLocalScriptRoutine(string script)
+    private IEnumerator RunServerPythonScriptRoutine(string script)
     {
         localExecutionRunning = true;
-        SetStatus("Running code...");
+        pendingCodeWorldRequestId = Guid.NewGuid().ToString("N");
+        pendingCodeWorldPythonResponse = null;
+        awaitingCodeWorldPythonResponse = true;
+        SetStatus("Running Python on server...");
 
-        string feedback = string.Empty;
-        yield return ExecuteStatementListCoroutine(
-            TokenizeScript(script),
-            new ScriptCursor(),
-            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase),
-            result => feedback = result);
-
-        if (!string.IsNullOrWhiteSpace(feedback))
+        bool sent = false;
+        yield return SendPacketWithConnect(new CodeWorldPythonRunPacket(pendingCodeWorldRequestId, script), success => sent = success);
+        if (!sent)
         {
-            SetStatus(feedback);
+            awaitingCodeWorldPythonResponse = false;
+            SetStatus("Could not reach the code execution server.");
+            localExecutionRunning = false;
+            localExecutionRoutine = null;
+            yield break;
         }
-        else if (!localExecutionStopRequested)
+
+        float elapsed = 0f;
+        while (!localExecutionStopRequested && awaitingCodeWorldPythonResponse && elapsed < 20f)
         {
-            SetStatus("Code finished.");
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (localExecutionStopRequested)
+        {
+            localExecutionRunning = false;
+            localExecutionRoutine = null;
+            yield break;
+        }
+
+        if (awaitingCodeWorldPythonResponse)
+        {
+            awaitingCodeWorldPythonResponse = false;
+            SetStatus("Python server did not answer in time.");
+            localExecutionRunning = false;
+            localExecutionRoutine = null;
+            yield break;
+        }
+
+        CodeWorldPythonResponsePacket response = pendingCodeWorldPythonResponse;
+        pendingCodeWorldPythonResponse = null;
+        pendingCodeWorldRequestId = string.Empty;
+
+        if (response == null)
+        {
+            SetStatus("Python server returned no response.");
+            localExecutionRunning = false;
+            localExecutionRoutine = null;
+            yield break;
+        }
+
+        string error = (response.Error ?? string.Empty).Trim();
+        string output = (response.Output ?? string.Empty).Trim();
+        string commandsText = response.CommandsText ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            SetStatus("Python error: " + ShortenStatus(error));
+        }
+        else if (!string.IsNullOrWhiteSpace(output))
+        {
+            SetStatus("Python output: " + ShortenStatus(output));
+        }
+        else
+        {
+            SetStatus("Python finished.");
+        }
+
+        int appliedCount = 0;
+        string commandFeedback = string.Empty;
+        yield return ApplyServerCommandLinesRoutine(commandsText, count => appliedCount = count, feedback => commandFeedback = feedback);
+
+        if (!string.IsNullOrWhiteSpace(commandFeedback) && string.IsNullOrWhiteSpace(error))
+        {
+            SetStatus(commandFeedback);
+        }
+        else if (string.IsNullOrWhiteSpace(error))
+        {
+            SetStatus(appliedCount > 0 ? "Python applied " + appliedCount + " world command(s)." : "Python finished. No world commands were created.");
         }
 
         RefreshHistoryText();
@@ -723,6 +875,69 @@ public class CodeWorldRuntime : MonoBehaviour
         localExecutionRoutine = null;
         localExecutionStopRequested = false;
         yield break;
+    }
+
+    private IEnumerator ApplyServerCommandLinesRoutine(string commandsText, Action<int> onAppliedCount, Action<string> onFeedback)
+    {
+        int appliedCount = 0;
+        if (string.IsNullOrWhiteSpace(commandsText))
+        {
+            onAppliedCount?.Invoke(0);
+            yield break;
+        }
+
+        string[] lines = commandsText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        bool hostAppliesDirectly = sessionManager == null || !sessionManager.IsConnectedToSession || sessionManager.IsHosting;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (localExecutionStopRequested)
+            {
+                break;
+            }
+
+            string line = NormalizeCommand(lines[i]);
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            if (hostAppliesDirectly)
+            {
+                if (TryRunCommand(line, true, out string feedback, out bool mutatedWorld))
+                {
+                    if (mutatedWorld)
+                    {
+                        commandHistory.Add(line);
+                        BroadcastCommandFromHost(line);
+                        appliedCount++;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(feedback))
+                    {
+                        onFeedback?.Invoke(feedback);
+                    }
+                }
+                else
+                {
+                    onFeedback?.Invoke(feedback);
+                    break;
+                }
+            }
+            else
+            {
+                sessionManager.SendQuizPacketToHost(new CodeWorldCommandPacket(line, sessionManager.LocalClientId));
+                appliedCount++;
+            }
+
+            yield return null;
+        }
+
+        if (!hostAppliesDirectly && appliedCount > 0)
+        {
+            onFeedback?.Invoke("Sent " + appliedCount + " Python world command(s) to host.");
+        }
+
+        onAppliedCount?.Invoke(appliedCount);
     }
 
     private IEnumerator ExecuteStatementListCoroutine(List<string> statements, ScriptCursor cursor, Dictionary<string, float> variables, Action<string> onError)
@@ -2664,7 +2879,7 @@ public class CodeWorldRuntime : MonoBehaviour
         aiOpenButton = CreateButton("AiOpenButton", editorPanel.transform, "AI", new Vector2(278f, -245f), new Vector2(70f, 38f), new Color(0.16f, 0.52f, 0.82f, 1f), 12);
         aiOpenButton.onClick.AddListener(() => UpdateAiVisibility(true));
 
-        Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run. Press Esc or STOP to stop running code. Press ` to hide. Example C#-style code:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
+        Text helpText = CreateText("Help", editorPanel.transform, "Press Ctrl+Enter to run Python on the server. Press Esc or STOP to stop waiting. Press ` to hide. Example:", 15, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.75f, 0.86f, 1f), new Vector2(-2f, 184f), new Vector2(580f, 28f));
         helpText.raycastTarget = false;
 
         GameObject codeViewport = CreateUiObject("CodeViewport", editorPanel.transform, new Vector2(590f, 300f), new Vector2(0f, 10f));
@@ -2707,7 +2922,7 @@ public class CodeWorldRuntime : MonoBehaviour
         codeTextRect.offsetMax = new Vector2(-12f, -10f);
         codeText.fontSize = 18;
 
-        Text codeHint = CreateText("CodePlaceholder", codeContent.transform, "Type C#-style code here...", 16, FontStyle.Italic, TextAnchor.UpperLeft, new Color(1f, 1f, 1f, 0.35f), Vector2.zero, new Vector2(530f, 320f));
+        Text codeHint = CreateText("CodePlaceholder", codeContent.transform, "Type Python code here...", 16, FontStyle.Italic, TextAnchor.UpperLeft, new Color(1f, 1f, 1f, 0.35f), Vector2.zero, new Vector2(530f, 320f));
         codeHint.raycastTarget = false;
         RectTransform codeHintRect = codeHint.rectTransform;
         codeHintRect.anchorMin = Vector2.zero;
@@ -2724,10 +2939,44 @@ public class CodeWorldRuntime : MonoBehaviour
         editorInput.onValueChanged.AddListener(HandleEditorInputChanged);
         RefreshEditorLayout();
 
-        statusText = CreateText("Status", editorPanel.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-2f, -160f), new Vector2(580f, 48f));
+        statusText = CreateText("Status", editorPanel.transform, string.Empty, 15, FontStyle.Normal, TextAnchor.UpperLeft, new Color(0.98f, 0.86f, 0.34f), new Vector2(-128f, -158f), new Vector2(340f, 42f));
         statusText.raycastTarget = false;
-        historyText = CreateText("History", editorPanel.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), new Vector2(-2f, -230f), new Vector2(580f, 90f));
+
+        GameObject historyViewport = CreateUiObject("HistoryViewport", editorPanel.transform, new Vector2(340f, 82f), new Vector2(-128f, -226f));
+        historyViewportRect = historyViewport.GetComponent<RectTransform>();
+        historyViewport.AddComponent<Image>().color = new Color(0.06f, 0.1f, 0.16f, 0.9f);
+        Outline historyOutline = historyViewport.AddComponent<Outline>();
+        historyOutline.effectColor = new Color(0.25f, 0.62f, 0.95f, 0.35f);
+        historyOutline.effectDistance = new Vector2(1f, -1f);
+        Mask historyMask = historyViewport.AddComponent<Mask>();
+        historyMask.showMaskGraphic = false;
+
+        historyScrollRect = historyViewport.AddComponent<ScrollRect>();
+        historyScrollRect.horizontal = false;
+        historyScrollRect.vertical = true;
+        historyScrollRect.scrollSensitivity = 24f;
+        historyScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        historyScrollRect.inertia = false;
+
+        GameObject historyContent = CreateUiObject("HistoryContent", historyViewport.transform, new Vector2(312f, 96f), Vector2.zero);
+        historyContentRect = historyContent.GetComponent<RectTransform>();
+        historyContentRect.anchorMin = new Vector2(0f, 1f);
+        historyContentRect.anchorMax = new Vector2(1f, 1f);
+        historyContentRect.pivot = new Vector2(0.5f, 1f);
+        historyContentRect.anchoredPosition = new Vector2(0f, -8f);
+        historyContentRect.sizeDelta = new Vector2(-20f, 96f);
+
+        historyText = CreateText("History", historyContent.transform, "History: none", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.66f, 0.8f, 0.96f), Vector2.zero, new Vector2(300f, 78f));
         historyText.raycastTarget = false;
+        RectTransform historyTextRect = historyText.rectTransform;
+        historyTextRect.anchorMin = Vector2.zero;
+        historyTextRect.anchorMax = Vector2.one;
+        historyTextRect.offsetMin = new Vector2(10f, 8f);
+        historyTextRect.offsetMax = new Vector2(-10f, -8f);
+        historyScrollRect.viewport = historyViewportRect;
+        historyScrollRect.content = historyContentRect;
+        AttachScrollWheelForwarder(historyViewport, historyScrollRect);
+
         editorHintText = CreateScreenCornerText("EditorHint", editorCanvas.transform, "Press ` to show the code window.", 19, FontStyle.Bold, TextAnchor.LowerLeft, new Color(0.98f, 0.9f, 0.42f, 0.98f), new Vector2(34f, 28f), new Vector2(520f, 40f));
         editorHintText.raycastTarget = false;
         editorHintText.gameObject.SetActive(false);
@@ -3701,7 +3950,7 @@ public class CodeWorldRuntime : MonoBehaviour
         Text titleText = CreateText("AiTitle", titleBar.transform, "CODE ISLAND AI", 22, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(280f, 30f));
         titleText.raycastTarget = false;
 
-        Text introText = CreateText("AiIntro", aiPanel.transform, "Ask about this syntax, object commands, vectors, colors, or how to write C#-style lines for the island.", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.78f, 0.88f, 1f), new Vector2(0f, 132f), new Vector2(456f, 42f));
+        Text introText = CreateText("AiIntro", aiPanel.transform, "Ask about Code Island Python, mentora_world functions, vectors, colors, loops, or how to control objects.", 14, FontStyle.Italic, TextAnchor.UpperLeft, new Color(0.78f, 0.88f, 1f), new Vector2(0f, 132f), new Vector2(456f, 42f));
         introText.raycastTarget = false;
 
         GameObject historyViewport = CreateUiObject("AiHistoryViewport", aiPanel.transform, new Vector2(456f, 210f), new Vector2(0f, 12f));
@@ -3738,7 +3987,7 @@ public class CodeWorldRuntime : MonoBehaviour
         aiHistoryScrollRect.viewport = aiHistoryViewportRect;
         aiHistoryScrollRect.content = aiHistoryContentRect;
 
-        aiInput = CreateInputField(aiPanel.transform, "AiInput", "Ask about Code Island syntax... Press Enter to send.", new Vector2(0f, -148f), new Vector2(456f, 130f));
+        aiInput = CreateInputField(aiPanel.transform, "AiInput", "Ask about Code Island Python... Press Enter to send.", new Vector2(0f, -148f), new Vector2(456f, 130f));
         aiInput.lineType = InputField.LineType.MultiLineSubmit;
         aiInput.onEndEdit.AddListener(HandleAiInputEndEdit);
 
@@ -3746,7 +3995,7 @@ public class CodeWorldRuntime : MonoBehaviour
         AttachScrollWheelForwarder(historyViewport, aiHistoryScrollRect);
         AttachScrollWheelForwarder(aiInput.gameObject, aiHistoryScrollRect);
 
-        AppendChatLine("AI: I can help with Code Island syntax. Ask me how to spawn, move, rotate, scale, color, delete, or write C#-style commands.");
+        AppendChatLine("AI: I can help with Code Island Python. Ask me how to use cube(), sphere(), move(), rotate(), scale(), color(), loops, and vectors.");
         UpdateAiVisibility(false);
     }
 
@@ -3756,6 +4005,17 @@ public class CodeWorldRuntime : MonoBehaviour
         {
             statusText.text = string.IsNullOrWhiteSpace(message) ? string.Empty : message;
         }
+    }
+
+    private static string ShortenStatus(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return string.Empty;
+        }
+
+        string normalized = Regex.Replace(message.Trim(), "\\s+", " ");
+        return normalized.Length <= 180 ? normalized : normalized.Substring(0, 177) + "...";
     }
 
     private void RefreshHistoryText()
@@ -3768,17 +4028,41 @@ public class CodeWorldRuntime : MonoBehaviour
         if (commandHistory.Count == 0)
         {
             historyText.text = "History: none";
+            RefreshHistoryLayout();
             return;
         }
 
-        int start = Mathf.Max(0, commandHistory.Count - 6);
         StringBuilder builder = new StringBuilder("History:\n");
-        for (int i = start; i < commandHistory.Count; i++)
+        for (int i = 0; i < commandHistory.Count; i++)
         {
             builder.Append(commandHistory[i]).Append('\n');
         }
 
         historyText.text = builder.ToString().TrimEnd();
+        RefreshHistoryLayout();
+        ScrollHistoryToBottom();
+    }
+
+    private void RefreshHistoryLayout()
+    {
+        if (historyText == null || historyContentRect == null || historyViewportRect == null)
+        {
+            return;
+        }
+
+        float lineHeight = Mathf.Max(17f, historyText.fontSize * 1.25f);
+        int lineCount = Mathf.Max(1, (historyText.text ?? string.Empty).Split('\n').Length);
+        float preferredHeight = lineCount * lineHeight + 18f;
+        float viewportHeight = historyViewportRect.rect.height;
+        historyContentRect.sizeDelta = new Vector2(historyContentRect.sizeDelta.x, Mathf.Max(viewportHeight, preferredHeight));
+    }
+
+    private void ScrollHistoryToBottom()
+    {
+        if (historyScrollRect != null)
+        {
+            historyScrollRect.verticalNormalizedPosition = 0f;
+        }
     }
 
     private static GameObject CreateUiObject(string name, Transform parent, Vector2 size, Vector2 anchoredPosition)
@@ -3974,6 +4258,11 @@ public class CodeWorldRuntime : MonoBehaviour
 
     private void HandleEditorInputChanged(string _)
     {
+        if (TryRestoreBackquoteMutation())
+        {
+            return;
+        }
+
         RefreshEditorLayout();
 
         if (suppressEditorSync)
@@ -3985,6 +4274,69 @@ public class CodeWorldRuntime : MonoBehaviour
         nextEditorSyncTime = Time.unscaledTime + EditorSyncInterval;
         cursorSyncDirty = true;
         nextCursorSyncTime = Time.unscaledTime + CursorSyncInterval;
+    }
+
+    private void BeginBackquoteTextGuard()
+    {
+        if (editorInput == null)
+        {
+            return;
+        }
+
+        suppressBackquoteTextMutation = true;
+        backquoteGuardText = editorInput.text ?? string.Empty;
+        backquoteGuardAnchor = Mathf.Clamp(editorInput.selectionAnchorPosition, 0, backquoteGuardText.Length);
+        backquoteGuardFocus = Mathf.Clamp(editorInput.selectionFocusPosition, 0, backquoteGuardText.Length);
+        backquoteGuardCaret = Mathf.Clamp(editorInput.caretPosition, 0, backquoteGuardText.Length);
+    }
+
+    private bool TryRestoreBackquoteMutation()
+    {
+        if (!suppressBackquoteTextMutation || editorInput == null)
+        {
+            return false;
+        }
+
+        string currentText = editorInput.text ?? string.Empty;
+        if (currentText == backquoteGuardText)
+        {
+            suppressBackquoteTextMutation = false;
+            return false;
+        }
+
+        if (!LooksLikeBackquoteMutation(backquoteGuardText, currentText, backquoteGuardAnchor, backquoteGuardFocus))
+        {
+            suppressBackquoteTextMutation = false;
+            return false;
+        }
+
+        suppressEditorTracking = true;
+        suppressEditorSync = true;
+        editorInput.text = backquoteGuardText;
+        editorInput.selectionAnchorPosition = Mathf.Clamp(backquoteGuardAnchor, 0, editorInput.text.Length);
+        editorInput.selectionFocusPosition = Mathf.Clamp(backquoteGuardFocus, 0, editorInput.text.Length);
+        editorInput.caretPosition = Mathf.Clamp(backquoteGuardCaret, 0, editorInput.text.Length);
+        lastEditorTrackedText = editorInput.text;
+        suppressEditorSync = false;
+        suppressEditorTracking = false;
+        suppressBackquoteTextMutation = false;
+        RefreshEditorLayout();
+        return true;
+    }
+
+    private static bool LooksLikeBackquoteMutation(string previousText, string currentText, int anchor, int focus)
+    {
+        previousText = previousText ?? string.Empty;
+        currentText = currentText ?? string.Empty;
+        int start = Mathf.Clamp(Mathf.Min(anchor, focus), 0, previousText.Length);
+        int end = Mathf.Clamp(Mathf.Max(anchor, focus), 0, previousText.Length);
+        string expected = previousText.Substring(0, start) + "`" + previousText.Substring(end);
+        if (currentText == "`")
+        {
+            return start == 0 && end == previousText.Length;
+        }
+
+        return string.Equals(currentText, expected, StringComparison.Ordinal);
     }
 
     private void FlushPendingEditorSync()
@@ -4294,10 +4646,10 @@ public class CodeWorldRuntime : MonoBehaviour
         builder.Append("This assistant is restricted to Code Island scripting help only.\n");
         builder.Append("Do not answer general knowledge, Unity questions outside this mode, life advice, math tutoring, or unrelated chat.\n");
         builder.Append("If a question is outside Code Island scripting, answer with a short refusal and say you only help with Code Island code.\n");
-        builder.Append("Supported commands: cube/box/sphere/ball/orb/ellipsoid/oval/capsule/cylinder/rectangle/rect/circle/disc/panel/plane name [x y z] [sx sy sz], move, rotate, scale, translate, turn, color, delete, clear, list, help.\n");
-        builder.Append("Supported control flow: simple for loops, while loops, int/float/var assignments, ++, --, +=, -=, numeric expressions, and string concatenation for names.\n");
-        builder.Append("The editor accepts C#-style lines like Cube(\"name\", new Vector3(...)); and normal command lines.\n");
-        builder.Append("Ignore using UnityEngine and class wrappers if the player includes them.\n");
+        builder.Append("The editor runs real Python on the Mentora Java server. The server provides a custom mentora_world library.\n");
+        builder.Append("Supported Python functions: cube, box, sphere, ball, orb, ellipsoid, oval, capsule, cylinder, rectangle, rect, circle, disc, panel, plane, move, rotate, scale, resize, translate, turn, color, delete, destroy, clear, list_objects, help, vector, vec3, Vec3.\n");
+        builder.Append("Examples: cube(\"box1\", vector(220, 33, 520), scale=vector(2, 1, 2)); color(\"box1\", \"cyan\"); move(\"box1\", vector(220, 35, 520)).\n");
+        builder.Append("Use normal Python loops, variables, functions, lists, and math. Do not use Unity C# wrappers or new Vector3 syntax.\n");
         builder.Append("Object names should use letters, numbers, _ or -.\n");
         builder.Append("Colors can be names, hex, or RGB values.\n");
         builder.Append("Current editor code:\n");
@@ -4360,17 +4712,16 @@ public class CodeWorldRuntime : MonoBehaviour
     private static string BuildStarterScript()
     {
         return
-            "public static class WorldScript\n" +
-            "{\n" +
-            "    public static void Run()\n" +
-            "    {\n" +
-            "        Sphere(\"ball1\", new Vector3(220f, 33f, 520f), new Vector3(1.2f, 1.2f, 1.2f));\n" +
-            "        Ellipsoid(\"blob1\", new Vector3(224f, 33f, 520f), new Vector3(2f, 1f, 1.4f));\n" +
-            "        Move(\"ball1\", new Vector3(220f, 35f, 520f));\n" +
-            "        Rotate(\"blob1\", new Vector3(0f, 45f, 0f));\n" +
-            "        Color(\"blob1\", \"cyan\");\n" +
-            "    }\n" +
-            "}";
+            "from mentora_world import *\n" +
+            "\n" +
+            "sphere(\"ball1\", vector(220, 33, 520), scale=vector(1.2, 1.2, 1.2))\n" +
+            "ellipsoid(\"blob1\", vector(224, 33, 520), scale=vector(2, 1, 1.4))\n" +
+            "move(\"ball1\", vector(220, 35, 520))\n" +
+            "rotate(\"blob1\", vector(0, 45, 0))\n" +
+            "color(\"blob1\", \"cyan\")\n" +
+            "\n" +
+            "for i in range(5):\n" +
+            "    cube(f\"step_{i}\", vector(228 + i * 2, 32 + i, 520), scale=vector(1.6, 0.5, 1.6))\n";
     }
 
     private string GetEditorText()

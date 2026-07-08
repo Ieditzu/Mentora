@@ -20,6 +20,8 @@ import io.github.kawase.packet.impl.core.*;
 import io.github.kawase.packet.impl.game.*;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodePacket;
 import io.github.kawase.packet.impl.language.ExecuteCPPCodeResponsePacket;
+import io.github.kawase.packet.impl.language.CodeWorldPythonRunPacket;
+import io.github.kawase.packet.impl.language.CodeWorldPythonResponsePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodeResponsePacket;
 import io.github.kawase.packet.impl.qr.*;
@@ -84,6 +86,8 @@ public class PacketManager {
             case 70 -> new WeeklyReportResponsePacket();
             case 71 -> new FetchProgrammingProfileSummaryPacket();
             case 72 -> new FetchProgrammingProfileSummaryResponsePacket();
+            case 74 -> new CodeWorldPythonRunPacket();
+            case 75 -> new CodeWorldPythonResponsePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };
