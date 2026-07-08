@@ -990,7 +990,7 @@ public class CodeWorldRuntime : MonoBehaviour
         switch (command)
         {
             case "help":
-                feedback = "Commands: cube/move/rotate/scale/color/delete/clear/list plus simple for/while loops.";
+                feedback = "Commands: cube/box/sphere/ball/orb/ellipsoid/oval/capsule/cylinder/rectangle/circle/panel/plane, move, rotate, scale, color, delete, clear, list, plus simple for/while loops.";
                 return true;
 
             case "list":
@@ -1000,8 +1000,18 @@ public class CodeWorldRuntime : MonoBehaviour
             case "cube":
             case "box":
             case "sphere":
+            case "ball":
+            case "orb":
+            case "ellipsoid":
+            case "oval":
             case "capsule":
             case "cylinder":
+            case "rect":
+            case "rectangle":
+            case "panel":
+            case "plane":
+            case "circle":
+            case "disc":
                 return TryHandleSpawn(command, tokens, applyChange, out feedback, out mutatedWorld);
 
             case "move":
@@ -1809,8 +1819,18 @@ public class CodeWorldRuntime : MonoBehaviour
             case "cube":
             case "box":
             case "sphere":
+            case "ball":
+            case "orb":
+            case "ellipsoid":
+            case "oval":
             case "capsule":
             case "cylinder":
+            case "rect":
+            case "rectangle":
+            case "panel":
+            case "plane":
+            case "circle":
+            case "disc":
                 if (splitArgs.Length == 1)
                 {
                     return methodName.ToLowerInvariant() + " " + Unquote(splitArgs[0]);
@@ -1818,6 +1838,12 @@ public class CodeWorldRuntime : MonoBehaviour
                 if (splitArgs.Length == 2 && TryParseVectorExpression(splitArgs[1], out Vector3 spawnPos))
                 {
                     return methodName.ToLowerInvariant() + " " + Unquote(splitArgs[0]) + " " + FormatVector(spawnPos);
+                }
+                if (splitArgs.Length == 3 &&
+                    TryParseVectorExpression(splitArgs[1], out spawnPos) &&
+                    TryParseVectorExpression(splitArgs[2], out Vector3 spawnScale))
+                {
+                    return methodName.ToLowerInvariant() + " " + Unquote(splitArgs[0]) + " " + FormatVector(spawnPos) + " " + FormatVector(spawnScale);
                 }
                 break;
 
@@ -1884,8 +1910,18 @@ public class CodeWorldRuntime : MonoBehaviour
             case "cube":
             case "box":
             case "sphere":
+            case "ball":
+            case "orb":
+            case "ellipsoid":
+            case "oval":
             case "capsule":
             case "cylinder":
+            case "rect":
+            case "rectangle":
+            case "panel":
+            case "plane":
+            case "circle":
+            case "disc":
                 if (splitArgs.Length == 1 && TryEvaluateStringExpression(splitArgs[0], variables, out string spawnNameOnly, out feedback))
                 {
                     return methodName.ToLowerInvariant() + " " + spawnNameOnly;
@@ -1896,6 +1932,14 @@ public class CodeWorldRuntime : MonoBehaviour
                     TryParseVectorExpression(splitArgs[1], variables, out Vector3 spawnPos, out feedback))
                 {
                     return methodName.ToLowerInvariant() + " " + spawnName + " " + FormatVector(spawnPos);
+                }
+
+                if (splitArgs.Length == 3 &&
+                    TryEvaluateStringExpression(splitArgs[0], variables, out spawnName, out feedback) &&
+                    TryParseVectorExpression(splitArgs[1], variables, out spawnPos, out feedback) &&
+                    TryParseVectorExpression(splitArgs[2], variables, out Vector3 spawnScale, out feedback))
+                {
+                    return methodName.ToLowerInvariant() + " " + spawnName + " " + FormatVector(spawnPos) + " " + FormatVector(spawnScale);
                 }
                 break;
 
@@ -2113,9 +2157,9 @@ public class CodeWorldRuntime : MonoBehaviour
     private bool TryHandleSpawn(string command, string[] tokens, bool applyChange, out string feedback, out bool mutatedWorld)
     {
         mutatedWorld = false;
-        if (tokens.Length != 2 && tokens.Length != 5)
+        if (tokens.Length != 2 && tokens.Length != 5 && tokens.Length != 8)
         {
-            feedback = "Spawn syntax: cube name [x y z]";
+            feedback = "Spawn syntax: sphere name [x y z] [sx sy sz]";
             return false;
         }
 
@@ -2127,9 +2171,16 @@ public class CodeWorldRuntime : MonoBehaviour
         }
 
         Vector3 position = GetDefaultSpawnPoint();
-        if (tokens.Length == 5 && !TryParseVector3(tokens, 2, out position))
+        if (tokens.Length >= 5 && !TryParseVector3(tokens, 2, out position))
         {
             feedback = "Invalid position. Use numbers like 0 1 0.";
+            return false;
+        }
+
+        Vector3 scale = GetDefaultSpawnScale(command);
+        if (tokens.Length == 8 && !TryParseVector3(tokens, 5, out scale))
+        {
+            feedback = "Invalid size. Use numbers like 1 1 1.";
             return false;
         }
 
@@ -2146,23 +2197,56 @@ public class CodeWorldRuntime : MonoBehaviour
             Destroy(existing);
         }
 
-        PrimitiveType primitiveType = command switch
-        {
-            "sphere" => PrimitiveType.Sphere,
-            "capsule" => PrimitiveType.Capsule,
-            "cylinder" => PrimitiveType.Cylinder,
-            _ => PrimitiveType.Cube,
-        };
+        PrimitiveType primitiveType = ResolveSpawnPrimitiveType(command);
 
         GameObject created = GameObject.CreatePrimitive(primitiveType);
         created.name = objectName;
         created.transform.SetParent(dynamicObjectsRoot.transform, false);
         created.transform.position = position;
         created.transform.rotation = Quaternion.identity;
-        created.transform.localScale = Vector3.one;
+        created.transform.localScale = scale;
         ApplyMaterial(created, GetColorFromName("white"));
         spawnedObjects[objectName] = created;
         return true;
+    }
+
+    private static PrimitiveType ResolveSpawnPrimitiveType(string command)
+    {
+        return command switch
+        {
+            "sphere" => PrimitiveType.Sphere,
+            "ball" => PrimitiveType.Sphere,
+            "orb" => PrimitiveType.Sphere,
+            "ellipsoid" => PrimitiveType.Sphere,
+            "oval" => PrimitiveType.Sphere,
+            "capsule" => PrimitiveType.Capsule,
+            "cylinder" => PrimitiveType.Cylinder,
+            "circle" => PrimitiveType.Cylinder,
+            "disc" => PrimitiveType.Cylinder,
+            "plane" => PrimitiveType.Cube,
+            "panel" => PrimitiveType.Cube,
+            "rect" => PrimitiveType.Cube,
+            "rectangle" => PrimitiveType.Cube,
+            _ => PrimitiveType.Cube,
+        };
+    }
+
+    private static Vector3 GetDefaultSpawnScale(string command)
+    {
+        return command switch
+        {
+            "ball" => new Vector3(1.15f, 1.15f, 1.15f),
+            "orb" => new Vector3(1.4f, 1.4f, 1.4f),
+            "ellipsoid" => new Vector3(1.8f, 1.1f, 1.2f),
+            "oval" => new Vector3(1.8f, 1.1f, 1.2f),
+            "circle" => new Vector3(1.5f, 0.15f, 1.5f),
+            "disc" => new Vector3(1.5f, 0.15f, 1.5f),
+            "rect" => new Vector3(2.5f, 1f, 0.35f),
+            "rectangle" => new Vector3(2.5f, 1f, 0.35f),
+            "panel" => new Vector3(2.5f, 2f, 0.2f),
+            "plane" => new Vector3(4f, 0.2f, 4f),
+            _ => Vector3.one,
+        };
     }
 
     private bool TryHandleAbsoluteTransform(string[] tokens, bool applyChange, TransformMode mode, out string feedback, out bool mutatedWorld)
@@ -4210,7 +4294,7 @@ public class CodeWorldRuntime : MonoBehaviour
         builder.Append("This assistant is restricted to Code Island scripting help only.\n");
         builder.Append("Do not answer general knowledge, Unity questions outside this mode, life advice, math tutoring, or unrelated chat.\n");
         builder.Append("If a question is outside Code Island scripting, answer with a short refusal and say you only help with Code Island code.\n");
-        builder.Append("Supported commands: cube/box/sphere/capsule/cylinder name [x y z], move, rotate, scale, translate, turn, color, delete, clear, list, help.\n");
+        builder.Append("Supported commands: cube/box/sphere/ball/orb/ellipsoid/oval/capsule/cylinder/rectangle/rect/circle/disc/panel/plane name [x y z] [sx sy sz], move, rotate, scale, translate, turn, color, delete, clear, list, help.\n");
         builder.Append("Supported control flow: simple for loops, while loops, int/float/var assignments, ++, --, +=, -=, numeric expressions, and string concatenation for names.\n");
         builder.Append("The editor accepts C#-style lines like Cube(\"name\", new Vector3(...)); and normal command lines.\n");
         builder.Append("Ignore using UnityEngine and class wrappers if the player includes them.\n");
@@ -4280,10 +4364,11 @@ public class CodeWorldRuntime : MonoBehaviour
             "{\n" +
             "    public static void Run()\n" +
             "    {\n" +
-            "        Cube(\"box1\", new Vector3(220f, 33f, 520f));\n" +
-            "        Move(\"box1\", new Vector3(220f, 35f, 520f));\n" +
-            "        Rotate(\"box1\", new Vector3(0f, 45f, 0f));\n" +
-            "        Color(\"box1\", \"cyan\");\n" +
+            "        Sphere(\"ball1\", new Vector3(220f, 33f, 520f), new Vector3(1.2f, 1.2f, 1.2f));\n" +
+            "        Ellipsoid(\"blob1\", new Vector3(224f, 33f, 520f), new Vector3(2f, 1f, 1.4f));\n" +
+            "        Move(\"ball1\", new Vector3(220f, 35f, 520f));\n" +
+            "        Rotate(\"blob1\", new Vector3(0f, 45f, 0f));\n" +
+            "        Color(\"blob1\", \"cyan\");\n" +
             "    }\n" +
             "}";
     }
