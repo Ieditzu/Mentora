@@ -1,590 +1,731 @@
 # Mentora
 
-**Mentora** is an AI-powered educational platform that teaches children aged 9–13 programming through hands-on experience rather than passive lessons. Students write and execute real Python and C++ code inside a 3D Unity game world, receiving instant AI-graded feedback on their output. Every mistake a student makes is remembered — the backend builds a persistent per-student knowledge profile tracking strengths, weaknesses, hint usage, and chat history across topics and languages. An in-game AI tutor (powered by Meta's LLaMA 3.3 70B via Groq) uses that profile before every single response, so hints and explanations are always calibrated to exactly what that student knows and where they are struggling.
+Mentora is an AI-powered educational ecosystem for learning programming through a Unity game, a parental Android app, a web course creator, and a Java/Spring backend. The project teaches Python and C++ by having children write and run real code, receive AI-guided feedback, and build a persistent learning profile that follows them across tasks, quizzes, sessions, and multiplayer activities.
 
-Beyond the game, Mentora is an ecosystem: a **companion Android app** lets parents monitor their child's progress in real time, view AI-generated summaries of what their child is good at in Python and C++ respectively, see completed tasks, and set custom goals to keep the child motivated. A **community web platform** allows parents and educators to author and publish their own quiz-based courses, which students can discover and play directly inside the game world.
+This README is based on the current codebase, not only the older project notes. The implementation currently includes backend packets up to `72`, a separate Unity LAN multiplayer layer with local packet IDs up to `73`, CodeWorld collaborative editing, AI-generated challenges, parent challenges, weekly reports, live session monitoring, a voice-enabled companion, and per-player programming profile merging.
 
----
+## Visual Overview
 
-## Table of Contents
+### Game
 
-- [Architecture Overview](#architecture-overview)
-- [Component Breakdown](#component-breakdown)
-  - [Java/Spring Backend](#javaspring-backend)
-  - [Unity Game Client](#unity-game-client)
-  - [Kotlin Android App](#kotlin-android-app)
-  - [Web Course Creator](#web-course-creator)
-- [Core Concepts](#core-concepts)
-  - [AI Learning Profile](#ai-learning-profile)
-  - [Adaptive AI Tutoring (Groq + LLaMA)](#adaptive-ai-tutoring-groq--llama)
-  - [Real-Time Binary WebSocket Protocol](#real-time-binary-websocket-protocol)
-  - [Authentication Flows](#authentication-flows)
-  - [Course & Quiz System](#course--quiz-system)
-  - [Task & Goal System](#task--goal-system)
-- [Database Schema](#database-schema)
-- [API Reference](#api-reference)
-  - [HTTP REST (Web Creator)](#http-rest-web-creator)
-  - [WebSocket Packet Protocol](#websocket-packet-protocol)
+| Unity game view captured through MCP | Unity scene view captured through MCP |
+| --- | --- |
+| ![Unity game view](unity/Assets/Screenshots/readme-game-view.png) | ![Unity scene view](unity/Assets/Screenshots/readme-scene-view.png) |
+
+| World map | Python island | Python coding pad |
+| --- | --- | --- |
+| ![Entire map in game](images/entire_map_in_game.png) | ![Python island](images/python_island.png) | ![Python coding](images/python_coding.png) |
+
+### Android App And Web Creator
+
+| Children dashboard | AI child insight | Goals | Task history |
+| --- | --- | --- | --- |
+| ![Android children screen](images/app_kids_screen.png) | ![Android AI insight](images/app_ai_insight_of_child.png) | ![Android goals](images/app_goals_screen.png) | ![Android task history](images/app_task_history.png) |
+
+| Web creator dashboard | Course library/editor |
+| --- | --- |
+| ![Web creator](images/web_creator.png) | ![Web creator courses](images/web_creator_courses.png) |
+
+## Table Of Contents
+
+- [System Architecture](#system-architecture)
+- [Repository Structure](#repository-structure)
 - [Technology Stack](#technology-stack)
-- [Getting Started](#getting-started)
+- [Backend](#backend)
+- [Binary Packet Encryption](#binary-packet-encryption)
+- [Packet Reference](#packet-reference)
+- [Authentication](#authentication)
+- [Per-Student Learning Profile](#per-student-learning-profile)
+- [AI System](#ai-system)
+- [Secure Code Execution](#secure-code-execution)
+- [Unity Game](#unity-game)
+- [Android Parent App](#android-parent-app)
+- [Web Course Creator](#web-course-creator)
+- [Courses, Tasks, Goals, And Reports](#courses-tasks-goals-and-reports)
+- [Database Model](#database-model)
+- [Security Notes](#security-notes)
+- [Running The Project](#running-the-project)
+- [Current Testing State](#current-testing-state)
 
----
+## System Architecture
 
-## Architecture Overview
+Mentora uses a multi-client, single-backend architecture. The Java backend is the source of truth for identity, progress, AI profile data, course content, task completion, goals, and code execution. Unity and Android communicate with it through an encrypted binary WebSocket protocol. The web creator uses REST.
 
-Mentora follows a **multi-client, single-server** architecture. One Java backend serves all clients simultaneously over two separate protocols: an HTTP REST API for the web course creator and a binary WebSocket connection for real-time game and mobile clients.
+```mermaid
+flowchart LR
+    Web[Web Course Creator<br/>React + Vite] -->|HTTP REST :8085| Backend[Java/Spring Backend]
+    Android[Android Parent App<br/>Kotlin + Compose] -->|Encrypted Binary WebSocket :49154| Backend
+    Unity[Unity Game Client<br/>C# + HDRP] -->|Encrypted Binary WebSocket :49154| Backend
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Java/Spring Backend                      │
-│                                                                 │
-│   HTTP REST :8085          Binary WebSocket :49154              │
-│   (Web Creator API)        (Game + Mobile Protocol)             │
-│         │                          │                            │
-│   WebSessionService         ClientHandler                       │
-│   CourseController          Server (singleton)                  │
-│         │                          │                            │
-│   PostgreSQL (JPA)   ←─────────────┤                            │
-│         │                 LearningProfileService                │
-│         │                 CourseService, ChildService           │
-│         │                 GroqAI (LLaMA-3.3-70B via Groq)       │
-└─────────────────────────────────────────────────────────────────┘
-         ▲                           ▲               ▲
-         │                           │               │
-   Web Creator              Unity Game Client    Android App
-   (Vite + JS)              (C# / HDRP)         (Kotlin Compose)
-```
+    Backend --> DB[(PostgreSQL)]
+    Backend --> Groq[Groq API<br/>LLaMA 3.3 70B]
+    Backend --> Python[Python Sandbox]
+    Backend --> Cpp[C++ Sandbox]
 
----
-
-## Component Breakdown
-
-### Java/Spring Backend
-
-**Location:** `java-server/Java-Server/`
-
-The backbone of the entire platform. Built with **Spring Boot 3.2** on **Java 21**, it manages all persistent data, business logic, AI calls, and real-time communication.
-
-**Key responsibilities:**
-- Handles all client connections (game, mobile) over a persistent binary WebSocket on port **49154**
-- Exposes a REST API on port **8085** exclusively for the web course creator
-- Persists all data (children, parents, courses, tasks, goals) to **PostgreSQL** via Spring Data JPA
-- Maintains per-child AI learning profiles as **JSONB** columns, updated after every code run, hint request, and AI chat turn
-- **Executes student-submitted Python and C++ code server-side** via `PythonExecutor` and `CppExecutor` inside sandboxed Linux environments — network isolation via `unshare`, strict `ulimit` constraints (256 MB memory cap, CPU time limit, 64 max processes to prevent fork bombs, 2 MB file size limit)
-- **AI-verifies code output** — there are no hardcoded expected answers; the AI reads the task description, the student's code, and the actual program output to judge correctness, so creative solutions that produce the right result are accepted
-- Calls the **Groq AI API** (LLaMA-3.3-70B) for adaptive tutoring responses, hint generation, and parent-facing progress summaries
-- Response caching with a configurable TTL and per-model rate-limit cooldown timers prevent redundant API calls
-
-**Server bootstrap:**
-
-The application starts via `StartServer.java`, which boots the Spring context and then manually initialises the WebSocket server on its dedicated port:
-
-```java
-// StartServer.java - WebSocket starts after Spring context is ready
-Server.init(49154, context);
+    Unity <--> LAN[Unity LAN Multiplayer<br/>TCP 7777 + UDP Discovery 7776]
 ```
 
-The `Server` class is a singleton that holds references to all Spring services and the live `ServerSocket`, acting as the bridge between the stateless Spring DI world and the stateful WebSocket connections.
+The Unity client also contains a second networking layer that is separate from the Java backend. `MultiplayerSessionManager.cs` handles LAN discovery, host/join sessions, remote avatars, quiz packets, voice chat, CodeWorld synchronization, and multiplayer profile sharing.
 
----
-
-### Unity Game Client
-
-**Location:** `unity/Assets/Scripts/`
-
-A 3D game environment built in **Unity** with the **High Definition Render Pipeline (HDRP)**. Students explore an interactive island world containing dedicated coding pads for Python and C++, a community island with published courses, and an AI mentor they can chat with at any point during a challenge.
-
-**What students do in the game:**
-- Work through **22 progressive tasks** across three tiers (see [Task & Goal System](#task--goal-system) for the full list)
-- Write and run real Python and C++ code directly in-game — output comes back from the server live; the AI then evaluates whether the result is correct (no hardcoded expected outputs)
-- Solve **interactive logic puzzles** where they manipulate in-game variables (e.g. `jumpVelocity`, `islandVisible`, `boxRigidbody`) through a real-time variable editor to unlock new areas — requires lateral thinking, not rote answers
-- Take a **5-question C++ multiple choice quiz** (bilingual Romanian/English) with a portal cinematic entry sequence
-- Ask the AI mentor for hints at any challenge via a chat panel — the AI knows the current task, the student's code, and their full learning profile
-- Track daily login streaks and a real-time progress bar showing overall task completion
-
-**Python code verification flow:**
-
-Python challenges use a two-step AI evaluation that is intentionally separate from the learning profile's hint/chat counters:
-
-1. Student submits code → `ExecutePythonCodePacket` → server runs it → stdout back to client
-2. Client sends `AskAiPacket` with context `"python_eval"` — Groq reads the task, the code, and the output to return `CORRECT` or `INCORRECT`
-3. Server-side `recordAiInteraction` skips the `"eval"` context, so AI evaluation calls do **not** inflate the student's hint or chat turn counts in their learning profile
-4. A fallback `IsChallengeCorrect` heuristic (string comparison + `CompactCode` normalisation per `ValidationId`) handles cases where Groq is unavailable
-
-**Key scripts:**
-
-| Script | Purpose |
-|--------|---------|
-| `GameClient.cs` | Singleton WebSocket client; connects to `wss://neuro.serenityutils.club` by default, handles all binary packet send/receive |
-| `PauseMenuManager.cs` | Central in-game UI hub — QR code generation and display, session auto-login on startup, task/goal/children lists, streak display |
-| `PythonDebugPadCinematic.cs` | Python coding pads (medium + hard modes); runs code, AI-evaluates output, records learning events, provides AI hint chat |
-| `CppQuestionPadCinematic.cs` | 5-question bilingual C++ MCQ; records per-answer learning events, AI hint chat, awards task on perfect score |
-| `CommunityIslandMenu.cs` | Loads and displays published community courses via `FetchPublishedCoursesPacket` |
-| `Network/EncryptionUtility.cs` | Client-side AES-256-CBC encryption matching the server's per-packet dynamic seed scheme |
-
-The Unity client exclusively uses the binary WebSocket protocol — it never calls the HTTP REST API.
-
----
-
-### Kotlin Android App
-
-**Location:** `kotlin-app/`
-
-A **Jetpack Compose** Android application (target SDK 36) used by **parents** to monitor their child's learning progress and manage goals. It mirrors the same binary WebSocket protocol as the Unity client.
-
-**Key features:**
-- **Per-language AI summaries** — AI-generated one-line → three-line → full stats breakdown for C++, Python, and General, refreshed automatically as the child's profile evolves (throttled to once per 5 minutes)
-- **Live online presence** — shows which children are currently active in the game in real time
-- **Custom goal setting** — parents define point-threshold or task-completion goals with a reward message; the server pushes a live completion event to the app the moment the child hits the target
-- **System notifications** — the app is notified in real time when a child completes a task
-- **Task completion history** grouped by date with daily stats
-- **QR code scanning** (via **ML Kit** barcode + **CameraX**) to link a child's game account without the child typing credentials
-- **Profile pictures** for both parents and children, stored as Base64 on the server
-- Dark mode and colour theme customisation
-
----
-
-### Web Course Creator
-
-**Location:** `web-creator/`
-
-A lightweight **Vite**-powered single-page application built in vanilla JavaScript. Parents and educators use it to author custom course content that gets published into the game.
-
-**Key features:**
-- Parent registration, login, and session management
-- Full CRUD for courses: title, language (Python/C++), difficulty, description, quiz questions
-- Each question supports four multiple-choice options with a designated correct answer and optional explanation
-- Publishing/unpublishing courses so they appear in-game on the Community Island
-- Published courses integrate directly with the AI learning profile — completion attempts are recorded as learning events under the topic `{language}_course:{acronym}`, feeding back into the student's adaptive profile
-
-The creator communicates exclusively with the **HTTP REST API** on port 8085, authenticated via a Bearer token stored in the browser.
-
----
-
-## Core Concepts
-
-### AI Learning Profile
-
-Every child has a **`game_stats` JSONB column** in the database that acts as their persistent, evolving knowledge fingerprint. The `LearningProfileService` maintains three sub-profiles within this column:
-
-| Profile Key | Scope |
-|-------------|-------|
-| `aiProfileCpp` | C++ specific coding history |
-| `aiProfilePython` | Python specific coding history |
-| `aiProfileGeneral` | Cross-language general stats |
-
-Each profile tracks the following counters:
-
-```json
-{
-  "correctCount": 14,
-  "incorrectCount": 7,
-  "hintsUsed": 5,
-  "chatTurns": 12,
-  "totalInteractions": 33,
-  "topics": {
-    "cpp_course:LOOPS": { "correct": 4, "incorrect": 1 }
-  },
-  "concepts": { ... },
-  "mistakes": [ ... ],
-  "recentEvents": [ ... ],
-  "summaryText": "Strong grasp of loops, struggles with pointers.",
-  "summaryOneLine": "Confident in iteration, developing pointer skills.",
-  "summaryUpdated": 1713200000
-}
+```mermaid
+flowchart TD
+    Host[Unity Host] <-->|TCP game/session packets| PeerA[Unity Client A]
+    Host <-->|TCP game/session packets| PeerB[Unity Client B]
+    Host -.->|UDP discovery beacon<br/>MENTORA_MP_DISCOVERY_V1| LAN[Local Network]
+    PeerA -->|CodeWorld editor sync<br/>quiz answers<br/>voice frames| Host
+    PeerB -->|profile summary<br/>cursor positions<br/>player state| Host
 ```
 
-**`recentEvents`** is a rolling window of the last 10 learning events, giving the AI recency-weighted context about what the student has been working on.
-
-**Learning events are recorded from multiple sources:**
-
-1. **Coding pads in Unity** — when a student runs code, `RecordLearningEventPacket` is sent with the language, topic, correctness, and any error details
-2. **AI chat interactions** — every question asked to the tutor is logged via `recordAiInteraction`
-3. **Course quiz submissions** — `SubmitCourseCompletionPacket` triggers `recordLearningEvent` with a synthetic topic like `python_course:FUNCBASICS`
-
-**Skill level classification** — `buildProfileSummary` classifies each student into a level based on their accuracy and interaction count:
-- **Beginner** — fewer than 10 total interactions or accuracy below 40%
-- **Intermediate** — accuracy 40–70%
-- **Advanced** — accuracy above 70%
-
-This level label is included in every AI prompt context so the tutor never pitches explanations too high or too low.
-
-**LLM-generated narrative summaries** (`summaryText`, `summaryOneLine`, `summaryThreeLine`) are regenerated by calling Groq when stats change, but are throttled — no more than once every 300 seconds — to avoid excessive API usage. The summary prompt instructs Groq to produce both `ONE:` (single line) and `THREE:` (three-line) responses in one call, which are split and stored separately for the different UI detail levels.
-
----
-
-### Adaptive AI Tutoring (Groq + LLaMA)
-
-The AI tutor is powered by **Meta's LLaMA 3.3 70B** model, accessed via the **Groq** inference API for low-latency responses.
-
-**How adaptation works:**
-
-When a student asks a question in-game, the server:
-
-1. Identifies the relevant language context from the question metadata (`cpp` or `python`)
-2. Calls `buildAiHelpProfileContext(childId, language)` to serialize the child's learning profile into a readable text block
-3. Injects that profile block into the system prompt alongside the student's question
-
-The constructed prompt follows this structure:
-
-```
-You are an educational AI mentor inside the Mentora learning game.
-Respond in a supportive, concise way that helps the student keep thinking.
-Do not give away the full solution unless the student explicitly asks for the final answer.
-
-Student progress profile:
-  [serialised LearningProfile — correct/incorrect counts, recent mistakes, topic strengths]
-
-Context: [pad context, e.g. "CppPad - pointers exercise"]
-Student request:
-  [the student's question]
-
-Keep the answer to 1-4 short sentences.
-```
-
-This means the AI *knows* whether the student has been struggling with a specific topic, how many hints they've already used, and what their recent mistakes were — and tailors its guidance accordingly, without the student needing to re-explain their situation each time.
-
-**Parent-facing summaries** are generated with a separate structured prompt that produces `ONE:` (one-line) and `THREE:` (three-line) narrative summaries of the child's progress, intended for display in the Android parent dashboard.
-
-**AI-verified code submissions** — when a student submits code, the server doesn't check against a hardcoded expected output. Instead, the AI receives the task description, the student's full code, and the actual program output, then responds with `CORRECT` or `INCORRECT` and a short explanation. This means creative solutions that produce the right result through a different approach are accepted.
-
-**Rate limiting and caching** are handled inside `GroqAI.java` with a configurable LRU cache (200 entries, 5-minute TTL) and independent cooldown timers per model after rate limits are hit.
-
----
-
-### Real-Time Binary WebSocket Protocol
-
-All game and mobile communication uses a **custom binary packet protocol** over WebSocket (port 49154). This avoids JSON serialisation overhead and allows tight control over the message format.
-
-**Encryption**
-
-Every packet is encrypted with **AES-256-CBC** using a dynamic per-packet seed system. Each message generates a unique seed from `System.nanoTime()`, encrypts that seed with a shared base key, then encrypts the actual payload using the seed as the encryption key. This means every single packet uses a different encryption key — replay attacks and traffic analysis are impractical. The seed length is validated server-side to prevent out-of-memory attacks.
-
-**Packet lifecycle:**
-
-1. Client sends an encrypted binary frame; after decryption the first byte is the **packet ID**
-2. `ClientHandler.onMessage` reads the ID, delegates to `PacketManager.createPacket(id)` to deserialise the payload
-3. A large `switch` expression dispatches on the concrete packet type
-4. The handler checks authorisation (most packets require an authenticated session), processes business logic, then optionally writes a response packet back to the same client or broadcasts to related clients (e.g. goal completions are pushed to the connected parent app in real time)
-
-**Complete packet table (IDs 1–44):**
-
-| ID | Packet(s) | Direction | Purpose |
-|----|-----------|-----------|---------|
-| 1 | `HandShakePacket` | C→S | Connection init; client identifies itself (`unity_game`, `android_client`, etc.) |
-| 2 / 10 | `AuthPacket` / `AuthResponsePacket` | C→S / S→C | Parent login with hashed email + password |
-| 3 | `RegisterParentPacket` | C→S | New parent registration; auto-authenticates on success |
-| 4 | `AddChildPacket` | C→S | Parent adds a child by name |
-| 5 | `AddGoalPacket` | C→S | Create a task-linked or points-threshold goal; optionally pushed live to connected child |
-| 8 / 9 | `CompleteTaskPacket` / `ActionResponsePacket` | C→S / S→C | Mark task complete; notifies connected parent |
-| 11 / 12 | `FetchTasksPacket` / `FetchTasksResponsePacket` | C→S / S→C | Full global task catalog |
-| 13 / 14 | `FetchGoalsPacket` / `FetchGoalsResponsePacket` | C→S / S→C | Goals for a child (self or parent-fetched) |
-| 15 / 16 | `FetchChildrenPacket` / `FetchChildrenResponsePacket` | C→S / S→C | Parent's children + **live online flag** per child |
-| 17 / 18 | `FetchCompletedTasksPacket` / `FetchCompletedTasksResponsePacket` | C→S / S→C | Parent-only: completed tasks for a child with timestamps |
-| 19 / 20 | `GenerateQRLoginPacket` / `QRLoginResponsePacket` | C→S / S→C | Game generates a short-lived QR token |
-| 21 | `ClaimQRLoginPacket` | C→S | Parent app claims token for a specific child; triggers child auth |
-| 22 | `ChildAuthResponsePacket` | S→C | Auth success: child id, name, session token |
-| 23 / 24 | `FetchChildStatsPacket` / `FetchChildStatsResponsePacket` | C→S / S→C | Child fetches own stats; triggers streak update + AI summary refresh |
-| 25 | `VerifySessionPacket` | C→S | Resume child session from saved `childId` + token (loaded from `session.json`) |
-| 26 | `UpdatePfpPacket` | C→S | Update parent or child profile picture (Base64) |
-| 27 | `RemoveChildPacket` | C→S | Parent deletes a child profile |
-| 28 / 29 | `ExecuteCPPCodePacket` / `ExecuteCPPCodeResponsePacket` | C→S / S→C | Run C++ code server-side (120s timeout); returns stdout/stderr |
-| 30 / 31 | `AskAiPacket` / `AiResponsePacket` | C→S / S→C | AI mentor Q&A; injects learning profile for child sessions |
-| 32 | `FetchChildStatsByParentPacket` | C→S | Parent fetches a child's stats (streak **not** updated) |
-| 33 | `RecordLearningEventPacket` | C→S | Record a learning event against child profile (fire-and-forget, no ACK) |
-| 34 / 35 | `ExecutePythonCodePacket` / `ExecutePythonCodeResponsePacket` | C→S / S→C | Run Python code server-side (120s timeout) |
-| 36 / 37 | `FetchPublishedCoursesPacket` / `FetchPublishedCoursesResponsePacket` | C→S / S→C | Published course catalog with per-child completion flags |
-| 38 / 39 | `FetchCourseDetailPacket` / `FetchCourseDetailResponsePacket` | C→S / S→C | Full course questions + child completion state |
-| 40 | `SubmitCourseCompletionPacket` | C→S | Submit quiz result; awards points on perfect score |
-
-Packets **1, 2, 3, 19, 25, 41, 43, 44** are whitelisted and processed **without** prior authentication. All others return an `ActionResponsePacket(currentId, false, "Unauthorized")` if the client has no valid session.
-
----
-
-### Authentication Flows
-
-Mentora has two distinct user types with separate authentication flows.
-
-#### Parent Authentication (Web Creator & Android)
-
-Parents authenticate via the HTTP REST API:
-
-1. **Register**: `POST /api/web/auth/register` — email + password; password is stored as a **SHA-256 hash** (via `HashUtility`)
-2. **Login**: `POST /api/web/auth/login` — returns a `token` (UUID) and `parentId`
-3. Subsequent REST requests include `Authorization: Bearer <token>`; `WebSessionService` validates the token against an in-memory map with a **7-day TTL**
-
-#### Child / Game Authentication (QR Flow)
-
-Children are linked to parent accounts via a QR code pairing flow designed to work without the child needing to type credentials:
-
-1. The Unity game sends `GenerateQRLoginPacket` → server returns a short-lived token
-2. The parent scans the QR code displayed in-game using the Android app
-3. The Android app sends `ClaimQRLoginPacket` (with `childId` + token) to the server
-4. The server issues a `ChildAuthResponsePacket` back to the game client with a persistent `GameSession` token
-5. Future sessions use `VerifySessionPacket` (childId + token) to resume without re-pairing
-
-**Dev shortcuts** (`DevCreateChildProfilePacket`, `DevLoginAsChildPacket`) allow rapid testing without a parent account.
-
----
-
-### Course & Quiz System
-
-Courses are authored in the web creator and played by students in the Community Island area of the Unity game.
-
-**Course structure:**
-
-- A `Course` has metadata (title, acronym, language, difficulty, summary ≤280 chars, description, point reward) and an ordered list of `CourseQuizQuestion` entries
-- Each question has a prompt, four answer options (A–D), a `correctIndex` (0–3), and an optional explanation
-- Acronyms are sanitised server-side (uppercased, non-alphanumeric stripped) for use as learning profile topic keys
-- Courses require at least 1 question; all options and a valid `correctIndex` are validated before saving
-- Courses are only visible in-game after a parent explicitly **publishes** them
-- The web creator persists the session token in `localStorage` so parents stay logged in across browser refreshes
-
-**Completion rules:**
-
-A course run is only considered **completed** (and rewards granted) if the student achieves a **perfect score** — all questions answered correctly:
-
-```java
-boolean completedNow = totalQuestions > 0 && score >= totalQuestions;
-```
-
-On completion:
-- `child.totalPoints` is incremented by `course.pointReward` (granted only once per course)
-- A `course_quiz_attempt` learning event is recorded against the child's AI profile with the topic `{language}_course:{acronym}`
-- Progress is tracked in `child_course_progress` with attempt counts, scores, and timestamps
-
-**Global Tasks** (separate from courses) are pre-seeded entries in the `tasks` table covering common programming exercises (C++ quizzes, debugging, Python practice, logic puzzles). Completing a task increments points and updates `game_stats.tasks_completed`.
-
----
-
-### Task & Goal System
-
-**Tasks** are pre-defined programming challenges seeded from `DefaultTaskType` into the `tasks` table on first server start. Any child can complete a task once for its point value. Completing a task also increments `game_stats["tasks_completed"]` and triggers automatic goal-completion checking.
-
-**The 22 built-in tasks:**
-
-| # | Title | Points | Category |
-|---|-------|--------|---------|
-| 1 | C++ Starter Quiz | 25 | C++ |
-| 2–5 | C++ Debug: Multiply, Sum, Even, Increment | 15–20 | C++ Medium |
-| 6–10 | C++ Hard: IsEven, MaxOfTwo, Square, Sum3, Factorial | 30–35 | C++ Hard |
-| 11–14 | Python Debug: Multiply, Sum, Even, Loop | 15–20 | Python Medium |
-| 15–19 | Python Visual: Bar Line, Progress Bar, Square Grid, Stairs, Alternating | 30–35 | Python Hard |
-| 20 | Logic: Jump & Box (adjust jump velocity + enable physics) | 20 | Logic |
-| 21 | Logic: Reveal Island (set island visible flag) | 20 | Logic |
-| 22 | Logic: Reveal Bridge (unlock bridge path) | 20 | Logic |
-
-**Goals** are created by parents and tied to a child. A goal specifies:
-- A title and description
-- A reward message shown to the child on completion
-- Either a **point threshold** (`required_points`) or a **specific task** (`required_task_id`) as the completion condition
-
-The server checks goal completion automatically when a task is completed or points are updated. When a goal is met, a live push packet is sent to both the connected game client (so the child sees the reward in-game immediately) and the parent's Android app.
-
----
-
-## Database Schema
-
-Schema is managed automatically by **Hibernate DDL auto-update**. The logical schema is:
-
-```
-parents
-  ├── id (PK)
-  ├── email (unique)
-  ├── password_hash
-  └── profile_picture (Base64)
-
-children
-  ├── id (PK)
-  ├── parent_id (FK → parents)
-  ├── name
-  ├── profile_picture
-  ├── total_points
-  ├── streak
-  ├── last_login_date
-  └── game_stats (JSONB) ← AI learning profiles live here
-
-game_sessions
-  ├── id (PK)
-  ├── child_id (unique FK → children)
-  └── session_token
-
-tasks
-  ├── id (PK)
-  ├── title
-  └── point_value
-
-completed_tasks
-  ├── child_id (FK → children)
-  └── task_id (FK → tasks)
-
-goals
-  ├── id (PK)
-  ├── parent_id (FK → parents)
-  ├── child_id (FK → children)
-  ├── title, reward
-  ├── required_points
-  ├── required_task_id (nullable FK → tasks)
-  └── completed, completed_at
-
-courses
-  ├── id (PK)
-  ├── parent_id (FK → parents)
-  ├── title, acronym, language, difficulty
-  ├── summary, description
-  ├── point_reward
-  ├── is_published
-  └── created_at, updated_at
-
-course_quiz_questions
-  ├── id (PK)
-  ├── course_id (FK → courses)
-  ├── order_index
-  ├── prompt
-  ├── option_a/b/c/d
-  ├── correct_index (0–3)
-  └── explanation
-
-child_course_progress
-  ├── id (PK)
-  ├── child_id (FK → children)
-  ├── course_id (FK → courses)
-  ├── attempts
-  ├── best_score
-  ├── completed, completed_at
-  └── reward_granted
-```
-
----
-
-## API Reference
-
-### HTTP REST (Web Creator)
-
-Base URL: `https://neuro.serenityutils.club` (configurable via `VITE_API_BASE` env var)
-
-**Authentication**
-
-| Method | Endpoint | Body | Response |
-|--------|----------|------|----------|
-| POST | `/api/web/auth/lookup` | `{ email }` | `{ exists: bool }` |
-| POST | `/api/web/auth/register` | `{ email, password }` | `{ token, parentId }` |
-| POST | `/api/web/auth/login` | `{ email, password }` | `{ token, parentId }` |
-
-**Courses** *(require `Authorization: Bearer <token>`)*
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/web/courses/mine` | List all courses owned by the authenticated parent |
-| GET | `/api/web/courses/{courseId}` | Get full course detail including questions |
-| POST | `/api/web/courses` | Create a new course |
-| PUT | `/api/web/courses/{courseId}` | Update a course (replaces questions list) |
-| DELETE | `/api/web/courses/{courseId}` | Delete a course |
-
-**Course upsert body:**
-
-```json
-{
-  "title": "Python Basics",
-  "acronym": "PYBASICS",
-  "language": "python",
-  "difficulty": "beginner",
-  "summary": "Core Python syntax",
-  "description": "Learn variables, loops, and functions.",
-  "pointReward": 50,
-  "isPublished": false,
-  "questions": [
-    {
-      "orderIndex": 0,
-      "prompt": "What keyword defines a function in Python?",
-      "optionA": "func",
-      "optionB": "def",
-      "optionC": "define",
-      "optionD": "fn",
-      "correctIndex": 1,
-      "explanation": "'def' is the Python keyword for defining functions."
-    }
-  ]
-}
-```
-
----
-
-### WebSocket Packet Protocol
-
-**Connection:** `wss://<host>:49154`
-
-All frames are binary. The first byte is the packet ID. Clients must send a `HandShakePacket` (ID 1) immediately after connecting. Most subsequent packets require an authenticated session.
-
-See [Core Concepts → Real-Time Binary WebSocket Protocol](#real-time-binary-websocket-protocol) for the packet ID table and dispatch flow.
-
----
+## Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| `java-server/Java-Server/` | Spring Boot backend, WebSocket server, REST API, AI integration, code execution, persistence |
+| `unity/` | Unity 2022.3.62f3 HDRP game client |
+| `kotlin-app/` | Android parent dashboard built with Kotlin and Jetpack Compose |
+| `web-creator/` | React/Vite course authoring platform |
+| `images/` | Project screenshots used by this README and presentation material |
+| `mentora-presentation-slidev/` | Slidev presentation assets |
 
 ## Technology Stack
 
-| Layer | Technology | Version/Notes |
-|-------|-----------|---------------|
-| Backend language | Java | 21 |
-| Backend framework | Spring Boot | 3.2.4 |
-| ORM | Spring Data JPA + Hibernate | `ddl-auto=update` |
-| Database | PostgreSQL | — |
-| Real-time transport | Java-WebSocket (`org.java-websocket`) | Port 49154 |
-| JSON (JSONB) | Hypersistence Utils (`io.hypersistence`) | JSONB column mapping |
-| AI inference | Groq API | `llama-3.3-70b-versatile` |
-| Game engine | Unity | HDRP, XR Toolkit |
-| Mobile | Kotlin + Jetpack Compose | Target SDK 36 |
-| Mobile scanning | Google ML Kit (Barcode) | QR pairing |
-| Mobile images | Coil | — |
-| Web creator | Vite 7 + Vanilla JS | — |
-| Code execution | Server-side `PythonExecutor`, `CppExecutor` | Java process spawning |
-| Password hashing | SHA-256 (`HashUtility`) | — |
-| Session management | In-memory UUID map | 7-day TTL |
+| Layer | Technologies |
+| --- | --- |
+| Backend | Java 21, Spring Boot 3.2.4, Spring Data JPA, Hibernate, PostgreSQL |
+| Realtime backend protocol | Java-WebSocket, custom encrypted binary packets |
+| AI | Groq API, `llama-3.3-70b-versatile`, response cache, API key rotation |
+| Code execution | Server-side Python and C++ runners with Linux sandboxing |
+| Game | Unity 2022.3.62f3, C#, HDRP |
+| Android | Kotlin, Jetpack Compose, CameraX, ZXing/QR scanning, Coil |
+| Web | React 19, Vite 7, Tailwind CSS v4, Framer Motion, lucide-react |
 
----
+## Backend
 
-## Getting Started
+The backend is the central authority for the platform. It owns account data, child profiles, learning history, published courses, tasks, goals, live session state, parent challenges, weekly reports, AI calls, and code execution.
 
-### Prerequisites
+Important files:
 
-- **Java 21** and Gradle
-- **PostgreSQL** running locally (or update `application.properties`)
-- One or more **Groq API keys** placed in `java-server/Java-Server/api-keys.json`
-- **Node.js 18+** for the web creator
-- **Android Studio** for the Kotlin app
-- **Unity 2022+** (HDRP) for the game client
+| File | Role |
+| --- | --- |
+| `client/ClientHandler.java` | Main WebSocket packet dispatcher and authorization gate |
+| `packet/Packet.java` | Base packet class, encryption/decryption, string serialization |
+| `packet/PacketManager.java` | Packet factory for backend packet IDs |
+| `database/services/LearningProfileService.java` | Per-child AI profile updates, summaries, weekly reports |
+| `database/services/CourseService.java` | Course CRUD, publishing, completion, reward logic |
+| `database/services/TaskService.java` | Global task seeding and task completion |
+| `utility/GroqAI.java` | Groq chat API wrapper, response cache, key rotation |
+| `python/PythonExecutor.java` | Sandboxed Python execution |
+| `cpp/CppExecutor.java` | Sandboxed C++ compilation and execution |
+| `web/WebAuthController.java` | Web auth endpoints |
+| `web/WebCourseController.java` | Web course REST API |
+
+`Server.java` keeps live runtime state:
+
+- `activeConnections` for connected clients.
+- `pendingQRLogins` for QR login pairing.
+- `latestLiveSessionStates` for parent live monitoring.
+- `liveSessionSpectators` for subscribed parent clients.
+- `activeParentChallenges` for parent-sent challenges.
+
+## Binary Packet Encryption
+
+Unity and Android do not send plain JSON to the backend WebSocket. They use a custom binary packet format implemented in Java, C#, and Kotlin.
+
+```mermaid
+sequenceDiagram
+    participant Client as Unity/Android Client
+    participant Packet as Packet.encode()
+    participant Server as Java ClientHandler
+    participant Manager as PacketManager
+
+    Client->>Packet: Build packet payload
+    Packet->>Packet: Generate dynamicSeed from nanoTime/ticks
+    Packet->>Packet: Encrypt dynamicSeed with shared base key
+    Packet->>Packet: Encrypt payload with SHA-256(dynamicSeed)
+    Packet->>Server: [seedLength][encryptedSeed][encryptedPayload]
+    Server->>Server: Validate seedLength
+    Server->>Server: Decrypt seed with base key
+    Server->>Server: Decrypt payload with dynamic seed
+    Server->>Manager: Instantiate packet by ID
+    Manager-->>Server: Concrete packet
+    Server->>Server: Authorize and dispatch
+```
+
+Frame layout:
+
+```text
+[4-byte seed length][encrypted seed][encrypted payload]
+```
+
+Encryption details confirmed in code:
+
+- Algorithm: `AES/CBC/PKCS5Padding` on Java, `Aes` with `CBC` and `PKCS7` on C#.
+- Key derivation: SHA-256 hash of the provided password/seed string.
+- IV: random 16-byte IV prepended to ciphertext.
+- Dynamic seed: generated per packet, encrypted with `Data.baseKey`, then used as the payload key.
+- Defensive validation: seed length must be positive and no greater than `1024`.
+
+String serialization inside packets uses:
+
+```text
+[int length][UTF-8 bytes]
+```
+
+## Packet Reference
+
+There are two packet systems:
+
+- Backend WebSocket packets, handled by `java-server/Java-Server/.../PacketManager.java`.
+- Unity local multiplayer packets, handled by `unity/Assets/Scripts/Runtime/Network/PacketManager.cs`.
+
+### Backend WebSocket Packets
+
+| ID | Packet | Purpose |
+| --- | --- | --- |
+| `1` | `HandShakePacket` | Client identifies itself after WebSocket connection |
+| `2` | `AuthPacket` | Parent login over WebSocket |
+| `3` | `RegisterParentPacket` | Parent registration over WebSocket |
+| `4` | `AddChildPacket` | Add child to authenticated parent |
+| `5` | `AddGoalPacket` | Create child goal |
+| `8` | `CompleteTaskPacket` | Mark task complete and award task points |
+| `9` | `ActionResponsePacket` | Generic success/error response |
+| `10` | `AuthResponsePacket` | Parent auth response |
+| `11/12` | `FetchTasksPacket` / response | Global task catalog |
+| `13/14` | `FetchGoalsPacket` / response | Goals for a child |
+| `15/16` | `FetchChildrenPacket` / response | Parent children list and online flags |
+| `17/18` | `FetchCompletedTasksPacket` / response | Completed task history |
+| `19/20` | `GenerateQRLoginPacket` / response | QR login token creation |
+| `21` | `ClaimQRLoginPacket` | Parent app claims QR token for child |
+| `22` | `ChildAuthResponsePacket` | Game child login response |
+| `23/24` | `FetchChildStatsPacket` / response | Child stats and game profile JSON |
+| `25` | `VerifySessionPacket` | Resume game session |
+| `26` | `UpdatePfpPacket` | Update parent or child profile picture |
+| `27` | `RemoveChildPacket` | Delete child profile |
+| `28/29` | `ExecuteCPPCodePacket` / response | Compile and run C++ |
+| `30/31` | `AskAiPacket` / `AiResponsePacket` | AI mentor chat and evaluation |
+| `32` | `FetchChildStatsByParentPacket` | Parent fetches child stats without updating streak |
+| `33` | `RecordLearningEventPacket` | Write learning event into child profile |
+| `34/35` | `ExecutePythonCodePacket` / response | Run Python |
+| `36/37` | `FetchPublishedCoursesPacket` / response | Published course catalog |
+| `38/39` | `FetchCourseDetailPacket` / response | Published course details |
+| `40` | `SubmitCourseCompletionPacket` | Save course attempt and possible reward |
+| `41/42` | `FetchAllChildrenPacket` / response | Dev/admin child listing |
+| `43` | `DevLoginAsChildPacket` | Dev shortcut child login |
+| `44` | `DevCreateChildProfilePacket` | Dev shortcut child creation |
+| `45/46` | `GenerateAiTaskPacket` / response | AI-generated challenge |
+| `47/48` | `CompanionSpeakPacket` / response | Companion text response |
+| `58/59` | `CompanionVoiceTextPacket` / `CompanionVoiceAudioPacket` | Companion voice/text input |
+| `64/65` | `SubscribeLiveSessionPacket` / `LiveSessionUpdatePacket` | Parent live session monitoring |
+| `66/67/68` | Parent challenge packets | Parent sends challenge and receives completion |
+| `69/70` | Weekly report packets | AI weekly parent report |
+| `71/72` | Programming profile summary packets | Child profile summary for game/multiplayer context |
+
+`ClientHandler.java` enforces an unauthenticated whitelist. Packets outside the allowed set return an unauthorized `ActionResponsePacket` unless the client has a valid parent or child session.
+
+### Unity Local Multiplayer Packets
+
+These packets are defined in the Unity client and belong to LAN multiplayer, not the Java backend:
+
+| ID | Packet | Purpose |
+| --- | --- | --- |
+| `49/50` | `MultiplayerJoinPacket` / `MultiplayerWelcomePacket` | Join host session |
+| `51/52` | `MultiplayerPlayerStatePacket` / `MultiplayerPlayerLeftPacket` | Remote player state |
+| `53/54/55` | `QuizStartPacket` / `QuizAnswerPacket` / `QuizResultPacket` | Multiplayer quiz flow |
+| `56/57` | `MultiplayerVoicePacket` / `MultiplayerUdpHelloPacket` | Voice and UDP discovery |
+| `60/61` | `CodeWorldCommandPacket` / `CodeWorldStatePacket` | CodeWorld command and state sync |
+| `62/63` | `CodeWorldEditorSyncPacket` / `CodeWorldCursorPacket` | Shared editor text and named cursors |
+| `73` | `MultiplayerProfileSummaryPacket` | Per-player programming profile sharing |
+
+## Authentication
+
+Mentora has separate parent and child flows.
+
+### Parent Auth
+
+Parents can authenticate through Android WebSocket packets or through the web REST API. The web API exposes:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/web/auth/lookup` | Check whether an email exists |
+| `POST` | `/api/web/auth/register` | Create parent and return token |
+| `POST` | `/api/web/auth/login` | Login and return token |
+
+Credentials are hashed with `SHA-256` in `HashUtility`. Web sessions are UUID tokens stored in memory by `WebSessionService` with a 7-day TTL.
+
+### Child Auth Through QR
+
+Children do not type credentials in the game. The game uses QR pairing:
+
+1. Unity sends `GenerateQRLoginPacket`.
+2. Backend returns a short token through `QRLoginResponsePacket`.
+3. Parent scans the QR code from Android.
+4. Android sends `ClaimQRLoginPacket` with token and child ID.
+5. Backend sends `ChildAuthResponsePacket` to the waiting game client.
+6. Unity stores child ID/session token and later resumes through `VerifySessionPacket`.
+
+## Per-Student Learning Profile
+
+Every child has a `game_stats` JSONB column in the `children` table. The profile is intentionally flexible and is maintained by `LearningProfileService`.
+
+```mermaid
+flowchart LR
+    CodeRun[Code run result] --> Profile[game_stats JSONB]
+    Quiz[Quiz or course attempt] --> Profile
+    Hint[AI hint/chat] --> Profile
+    Task[Task completion] --> Profile
+
+    Profile --> Cpp[aiProfileCpp]
+    Profile --> Python[aiProfilePython]
+    Profile --> General[aiProfileGeneral]
+
+    Cpp --> AI[AI prompt context]
+    Python --> AI
+    General --> Parent[Parent summaries and reports]
+    General --> Multiplayer[Multiplayer merged profile context]
+```
+
+Tracked fields include:
+
+- `correctCount`
+- `incorrectCount`
+- `hintsUsed`
+- `chatTurns`
+- `totalInteractions`
+- topic statistics
+- concept strengths and struggles
+- common mistakes
+- recent learning events
+- `summaryText`
+- `summaryOneLine`
+- `summaryThreeLine`
+- summary update timestamp
+
+`recordLearningEvent()` updates language-specific and general profiles. `recordAiInteraction()` skips contexts containing `eval`, so AI grading does not inflate hint/chat usage.
+
+`buildProfileSummary()` classifies the child as `beginner`, `intermediate`, or `advanced` based on interaction count and accuracy. `buildAiHelpProfileContext()` serializes the child profile into text for AI prompts. `buildMultiplayerProgrammingProfileSummary()` produces a compact profile string used by Unity multiplayer profile merging.
+
+## AI System
+
+The AI layer is centered around Groq and `llama-3.3-70b-versatile`.
+
+Capabilities in the current codebase:
+
+- AI mentor chat through `AskAiPacket`.
+- AI-backed code evaluation contexts.
+- AI-generated task/challenge flow through `GenerateAiTaskPacket`.
+- AI companion lines through `CompanionSpeakPacket`.
+- Companion voice input through transcript or PCM audio packets.
+- Parent-facing summaries and weekly reports.
+- Multiplayer quiz/profile context generation from merged player profiles.
+
+`GroqAI.java` includes:
+
+- 200-entry LRU response cache.
+- 5-minute cache TTL.
+- 35-second request timeout.
+- API key rotation when keys timeout or hit retryable status codes.
+- fallback error strings when no key is configured or Groq is unavailable.
+
+## Secure Code Execution
+
+Student code is executed server-side, but not directly in the backend process.
+
+### Python
+
+`PythonExecutor.java`:
+
+- creates a temporary directory.
+- writes code to `main.py`.
+- runs `python3 -I -B -S`.
+- isolates network/user namespace with `unshare --net --user --map-root-user`.
+- applies strict `ulimit` constraints.
+- deletes the temporary directory afterward.
+
+### C++
+
+`CppExecutor.java`:
+
+- creates a temporary directory.
+- writes code to `main.cpp`.
+- compiles with `g++ -O2`.
+- applies a compile timeout.
+- runs the compiled binary through the same `unshare` and `ulimit` wrapper.
+- deletes the temporary directory afterward.
+
+Sandbox limits:
+
+| Limit | Value |
+| --- | --- |
+| Virtual memory | `ulimit -v 262144` |
+| CPU time | `ulimit -t <timeoutSeconds>` |
+| Created file size | `ulimit -f 2048` |
+| Process count | `ulimit -u 64` |
+| Network | disabled through `unshare --net` |
+| Java fallback timeout | `timeoutSeconds + 2` |
+
+## Unity Game
+
+The Unity game is the main student experience. It contains coding pads, quiz islands, community course browsing, AI challenges, a companion character, LAN multiplayer, and CodeWorld.
+
+Important scripts:
+
+| Script | Responsibility |
+| --- | --- |
+| `GameClient.cs` | WebSocket connection to backend and encrypted packet send/receive |
+| `PauseMenuManager.cs` | UI hub, auth flow, multiplayer menus, CodeWorld and Quiz Island entry points |
+| `MultiplayerSessionManager.cs` | LAN host/join, discovery, remote avatars, voice, quiz packets, profile sync |
+| `CodeWorldRuntime.cs` | "Your Code Controls The World" editor and runtime scene modification |
+| `MultiplayerQuizManager.cs` | Multiplayer quiz state, scoring, answer timing |
+| `CommunityIslandMenu.cs` | Published course browsing and course quiz play |
+| `AiChallengePad.cs` | AI-generated personalized challenge flow |
+| `RobotCompanion.cs` | In-game companion behavior, text/voice triggers |
+| `PythonDebugPadCinematic.cs` | Python challenges and AI evaluation flow |
+| `CodeChallengePadCinematic.cs` | C++ coding/debugging pads |
+| `CppQuestionPadCinematic.cs` | C++ multiple-choice quiz pad |
+
+### CodeWorld
+
+CodeWorld is accessible from `PauseMenuManager -> Multiplayer -> Host Game -> Your Code Controls The World`. It teleports the player to `CodeWorldRuntime.SpawnPosition` and activates a code editor that can show/hide in game.
+
+Implemented behavior includes:
+
+- code editor overlay/window.
+- keyboard-driven command editing.
+- object creation and manipulation through code-like commands.
+- cubes, spheres, rectangles/circles style primitives depending on command support in `CodeWorldRuntime`.
+- loops and command parsing support in the CodeWorld interpreter.
+- local history and state serialization.
+- live multiplayer editor sync.
+- named remote cursors.
+- snapshot resync for clients joining after the host.
+- hiding the normal companion where appropriate for CodeWorld mode.
+
+CodeWorld multiplayer packets are local Unity session packets:
+
+- `CodeWorldCommandPacket`
+- `CodeWorldStatePacket`
+- `CodeWorldEditorSyncPacket`
+- `CodeWorldCursorPacket`
+
+### Quiz Island
+
+Quiz Island is hosted through the multiplayer menu. It supports:
+
+- host-controlled quiz options.
+- fetching quiz/course content.
+- AI profile quiz generation.
+- multiplayer answer collection.
+- response-time-aware scoring in `MultiplayerQuizManager`.
+- ending the question once all players answer, with a short delay before moving on.
+- merged programming profile context when multiple players are in the lobby.
+
+### Multiplayer Profile Merging
+
+`MultiplayerSessionManager` stores `ProgrammingProfileSnapshot` entries for local and remote players:
+
+- `ClientId`
+- `PlayerName`
+- `ChildId`
+- `ChildName`
+- `TotalPoints`
+- `Streak`
+- `CompletedTaskCount`
+- `TotalTaskCount`
+- `ProfileSummary`
+
+`BuildMergedProgrammingProfileContext()` combines available player profiles so AI-generated multiplayer quizzes can consider all participants, not only the host.
+
+### Voice And Companion
+
+The Unity game supports:
+
+- companion text responses.
+- voice transcript packets.
+- raw PCM voice audio packets.
+- local voice chat in multiplayer.
+- voice modes: `AlwaysOn`, `PushToTalk`, `Muted`.
+- contextual companion triggers like challenge success/failure and entering coding pads.
+
+## Android Parent App
+
+The Android app is a parental monitoring suite, not just a login client.
+
+Key files:
+
+| File | Responsibility |
+| --- | --- |
+| `MainActivity.kt` | Android entry point |
+| `ui/AuthScreen.kt` | Parent login/register UI |
+| `ui/MainDashboard.kt` | Compose dashboard, children, goals, history, settings |
+| `ui/SocketViewModel.kt` | WebSocket state, packets, data models, notifications |
+| `socket/ClientSocket.java` | WebSocket client |
+| `socket/packet/Packet.java` | Packet serialization/encryption counterpart |
+
+Implemented app features:
+
+- parent login/register.
+- reconnect loop.
+- children dashboard with points and online state.
+- QR scan flow for linking game sessions.
+- child profile pictures.
+- parent profile picture support.
+- task history.
+- goals.
+- live session subscription state.
+- AI profiles by language and general profile.
+- weekly reports.
+- system notifications when child activity arrives.
+- theme customization and dark mode.
+
+## Web Course Creator
+
+The web creator lets parents or educators manage course content that appears in the Unity game.
+
+Important files:
+
+| File | Responsibility |
+| --- | --- |
+| `src/App.jsx` | Main SPA, auth state, dashboard, course editor |
+| `src/lib/api.js` | REST API helper |
+| `src/main.jsx` | React entry point |
+| `src/styles.css` | Tailwind/CSS styling |
+
+REST API:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/web/auth/lookup` | Determine login/register path |
+| `POST` | `/api/web/auth/register` | Register parent |
+| `POST` | `/api/web/auth/login` | Login parent |
+| `GET` | `/api/web/courses/mine` | List owned courses |
+| `GET` | `/api/web/courses/{courseId}` | Get owned course detail |
+| `POST` | `/api/web/courses` | Create course |
+| `PUT` | `/api/web/courses/{courseId}` | Update course and questions |
+| `DELETE` | `/api/web/courses/{courseId}` | Delete course |
+
+Course validation in `CourseService`:
+
+- title is required.
+- at least one quiz question is required.
+- each question needs a prompt.
+- each question has four options.
+- `correctIndex` must be `0..3`.
+- acronym is sanitized from acronym/title.
+- summary is trimmed to 280 characters.
+- course ownership is checked for read/update/delete.
+
+## Courses, Tasks, Goals, And Reports
+
+### Courses
+
+Courses are authored in the web creator and played in Unity through Community Island.
+
+Course fields:
+
+- title.
+- acronym.
+- language.
+- difficulty.
+- summary.
+- description.
+- point reward.
+- published flag.
+- ordered quiz questions.
+
+`recordCourseCompletion()` tracks attempts, last score, best score, total questions, last attempt time, completion, and reward state. Course points are granted only once because `rewardGranted` is checked before awarding points.
+
+### Global Tasks
+
+Global tasks are initialized from `DefaultTaskType`:
+
+| Category | Examples |
+| --- | --- |
+| C++ starter | `C++ Starter Quiz: Complete All Questions` |
+| C++ debug medium | multiply, sum, even check, pass-by-reference |
+| C++ hard | `IsEven`, `MaxOfTwo`, `Square`, `Sum3`, `Factorial3` |
+| Python medium | multiply, add, even check, loop sum |
+| Python hard visual | bar line, progress bar, square grid, staircase, alternating pattern |
+| Logic puzzles | jump power/physics, reveal island, reveal bridge |
+
+`TaskService.completeTask()` creates a `CompletedTask`, adds the task point value to the child, increments `game_stats["tasks_completed"]`, saves the child, and triggers goal checks. The method currently does not enforce duplicate prevention in the shown code path, so callers should avoid submitting the same completion repeatedly unless repeat rewards are intended.
+
+### Goals
+
+Goals are parent-created child objectives. A goal can be based on:
+
+- required points.
+- required task.
+
+`GoalService` checks goals after task completion and can push updates to connected clients.
+
+### Parent Challenges
+
+Parent challenges are live prompts sent from the Android app to a child session:
+
+- `SendParentChallengePacket`
+- `ParentChallengePacket`
+- `ParentChallengeCompletedPacket`
+
+Active challenges are held in `Server.activeParentChallenges`.
+
+### Weekly Reports
+
+`LearningProfileService.generateWeeklyParentReport()`:
+
+- computes the current Monday-Sunday week.
+- collects completed tasks from the week.
+- reads C++, Python, and general profile data.
+- collects recent learning events.
+- builds an AI prompt for a parent-facing report.
+- falls back to a deterministic report if the AI call fails.
+
+## Database Model
+
+The entity model is implemented under `java-server/Java-Server/src/main/java/io/github/kawase/database/entity/`.
+
+```mermaid
+erDiagram
+    PARENT ||--o{ CHILD : owns
+    CHILD ||--o| GAME_SESSION : has
+    CHILD ||--o{ COMPLETED_TASK : completes
+    TASK ||--o{ COMPLETED_TASK : appears_in
+    PARENT ||--o{ GOAL : creates
+    CHILD ||--o{ GOAL : receives
+    TASK ||--o{ GOAL : may_require
+    PARENT ||--o{ COURSE : authors
+    COURSE ||--o{ COURSE_QUIZ_QUESTION : contains
+    CHILD ||--o{ CHILD_COURSE_PROGRESS : tracks
+    COURSE ||--o{ CHILD_COURSE_PROGRESS : tracks
+
+    PARENT {
+        long id
+        string email
+        string passwordHash
+        text profilePicture
+    }
+
+    CHILD {
+        long id
+        string name
+        text profilePicture
+        jsonb gameStats
+        int totalPoints
+        int streak
+        date lastLoginDate
+    }
+
+    COURSE {
+        long id
+        string title
+        string acronym
+        string language
+        string difficulty
+        string summary
+        int pointReward
+        bool published
+    }
+```
+
+Important persistent concepts:
+
+- `children.game_stats` stores the evolving AI profile as JSONB.
+- `game_sessions` stores persistent child session tokens.
+- `completed_tasks` stores task completion records.
+- `goals` stores parent-created reward objectives.
+- `child_course_progress` stores course attempts, scores, and reward state.
+
+## Security Notes
+
+Implemented protections:
+
+- encrypted binary WebSocket packets between backend and Unity/Android.
+- per-packet dynamic encryption seed.
+- seed length validation.
+- SHA-256 credential hashing.
+- web bearer tokens with TTL.
+- course owner validation.
+- child ownership checks in parent operations.
+- code execution sandboxing with process, memory, file, CPU, and network restrictions.
+
+Known limitations visible in the code:
+
+- web sessions are in-memory, so they reset when the backend restarts.
+- password hashing uses plain SHA-256 rather than a slow password hashing algorithm such as BCrypt/Argon2.
+- some dev/admin packets exist in the packet map and whitelist; deployments should review exposure before public release.
+- task completion duplicate prevention is not enforced in `TaskService.completeTask()`.
+
+## Running The Project
 
 ### Backend
 
 ```bash
 cd java-server/Java-Server
-# Configure database in src/main/resources/application.properties
-# Add your Groq key(s) to api-keys.json:
-# { "groq_api_keys": ["gsk_first_key", "gsk_second_key"] }
 ./gradlew bootRun
 ```
 
-`groq_api_key` is still accepted for a single key. `groq_api_keys` can be a JSON array or comma-separated string; chat and speech-to-text rotate keys independently when a key is rate-limited or times out.
+Expected services:
 
-The server starts HTTP on **:8085** and WebSocket on **:49154**.
+- HTTP REST: `:8085`
+- WebSocket: `:49154`
 
-### Web Course Creator
+Backend prerequisites:
+
+- Java 21.
+- PostgreSQL.
+- configured `application.properties`.
+- `api-keys.json` with Groq API key configuration.
+
+Example Groq key file:
+
+```json
+{
+  "groq_api_keys": ["gsk_first_key", "gsk_second_key"]
+}
+```
+
+### Web Creator
 
 ```bash
 cd web-creator
 npm install
 npm run dev
-# Runs on http://localhost:5173
-# Set VITE_API_BASE to point at your backend
 ```
+
+Set `VITE_API_BASE` if the backend is not running at the default configured endpoint.
 
 ### Android App
 
-Open `kotlin-app/` in Android Studio and run on a device or emulator. Update the WebSocket server URL in the app's configuration to match your backend host.
+Open `kotlin-app/` in Android Studio. The app targets modern Android SDKs and uses WebSocket packets matching the backend protocol.
 
 ### Unity Game
 
-Open the `unity/` folder in Unity Hub. Update the default server URL in `GameClient.cs` from `wss://neuro.serenityutils.club` to your local or deployed backend before running in the editor.
+Open `unity/` in Unity Hub using Unity `2022.3.62f3`. Update the server URL in `GameClient.cs` if using a local backend instead of the deployed endpoint.
 
----
+The default Unity backend URL in code is:
 
-> **Security note:** `application.properties` contains database credentials and `api-keys.json` contains the Groq API key. Neither file should be committed to a public repository. Add them to `.gitignore` and use environment variables or secrets management in production.
+```text
+wss://neuro.serenityutils.club
+```
+
+## Current Testing State
+
+The repository currently does not contain a full automated test suite for all components. Verification is mainly manual/integration-based:
+
+- backend starts and accepts WebSocket/REST traffic.
+- Unity connects and exchanges encrypted packets.
+- Android connects and displays child/progress state.
+- web creator can authenticate and manage courses.
+- Unity MCP was used to capture current game/editor screenshots for this README.
+
+This is an important improvement area. The highest-value future tests would cover packet encoding/decoding compatibility, course completion reward rules, task duplicate behavior, learning profile updates, and code executor sandbox behavior.
+
+## Competition/Project Criteria Mapping
+
+Mentora matches common educational software evaluation criteria:
+
+- Architecture: multi-client system with backend, game, mobile app, and web creator.
+- Implementation: custom packet protocol, sandboxed code execution, AI profile service, multiplayer systems.
+- Interface: game UI, Android dashboard, web authoring tool.
+- Content: editable courses, coding tasks, quizzes, AI-generated challenges, live feedback.
+- Evaluation and feedback: task completion, AI explanations, parent summaries, weekly reports.
+- Originality: persistent per-student AI profile, collaborative CodeWorld, merged multiplayer programming context, live parent-child educational loop.
