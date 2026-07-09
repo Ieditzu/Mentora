@@ -1,10 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class RocketLandingPuzzle : MonoBehaviour
 {
     private const string TaskTitle = "Rocket Landing";
     private const string CommunityIslandName = "inslua3";
+    private const string MissileResourcePath = "Missile/AIM-120C AMRAAM";
+    private const string MissileEditorAssetPath = "Assets/missle/AIM-120C AMRAAM/AIM-120C AMRAAM.obj";
     private static readonly Vector3 FallbackPosition = new Vector3(57.4f, 1.2f, 331.6f);
     private static readonly Vector3 CommunityIslandLocalOffset = new Vector3(0f, 1.2f, 0f);
 
@@ -13,6 +18,7 @@ public class RocketLandingPuzzle : MonoBehaviour
     private GameObject root;
     private GameObject rocket;
     private GameObject coinObject;
+    private GameObject importedRocketModel;
     private GameObject bodyObject;
     private GameObject noseObject;
     private GameObject consoleObject;
@@ -395,28 +401,54 @@ public class RocketLandingPuzzle : MonoBehaviour
         rocket = new GameObject("StudentCodeRocket");
         rocket.transform.SetParent(parent, false);
 
-        bodyObject = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        bodyObject.name = "RocketBody";
-        bodyObject.transform.SetParent(rocket.transform, false);
-        bodyObject.transform.localScale = new Vector3(0.55f, 1.35f, 0.55f);
+        importedRocketModel = InstantiateRocketVisual();
+        if (importedRocketModel != null)
+        {
+            importedRocketModel.transform.SetParent(rocket.transform, false);
+            importedRocketModel.name = "RocketVisual";
+            importedRocketModel.transform.localPosition = new Vector3(0f, 0.15f, 0f);
+            importedRocketModel.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+            importedRocketModel.transform.localScale = Vector3.one * 1.45f;
+            RemoveVisualColliders(importedRocketModel);
+            bodyObject = importedRocketModel;
+            noseObject = importedRocketModel;
+        }
+        else
+        {
+            bodyObject = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            bodyObject.name = "RocketBody";
+            bodyObject.transform.SetParent(rocket.transform, false);
+            bodyObject.transform.localScale = new Vector3(0.72f, 1.6f, 0.72f);
 
-        noseObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        noseObject.name = "RocketNose";
-        noseObject.transform.SetParent(rocket.transform, false);
-        noseObject.transform.localPosition = new Vector3(0f, 1.55f, 0f);
-        noseObject.transform.localScale = new Vector3(0.64f, 0.78f, 0.64f);
+            noseObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            noseObject.name = "RocketNose";
+            noseObject.transform.SetParent(rocket.transform, false);
+            noseObject.transform.localPosition = new Vector3(0f, 2.45f, 0f);
+            noseObject.transform.localScale = new Vector3(0.62f, 1.15f, 0.62f);
 
-        GameObject finLeft = CreateFin("RocketFinLeft", new Vector3(-0.52f, -0.82f, 0f), new Vector3(0.12f, 0.5f, 0.7f));
-        finLeft.transform.SetParent(rocket.transform, false);
-        GameObject finRight = CreateFin("RocketFinRight", new Vector3(0.52f, -0.82f, 0f), new Vector3(0.12f, 0.5f, 0.7f));
-        finRight.transform.SetParent(rocket.transform, false);
+            GameObject finLeft = CreateFin("RocketFinLeft", new Vector3(-0.52f, -0.82f, 0f), new Vector3(0.12f, 0.5f, 0.7f));
+            finLeft.transform.SetParent(rocket.transform, false);
+            GameObject finRight = CreateFin("RocketFinRight", new Vector3(0.52f, -0.82f, 0f), new Vector3(0.12f, 0.5f, 0.7f));
+            finRight.transform.SetParent(rocket.transform, false);
+
+            RocketWinglets primitiveWinglets = rocket.AddComponent<RocketWinglets>();
+            primitiveWinglets.finX = finLeft.transform;
+            primitiveWinglets.finZ = finRight.transform;
+        }
+
+        GameObject nozzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        nozzle.name = "RocketEngineNozzle";
+        nozzle.transform.SetParent(rocket.transform, false);
+        nozzle.transform.localPosition = new Vector3(0f, -1.95f, 0f);
+        nozzle.transform.localScale = new Vector3(0.42f, 0.18f, 0.42f);
+        ApplyColor(nozzle, new Color(0.18f, 0.18f, 0.2f, 1f));
 
         GameObject flame = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         flame.name = "RocketEngineFlame";
         flame.transform.SetParent(rocket.transform, false);
-        flame.transform.localPosition = new Vector3(0f, -1.7f, 0f);
+        flame.transform.localPosition = new Vector3(0f, -2.25f, 0f);
         flame.transform.localRotation = Quaternion.Euler(180f, 0f, 0f);
-        flame.transform.localScale = new Vector3(0.34f, 0.7f, 0.34f);
+        flame.transform.localScale = new Vector3(0.42f, 0.95f, 0.42f);
         ApplyColor(flame, new Color(1f, 0.42f, 0.08f, 0.85f));
         engineFlame = flame.transform;
         engineFlame.gameObject.SetActive(false);
@@ -447,10 +479,70 @@ public class RocketLandingPuzzle : MonoBehaviour
 
         rocketFuelUsage = rocket.AddComponent<FuelUsage>();
         rocketFuelUsage.rocket = rocketController;
+    }
 
-        RocketWinglets winglets = rocket.AddComponent<RocketWinglets>();
-        winglets.finX = finLeft.transform;
-        winglets.finZ = finRight.transform;
+    private void CreateBoosterPod(string name, Vector3 localPosition, Transform parent)
+    {
+        GameObject pod = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        pod.name = name;
+        pod.transform.SetParent(parent, false);
+        pod.transform.localPosition = localPosition;
+        pod.transform.localScale = new Vector3(0.28f, 1.1f, 0.28f);
+        ApplyColor(pod, new Color(0.88f, 0.89f, 0.84f, 1f));
+
+        GameObject cap = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        cap.name = name + "Cap";
+        cap.transform.SetParent(pod.transform, false);
+        cap.transform.localPosition = new Vector3(0f, 1f, 0f);
+        cap.transform.localScale = new Vector3(0.78f, 0.5f, 0.78f);
+        ApplyColor(cap, new Color(0.82f, 0.16f, 0.13f, 1f));
+    }
+
+    private void CreateLandingStrut(string name, Vector3 localPosition, float zRotation, Transform parent)
+    {
+        GameObject strut = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        strut.name = name;
+        strut.transform.SetParent(parent, false);
+        strut.transform.localPosition = localPosition;
+        strut.transform.localRotation = Quaternion.Euler(0f, 0f, zRotation);
+        strut.transform.localScale = new Vector3(0.08f, 0.62f, 0.08f);
+        ApplyColor(strut, new Color(0.72f, 0.74f, 0.77f, 1f));
+
+        GameObject foot = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        foot.name = name + "Foot";
+        foot.transform.SetParent(strut.transform, false);
+        foot.transform.localPosition = new Vector3(0f, -0.58f, 0f);
+        foot.transform.localRotation = Quaternion.identity;
+        foot.transform.localScale = new Vector3(1.6f, 0.22f, 1.6f);
+        ApplyColor(foot, new Color(0.2f, 0.21f, 0.24f, 1f));
+    }
+
+    private static GameObject InstantiateRocketVisual()
+    {
+        GameObject resourceModel = Resources.Load<GameObject>(MissileResourcePath);
+        if (resourceModel != null)
+        {
+            return Instantiate(resourceModel);
+        }
+
+#if UNITY_EDITOR
+        GameObject editorModel = AssetDatabase.LoadAssetAtPath<GameObject>(MissileEditorAssetPath);
+        if (editorModel != null)
+        {
+            return Instantiate(editorModel);
+        }
+#endif
+
+        return null;
+    }
+
+    private static void RemoveVisualColliders(GameObject rootObject)
+    {
+        Collider[] colliders = rootObject.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Destroy(colliders[i]);
+        }
     }
 
     private GameObject CreateFin(string name, Vector3 localPosition, Vector3 localScale)
@@ -709,13 +801,19 @@ public class RocketLandingPuzzle : MonoBehaviour
 
     private static void ApplyColor(GameObject target, Color color)
     {
-        Renderer renderer = target.GetComponent<Renderer>();
-        if (renderer == null)
+        if (target == null)
         {
             return;
         }
 
-        renderer.material.color = color;
+        Renderer[] renderers = target.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null && renderers[i].material != null)
+            {
+                renderers[i].material.color = color;
+            }
+        }
     }
 }
 
