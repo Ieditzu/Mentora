@@ -608,14 +608,14 @@ public class LearningProfileService {
                 "Available functions include cube, sphere, cylinder, capsule, panel, plane, move, rotate, scale, color, delete, clear, vector.\n" +
                 "The code controls a 3D island by creating and modifying named objects.\n" +
                 "Generate a world-building challenge that targets their weak areas, such as loops, variables, functions, conditions, coordinates, colors, or debugging.\n" +
-                "The template must be valid CodeWorld Python starter code, not a completed solution. It should give imports, useful variables, TODO comments, and at most commented example lines.\n" +
-                "Do not include code that already satisfies every requirement. The student must still need to finish the task.\n" +
+                "The template must be valid CodeWorld Python base code, but it must not fully complete the challenge.\n" +
+                "Use an almost-correct script, a partially finished script, or a skeleton with TODO comments depending on difficulty. The student must need to fix or add meaningful code before it passes.\n" +
                 "The final solution should be solvable in 5-25 lines.\n" +
-                "IMPORTANT: The completion checker requires the student to create an object named profile_goal and at least 3 objects total. Mention this in DESCRIPTION and include helpful starter code for that goal.\n\n" +
+                "IMPORTANT: The completion checker requires the student to create an object named profile_goal and at least 3 objects total. Mention this in DESCRIPTION and include helpful base code.\n\n" +
                 "Respond in EXACTLY this format. No markdown. No code fences. No ``` anywhere. Plain text only:\n" +
                 "TITLE: [max 55 chars]\n" +
                 "DESCRIPTION: [2-3 sentences: what the student must build or fix in CodeWorld]\n" +
-                "TEMPLATE: [raw starter CodeWorld Python only — NO backticks, NO ``` fences, just code lines]\n" +
+                "TEMPLATE: [raw incomplete base CodeWorld Python only — NO backticks, NO ``` fences, just code lines]\n" +
                 "EXPECTED: [one sentence: what the correct build should contain]\n" +
                 "POINTS: [integer: 15, 20, 25, or 30]\n";
         } else {
@@ -623,11 +623,12 @@ public class LearningProfileService {
                 "You are generating a personalized " + safeLang + " coding challenge for a child (age 9-13) learning programming.\n" +
                 "Student profile:\n" + profileContext + "\n\n" +
                 "Generate a " + safeLang + " challenge that targets their specific weak areas. " +
-                "It should be solvable in 5-20 lines of code.\n\n" +
+                "It should be solvable in 5-20 lines of code.\n" +
+                "The template must be base code only, not the complete answer. Include a small bug, missing line, TODO, or function body that the student must finish.\n\n" +
                 "Respond in EXACTLY this format. No markdown. No code fences. No ``` anywhere. Plain text only:\n" +
                 "TITLE: [max 55 chars]\n" +
                 "DESCRIPTION: [2-3 sentences: what the student must write or fix]\n" +
-                "TEMPLATE: [raw source code only — NO backticks, NO ``` fences, just the code lines]\n" +
+                "TEMPLATE: [raw incomplete base source code only — NO backticks, NO ``` fences, just the code lines]\n" +
                 "EXPECTED: [one sentence: what the correct output or behavior should be]\n" +
                 "POINTS: [integer: 15, 20, 25, or 30]\n";
         }
