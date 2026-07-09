@@ -24,6 +24,9 @@ public class RocketController : MonoBehaviour
     public float boostAcceleration = 80f;
     public float boostCooldown = 2f;
     public float turnSpeed = 90f;
+    public float steeringTorque = 18f;
+    public float steeringDamping = 5.5f;
+    public float maxAngularSpeed = 7f;
     public bool invertPitch;
     public bool invertYaw;
     public bool zeroGravity = true;
@@ -374,8 +377,21 @@ public class RocketController : MonoBehaviour
             camRotInitialized = false;
         }
 
-        rb.MoveRotation(Quaternion.FromToRotation(Vector3.up, noseDir));
-        rb.angularVelocity = Vector3.zero;
+        Vector3 currentNose = transform.up;
+        Vector3 correctionAxis = Vector3.Cross(currentNose, noseDir);
+        float correctionMagnitude = correctionAxis.magnitude;
+        if (correctionMagnitude > 1E-05f)
+        {
+            float angleError = Vector3.Angle(currentNose, noseDir);
+            Vector3 steeringAccel = correctionAxis.normalized * (angleError * steeringTorque * 0.1f);
+            rb.AddTorque(steeringAccel, ForceMode.Acceleration);
+        }
+
+        rb.AddTorque(-rb.angularVelocity * steeringDamping, ForceMode.Acceleration);
+        if (rb.angularVelocity.sqrMagnitude > maxAngularSpeed * maxAngularSpeed)
+        {
+            rb.angularVelocity = rb.angularVelocity.normalized * maxAngularSpeed;
+        }
 
         if (keyboard != null && keyboard.spaceKey.isPressed && !thrustLocked)
         {
@@ -428,6 +444,8 @@ public class RocketAerodynamics : MonoBehaviour
     public float maxLiftAccel = 50f;
     public float lateralDrag = 1f;
     public float axialDrag;
+    public float alignmentTorque = 3.5f;
+    public float angularDamping = 1.8f;
     public bool bidirectional = true;
     public bool enabledAero = true;
 
@@ -476,6 +494,20 @@ public class RocketAerodynamics : MonoBehaviour
         if (axialDrag > 0f)
         {
             body.AddForce(-axialVelocity * axialDrag, ForceMode.Acceleration);
+        }
+
+        if (alignmentTorque > 0f)
+        {
+            Vector3 alignAxis = Vector3.Cross(noseDir, effectiveNose == noseDir ? velocityDir : -velocityDir);
+            if (alignAxis.sqrMagnitude > 1E-05f)
+            {
+                body.AddTorque(alignAxis * alignmentTorque * speed, ForceMode.Acceleration);
+            }
+        }
+
+        if (angularDamping > 0f)
+        {
+            body.AddTorque(-body.angularVelocity * angularDamping, ForceMode.Acceleration);
         }
     }
 }

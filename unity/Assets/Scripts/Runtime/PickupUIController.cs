@@ -614,7 +614,7 @@ public class PickupUIController : MonoBehaviour
                 CoinRotator.CoinMode.JumpAndBox => "Hint: jumpVelocity 0-10; set boxRigidbody = true to push the box, false to lock it.",
                 CoinRotator.CoinMode.IslandReveal => "Hint: !islandVisible uses inverse logic. true keeps the island hidden, false reveals it.",
                 CoinRotator.CoinMode.BridgeReveal => "Hint: viewPod controls the bridge. true shows it, false hides it.",
-                CoinRotator.CoinMode.RocketLanding => "Hint: set engineEnabled=true, fuel=70, rocketThrust=48, rocketDrag=0.8, rocketMass=3, stabilizer=true, launchReady=true.",
+                CoinRotator.CoinMode.RocketLanding => "Hint: set engineEnabled=true, fuel=70, rocketThrust=60, rocketDrag=0.8, rocketMass=3, stabilizer=true, launchReady=true.",
                 _ => "Hint unavailable for this mode."
             };
             GUILayout.Label(hint, labelStyle);

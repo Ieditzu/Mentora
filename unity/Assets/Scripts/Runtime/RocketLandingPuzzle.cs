@@ -24,6 +24,7 @@ public class RocketLandingPuzzle : MonoBehaviour
     private GameObject consoleObject;
     private GameObject landingPad;
     private Camera rocketCamera;
+    private CapsuleCollider rocketCollider;
     private Rigidbody rocketBody;
     private RocketController rocketController;
     private RocketAerodynamics rocketAerodynamics;
@@ -44,6 +45,7 @@ public class RocketLandingPuzzle : MonoBehaviour
     private float fuelRemaining;
     private float torquePower = 18f;
     private float statusVisibleUntil;
+    private float launchClearanceHeight = 1.9f;
     private bool rocketViewActive;
     private Camera playerCamera;
     private FirstPersonControllerSimple activeFps;
@@ -151,9 +153,9 @@ public class RocketLandingPuzzle : MonoBehaviour
             return false;
         }
 
-        if (thrustPower <= rocketMass * Physics.gravity.magnitude * 1.12f)
+        if (thrustPower < 12f)
         {
-            feedback = "rocketThrust is too low for rocketMass.";
+            feedback = "rocketThrust is too low. Try a higher value.";
             return false;
         }
 
@@ -164,23 +166,28 @@ public class RocketLandingPuzzle : MonoBehaviour
         }
 
         rocketBody.mass = rocketMass;
-        rocketBody.drag = 0f;
-        rocketBody.angularDrag = stabilizerEnabled ? 2.8f : 0.45f;
+        rocketBody.drag = 0.08f;
+        rocketBody.angularDrag = stabilizerEnabled ? 1.2f : 0.2f;
         rocketBody.isKinematic = false;
         rocketBody.useGravity = true;
         rocketController.enabled = true;
         rocketController.zeroGravity = false;
-        rocketController.thrustForce = thrustPower;
-        rocketController.turnSpeed = torquePower * 5.2f;
-        rocketController.boostAcceleration = thrustPower * 1.55f;
+        rocketController.thrustForce = thrustPower * 1.25f;
+        rocketController.turnSpeed = torquePower * 4.4f;
+        rocketController.steeringTorque = stabilizerEnabled ? 24f : 14f;
+        rocketController.steeringDamping = stabilizerEnabled ? 6.5f : 2.5f;
+        rocketController.maxAngularSpeed = stabilizerEnabled ? 5.5f : 8f;
+        rocketController.boostAcceleration = thrustPower * 1.35f;
         rocketController.boostDuration = 0.9f;
         rocketController.boostCooldown = 1.6f;
         rocketController.SyncOrientationToTransform();
         rocketAerodynamics.enabledAero = true;
-        rocketAerodynamics.lateralDrag = lateralDrag;
-        rocketAerodynamics.axialDrag = axialDrag;
-        rocketAerodynamics.liftStrength = stabilizerEnabled ? 0.028f : 0.014f;
-        rocketAerodynamics.maxLiftAccel = stabilizerEnabled ? 55f : 32f;
+        rocketAerodynamics.lateralDrag = stabilizerEnabled ? lateralDrag * 1.35f : lateralDrag * 0.75f;
+        rocketAerodynamics.axialDrag = stabilizerEnabled ? axialDrag * 1.1f : axialDrag * 0.7f;
+        rocketAerodynamics.liftStrength = stabilizerEnabled ? 0.022f : 0.011f;
+        rocketAerodynamics.maxLiftAccel = stabilizerEnabled ? 42f : 24f;
+        rocketAerodynamics.alignmentTorque = stabilizerEnabled ? 4.8f : 1.8f;
+        rocketAerodynamics.angularDamping = stabilizerEnabled ? 2.6f : 0.7f;
         rocketFuelUsage.thrustBurnRate = Mathf.Max(0.4f, thrustPower * 0.025f);
         rocketFuelUsage.boostBurnRate = Mathf.Max(1.2f, thrustPower * 0.04f);
         flightActive = true;
@@ -459,10 +466,11 @@ public class RocketLandingPuzzle : MonoBehaviour
         rocketBody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rocketBody.interpolation = RigidbodyInterpolation.Interpolate;
 
-        CapsuleCollider collider = rocket.AddComponent<CapsuleCollider>();
-        collider.radius = 0.42f;
-        collider.height = 3.3f;
-        collider.center = Vector3.zero;
+        rocketCollider = rocket.AddComponent<CapsuleCollider>();
+        rocketCollider.radius = 0.42f;
+        rocketCollider.height = 3.3f;
+        rocketCollider.center = Vector3.zero;
+        FitRocketCollider();
 
         rocketController = rocket.AddComponent<RocketController>();
         rocketController.enabled = false;
@@ -545,6 +553,65 @@ public class RocketLandingPuzzle : MonoBehaviour
         }
     }
 
+    private void FitRocketCollider()
+    {
+        if (rocket == null || rocketCollider == null)
+        {
+            return;
+        }
+
+        Bounds? localBounds = CalculateLocalRendererBounds(rocket.transform);
+        if (!localBounds.HasValue)
+        {
+            launchClearanceHeight = 1.9f;
+            return;
+        }
+
+        Bounds bounds = localBounds.Value;
+        float radius = Mathf.Max(0.22f, Mathf.Max(bounds.extents.x, bounds.extents.z) * 0.8f);
+        float height = Mathf.Max(radius * 2.2f, bounds.size.y);
+
+        rocketCollider.center = new Vector3(bounds.center.x, bounds.center.y, bounds.center.z);
+        rocketCollider.radius = radius;
+        rocketCollider.height = height;
+
+        // Spawn so the lowest visible point starts above the pad instead of intersecting it.
+        launchClearanceHeight = -bounds.min.y + 0.18f;
+    }
+
+    private static Bounds? CalculateLocalRendererBounds(Transform rootTransform)
+    {
+        Renderer[] renderers = rootTransform.GetComponentsInChildren<Renderer>(true);
+        Bounds? combined = null;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            Bounds worldBounds = renderer.bounds;
+            Vector3 localMin = rootTransform.InverseTransformPoint(worldBounds.min);
+            Vector3 localMax = rootTransform.InverseTransformPoint(worldBounds.max);
+            Bounds localBounds = new Bounds((localMin + localMax) * 0.5f, localMax - localMin);
+
+            if (!combined.HasValue)
+            {
+                combined = localBounds;
+            }
+            else
+            {
+                Bounds current = combined.Value;
+                current.Encapsulate(localBounds.min);
+                current.Encapsulate(localBounds.max);
+                combined = current;
+            }
+        }
+
+        return combined;
+    }
+
     private GameObject CreateFin(string name, Vector3 localPosition, Vector3 localScale)
     {
         GameObject fin = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -562,7 +629,7 @@ public class RocketLandingPuzzle : MonoBehaviour
             return;
         }
 
-        launchPosition = root.transform.TransformPoint(new Vector3(0f, 1.9f, 0f));
+        launchPosition = root.transform.TransformPoint(new Vector3(0f, launchClearanceHeight, 0f));
         launchRotation = root.transform.rotation;
         rocketBody.velocity = Vector3.zero;
         rocketBody.angularVelocity = Vector3.zero;
