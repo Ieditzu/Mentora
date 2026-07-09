@@ -38,7 +38,8 @@ public enum DefaultTaskType {
     // Logic Puzzles - Island 3 (variable manipulation)
     LOGIC_JUMP_AND_BOX("Logic Puzzle: Set Jump Power & Enable Physics", 20),
     LOGIC_REVEAL_ISLAND("Logic Puzzle: Reveal Hidden Island", 20),
-    LOGIC_REVEAL_BRIDGE("Logic Puzzle: Reveal Bridge Path", 20);
+    LOGIC_REVEAL_BRIDGE("Logic Puzzle: Reveal Bridge Path", 20),
+    LOGIC_ROCKET_LANDING("Logic Puzzle: Rocket Landing Experiment", 30);
 
     private final String title;
     private final int pointValue;

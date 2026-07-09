@@ -38,6 +38,13 @@ public class PickupUIController : MonoBehaviour
     private string boxInput = "false";
     // Default hidden: "!islandVisible = true"
     private string islandInput = "true";
+    private string rocketEngineInput = "false";
+    private string rocketFuelInput = "0";
+    private string rocketThrustInput = "0";
+    private string rocketDragInput = "0";
+    private string rocketMassInput = "3";
+    private string rocketStabilizerInput = "false";
+    private string rocketLaunchInput = "false";
     private string jumpValidationMessage = string.Empty;
     private bool showHint;
     private CoinRotator activeCoin;
@@ -251,8 +258,35 @@ public class PickupUIController : MonoBehaviour
             islandInput = "true"; // !islandVisible = true -> hidden by default
             SetRevealIslandState(false);
         }
+        else if (activeMode == CoinRotator.CoinMode.RocketLanding)
+        {
+            ResetRocketCodeFields();
+            RocketLandingPuzzle.EnsureInstance().BeginCoinSession();
+        }
 
         visible = true;
+    }
+
+    public void ShowRocketExperiment()
+    {
+        activeCoin = null;
+        activeMode = CoinRotator.CoinMode.RocketLanding;
+        showHint = false;
+        jumpValidationMessage = string.Empty;
+        ResetRocketCodeFields();
+        RocketLandingPuzzle.EnsureInstance().BeginCoinSession();
+        visible = true;
+    }
+
+    private void ResetRocketCodeFields()
+    {
+        rocketEngineInput = "false";
+        rocketFuelInput = "0";
+        rocketThrustInput = "0";
+        rocketDragInput = "0";
+        rocketMassInput = "3";
+        rocketStabilizerInput = "false";
+        rocketLaunchInput = "false";
     }
 
     private void RestoreDefaults()
@@ -315,11 +349,24 @@ public class PickupUIController : MonoBehaviour
 
         islandInput = revealIslandActive ? "true" : "false";
         bridgeInput = bridgeRevealActive ? "true" : "false";
+        if (activeMode == CoinRotator.CoinMode.RocketLanding)
+        {
+            ResetRocketCodeFields();
+        }
         jumpValidationMessage = string.Empty;
     }
 
     private void ExitMode()
     {
+        if (activeMode == CoinRotator.CoinMode.RocketLanding)
+        {
+            RocketLandingPuzzle existing = RocketLandingPuzzle.Instance;
+            if (existing != null)
+            {
+                existing.EndCoinSession();
+            }
+        }
+
         RestoreDefaults();
         visible = false;
         showHint = false;
@@ -333,6 +380,15 @@ public class PickupUIController : MonoBehaviour
 
     public void HideOverlayOnly()
     {
+        if (activeMode == CoinRotator.CoinMode.RocketLanding)
+        {
+            RocketLandingPuzzle existing = RocketLandingPuzzle.Instance;
+            if (existing != null)
+            {
+                existing.EndCoinSession();
+            }
+        }
+
         RestoreDefaults();
         visible = false;
         showHint = false;
@@ -347,7 +403,9 @@ public class PickupUIController : MonoBehaviour
 
         bool useMobileLayout = Input.touchSupported || Application.isMobilePlatform;
         float width = useMobileLayout ? 760f : 480f;
-        float height = useMobileLayout ? 460f : 300f;
+        float height = activeMode == CoinRotator.CoinMode.RocketLanding
+            ? (useMobileLayout ? 740f : 520f)
+            : (useMobileLayout ? 460f : 300f);
         Rect rect = new Rect(Screen.width - width - 16f, 16f, width, height);
         GUI.Box(rect, GUIContent.none);
 
@@ -430,6 +488,84 @@ public class PickupUIController : MonoBehaviour
                 }
             }
         }
+        else if (activeMode == CoinRotator.CoinMode.RocketLanding)
+        {
+            GUILayout.Label("// Broken rocket repair console", labelStyle);
+            GUI.SetNextControlName("RocketEngineField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("engineEnabled =", labelStyle, GUILayout.Width(labelWidth));
+            rocketEngineInput = GUILayout.TextField(rocketEngineInput, 8, textFieldStyle).ToLowerInvariant();
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketFuelField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("fuel =", labelStyle, GUILayout.Width(labelWidth));
+            rocketFuelInput = GUILayout.TextField(rocketFuelInput, 12, textFieldStyle);
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketThrustField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("rocketThrust =", labelStyle, GUILayout.Width(labelWidth));
+            rocketThrustInput = GUILayout.TextField(rocketThrustInput, 12, textFieldStyle);
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketDragField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("rocketDrag =", labelStyle, GUILayout.Width(labelWidth));
+            rocketDragInput = GUILayout.TextField(rocketDragInput, 12, textFieldStyle);
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketMassField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("rocketMass =", labelStyle, GUILayout.Width(labelWidth));
+            rocketMassInput = GUILayout.TextField(rocketMassInput, 12, textFieldStyle);
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketStabilizerField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("stabilizer =", labelStyle, GUILayout.Width(labelWidth));
+            rocketStabilizerInput = GUILayout.TextField(rocketStabilizerInput, 8, textFieldStyle).ToLowerInvariant();
+            GUILayout.EndHorizontal();
+
+            GUI.SetNextControlName("RocketLaunchField");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("launchReady =", labelStyle, GUILayout.Width(labelWidth));
+            rocketLaunchInput = GUILayout.TextField(rocketLaunchInput, 8, textFieldStyle).ToLowerInvariant();
+            GUILayout.EndHorizontal();
+
+            if (enterPressed)
+            {
+                bool parsedFuel = float.TryParse(rocketFuelInput, out float fuel);
+                bool parsedThrust = float.TryParse(rocketThrustInput, out float thrust);
+                bool parsedDrag = float.TryParse(rocketDragInput, out float drag);
+                bool parsedMass = float.TryParse(rocketMassInput, out float mass);
+
+                if (!parsedFuel || !parsedThrust || !parsedDrag || !parsedMass)
+                {
+                    jumpValidationMessage = "fuel, thrust, drag, and mass must be numbers";
+                }
+                else
+                {
+                    bool engineEnabled = ParseBoolInput(rocketEngineInput);
+                    bool stabilizerEnabled = ParseBoolInput(rocketStabilizerInput);
+                    bool launchReady = ParseBoolInput(rocketLaunchInput);
+                    RocketLandingPuzzle.EnsureInstance().TryApplyCode(
+                        engineEnabled,
+                        fuel,
+                        thrust,
+                        drag,
+                        mass,
+                        stabilizerEnabled,
+                        launchReady,
+                        out jumpValidationMessage);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(jumpValidationMessage))
+            {
+                GUILayout.Label(jumpValidationMessage, labelStyle);
+            }
+        }
         else
         {
             string fieldName = activeMode == CoinRotator.CoinMode.IslandReveal ? "IslandField" : "BridgeField";
@@ -478,6 +614,7 @@ public class PickupUIController : MonoBehaviour
                 CoinRotator.CoinMode.JumpAndBox => "Hint: jumpVelocity 0-10; set boxRigidbody = true to push the box, false to lock it.",
                 CoinRotator.CoinMode.IslandReveal => "Hint: !islandVisible uses inverse logic. true keeps the island hidden, false reveals it.",
                 CoinRotator.CoinMode.BridgeReveal => "Hint: viewPod controls the bridge. true shows it, false hides it.",
+                CoinRotator.CoinMode.RocketLanding => "Hint: set engineEnabled=true, fuel=70, rocketThrust=48, rocketDrag=0.8, rocketMass=3, stabilizer=true, launchReady=true.",
                 _ => "Hint unavailable for this mode."
             };
             GUILayout.Label(hint, labelStyle);
@@ -815,5 +952,16 @@ public class PickupUIController : MonoBehaviour
         {
             colliders[i].enabled = enabled;
         }
+    }
+
+    private static bool ParseBoolInput(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim().ToLowerInvariant();
+        return normalized == "true" || normalized == "1" || normalized == "yes";
     }
 }

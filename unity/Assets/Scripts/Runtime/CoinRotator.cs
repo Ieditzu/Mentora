@@ -11,6 +11,7 @@ public class CoinRotator : MonoBehaviour
         JumpAndBox = 0,
         IslandReveal = 1,
         BridgeReveal = 2,
+        RocketLanding = 3,
     }
 
     [SerializeField] private float rotationSpeed = 120f;
@@ -64,7 +65,10 @@ public class CoinRotator : MonoBehaviour
             }
 
             SpawnNextCoinIfNeeded();
-            SpawnRobot();
+            if (mode != CoinMode.RocketLanding)
+            {
+                SpawnRobot();
+            }
             gameObject.SetActive(false);
         }
     }
