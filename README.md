@@ -8,10 +8,6 @@ This README is based on the current codebase, not only the older project notes. 
 
 ### Game
 
-| Unity game view captured through MCP | Unity scene view captured through MCP |
-| --- | --- |
-| ![Unity game view](unity/Assets/Screenshots/readme-game-view.png) | ![Unity scene view](unity/Assets/Screenshots/readme-scene-view.png) |
-
 | World map | Python island | Python coding pad |
 | --- | --- | --- |
 | ![Entire map in game](images/entire_map_in_game.png) | ![Python island](images/python_island.png) | ![Python coding](images/python_coding.png) |
@@ -715,7 +711,7 @@ The repository currently does not contain a full automated test suite for all co
 - Unity connects and exchanges encrypted packets.
 - Android connects and displays child/progress state.
 - web creator can authenticate and manage courses.
-- Unity MCP was used to capture current game/editor screenshots for this README.
+- curated screenshots from `images/` are used to document the current game, app, and web surfaces.
 
 This is an important improvement area. The highest-value future tests would cover packet encoding/decoding compatibility, course completion reward rules, task duplicate behavior, learning profile updates, and code executor sandbox behavior.
 
