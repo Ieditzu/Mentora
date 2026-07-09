@@ -755,7 +755,7 @@ public class RocketLandingPuzzle : MonoBehaviour
         }
 
         float impactSpeed = collision.relativeVelocity.magnitude;
-        if (impactSpeed < 13.5f)
+        if (impactSpeed < 9.5f)
         {
             return;
         }
@@ -770,7 +770,7 @@ public class RocketLandingPuzzle : MonoBehaviour
         for (int i = 0; i < collision.contactCount; i++)
         {
             ContactPoint contact = collision.GetContact(i);
-            if (contact.normal.y > 0.35f)
+            if (contact.normal.y > 0.2f)
             {
                 groundLikeSurface = true;
             }
@@ -784,8 +784,10 @@ public class RocketLandingPuzzle : MonoBehaviour
 
         Vector3 velocity = rocketBody.velocity;
         bool divingIntoImpact = velocity.sqrMagnitude > 0.01f &&
-                                Vector3.Dot(velocity.normalized, rocketUp) > 0.4f;
-        if (groundLikeSurface && noseHit && divingIntoImpact)
+                                Vector3.Dot(velocity.normalized, rocketUp) > 0.15f;
+        bool severeGroundImpact = groundLikeSurface && impactSpeed >= 11f;
+        bool noseCrash = noseHit && divingIntoImpact;
+        if (severeGroundImpact || noseCrash)
         {
             ExplodeRocket(collision.GetContact(0).point, impactSpeed);
         }
