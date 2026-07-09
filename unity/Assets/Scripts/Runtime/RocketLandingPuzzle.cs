@@ -736,7 +736,7 @@ public class RocketLandingPuzzle : MonoBehaviour
             }
         }
 
-        if (rocket.transform.position.y < root.transform.position.y - 24f || speed > 46f)
+        if (rocket.transform.position.y < root.transform.position.y - 24f || speed > 140f)
         {
             status = "Rocket lost control. Press R to reset.";
             flightActive = false;
