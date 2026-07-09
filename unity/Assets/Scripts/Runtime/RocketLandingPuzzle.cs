@@ -47,6 +47,7 @@ public class RocketLandingPuzzle : MonoBehaviour
     private float statusVisibleUntil;
     private float launchClearanceHeight = 1.9f;
     private bool rocketViewActive;
+    private bool crashed;
     private Camera playerCamera;
     private FirstPersonControllerSimple activeFps;
     private BeanController activeBean;
@@ -192,10 +193,10 @@ public class RocketLandingPuzzle : MonoBehaviour
         rocketFuelUsage.boostBurnRate = Mathf.Max(1.2f, thrustPower * 0.04f);
         flightActive = true;
         completed = false;
-        status = stabilizerEnabled
-            ? "Launch active. Space thrusts, W/S pitch, A/D yaw, Shift boosts."
-            : "Launch active, but stabilizer=false makes it unstable.";
-        feedback = "Rocket repaired. Space thrusts, W/S pitch, A/D yaw, Shift boosts.";
+            status = stabilizerEnabled
+                ? "Launch active. Space thrusts, W/S pitch, A/D yaw, Shift boosts, C camera."
+                : "Launch active, but stabilizer=false makes it unstable.";
+        feedback = "Rocket repaired. Space thrusts, W/S pitch, A/D yaw, Shift boosts, C camera.";
         AudioManager.Play(MenSfx.ButtonClick);
         return true;
     }
@@ -487,6 +488,9 @@ public class RocketLandingPuzzle : MonoBehaviour
 
         rocketFuelUsage = rocket.AddComponent<FuelUsage>();
         rocketFuelUsage.rocket = rocketController;
+
+        RocketCollisionRelay collisionRelay = rocket.AddComponent<RocketCollisionRelay>();
+        collisionRelay.Initialize(this);
     }
 
     private void CreateBoosterPod(string name, Vector3 localPosition, Transform parent)
@@ -653,11 +657,13 @@ public class RocketLandingPuzzle : MonoBehaviour
             rocketAerodynamics.enabledAero = false;
         }
 
+        SetRocketVisible(true);
         if (engineFlame != null)
         {
             engineFlame.gameObject.SetActive(false);
         }
 
+        crashed = false;
         flightActive = false;
         if (!completed)
         {
@@ -690,7 +696,7 @@ public class RocketLandingPuzzle : MonoBehaviour
 
     private void CheckLandingState()
     {
-        if (landingPad == null || completed)
+        if (landingPad == null || completed || crashed)
         {
             return;
         }
@@ -738,6 +744,135 @@ public class RocketLandingPuzzle : MonoBehaviour
         {
             status = $"Fuel {fuelRemaining:0} | Speed {speed:0.0} | Pad {horizontalDistance:0.0}m | Upright {(upright ? "yes" : "no")}";
         }
+    }
+
+    internal void HandleRocketCollision(Collision collision)
+    {
+        if (!flightActive || completed || crashed || collision == null || rocketBody == null)
+        {
+            return;
+        }
+
+        float impactSpeed = collision.relativeVelocity.magnitude;
+        if (impactSpeed < 13.5f)
+        {
+            return;
+        }
+
+        bool groundLikeSurface = false;
+        bool noseHit = false;
+        Vector3 rocketUp = rocket.transform.up;
+        float noseThreshold = rocketCollider != null
+            ? rocketCollider.center.y + Mathf.Max(rocketCollider.height * 0.18f, rocketCollider.radius * 0.8f)
+            : 0.9f;
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            ContactPoint contact = collision.GetContact(i);
+            if (contact.normal.y > 0.35f)
+            {
+                groundLikeSurface = true;
+            }
+
+            Vector3 localPoint = rocket.transform.InverseTransformPoint(contact.point);
+            if (localPoint.y >= noseThreshold)
+            {
+                noseHit = true;
+            }
+        }
+
+        Vector3 velocity = rocketBody.velocity;
+        bool divingIntoImpact = velocity.sqrMagnitude > 0.01f &&
+                                Vector3.Dot(velocity.normalized, rocketUp) > 0.4f;
+        if (groundLikeSurface && noseHit && divingIntoImpact)
+        {
+            ExplodeRocket(collision.GetContact(0).point, impactSpeed);
+        }
+    }
+
+    private void ExplodeRocket(Vector3 impactPoint, float impactSpeed)
+    {
+        crashed = true;
+        flightActive = false;
+
+        if (rocketController != null)
+        {
+            rocketController.enabled = false;
+        }
+
+        if (rocketAerodynamics != null)
+        {
+            rocketAerodynamics.enabledAero = false;
+        }
+
+        if (rocketBody != null)
+        {
+            rocketBody.velocity = Vector3.zero;
+            rocketBody.angularVelocity = Vector3.zero;
+            rocketBody.isKinematic = true;
+        }
+
+        if (engineFlame != null)
+        {
+            engineFlame.gameObject.SetActive(false);
+        }
+
+        SetRocketVisible(false);
+        CreateExplosionBurst(impactPoint, impactSpeed);
+        AudioManager.Play(MenSfx.AnswerWrong);
+        statusVisibleUntil = Time.time + 6f;
+        status = "Rocket exploded on impact. Press R to reset.";
+    }
+
+    private void SetRocketVisible(bool visible)
+    {
+        if (rocket == null)
+        {
+            return;
+        }
+
+        Renderer[] renderers = rocket.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null)
+            {
+                renderers[i].enabled = visible;
+            }
+        }
+    }
+
+    private void CreateExplosionBurst(Vector3 impactPoint, float impactSpeed)
+    {
+        GameObject burstRoot = new GameObject("RocketExplosionBurst");
+        burstRoot.transform.position = impactPoint;
+
+        int burstCount = 10;
+        float speedScale = Mathf.Clamp(impactSpeed * 0.12f, 1.1f, 2.6f);
+        for (int i = 0; i < burstCount; i++)
+        {
+            GameObject fragment = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            fragment.transform.SetParent(burstRoot.transform, false);
+            fragment.transform.localScale = Vector3.one * Random.Range(0.18f, 0.42f);
+            fragment.transform.position = impactPoint + Random.insideUnitSphere * 0.35f;
+            ApplyColor(fragment, i % 3 == 0
+                ? new Color(1f, 0.45f, 0.08f, 1f)
+                : new Color(0.18f, 0.18f, 0.2f, 1f));
+
+            Collider fragmentCollider = fragment.GetComponent<Collider>();
+            if (fragmentCollider != null)
+            {
+                Destroy(fragmentCollider);
+            }
+
+            Rigidbody fragmentBody = fragment.AddComponent<Rigidbody>();
+            fragmentBody.mass = 0.08f;
+            Vector3 burstDirection = (Random.onUnitSphere + Vector3.up * 0.8f).normalized;
+            fragmentBody.AddForce(burstDirection * Random.Range(4.5f, 8.5f) * speedScale, ForceMode.Impulse);
+            fragmentBody.AddTorque(Random.insideUnitSphere * 14f, ForceMode.Impulse);
+            Destroy(fragment, 1.6f);
+        }
+
+        Destroy(burstRoot, 1.7f);
     }
 
     private void CachePlayerReferences()
@@ -792,12 +927,15 @@ public class RocketLandingPuzzle : MonoBehaviour
             rocketCamera = cameraObject.AddComponent<Camera>();
             rocketCamera.depth = 100f;
             rocketCamera.fieldOfView = 72f;
-            rocketCamera.nearClipPlane = 0.03f;
+            rocketCamera.nearClipPlane = 0.01f;
             rocketCamera.tag = "Untagged";
             cameraObject.AddComponent<AudioListener>();
             rocketCameraController = cameraObject.AddComponent<RocketCameraController>();
-            rocketCameraController.isOnLauncher = true;
+            rocketCameraController.isOnLauncher = false;
             rocketCameraController.followHeading = true;
+            rocketCameraController.noseViewActive = true;
+            rocketCameraController.noseLocalOffset = new Vector3(0f, 1.78f, 0f);
+            rocketCameraController.noseRotationOffset = Vector3.zero;
             rocketCameraController.distance = 7.2f;
             rocketCameraController.minDistance = 5f;
             rocketCameraController.maxDistance = 11f;
@@ -808,6 +946,8 @@ public class RocketLandingPuzzle : MonoBehaviour
             rocketCameraController.slowMoRampIn = 0.01f;
             rocketCameraController.slowMoRampOut = 0.01f;
         }
+
+        ConfigureRocketCameraOffsets();
 
         if (rocketCamera != null)
         {
@@ -824,6 +964,25 @@ public class RocketLandingPuzzle : MonoBehaviour
             rocketCameraController.enabled = active;
             rocketCameraController.target = rocket != null ? rocket.transform : null;
         }
+    }
+
+    private void ConfigureRocketCameraOffsets()
+    {
+        if (rocketCameraController == null)
+        {
+            return;
+        }
+
+        Vector3 noseOffset = new Vector3(0f, 1.78f, 0f);
+        if (rocketCollider != null)
+        {
+            float noseY = rocketCollider.center.y + rocketCollider.height * 0.5f - rocketCollider.radius * 0.18f;
+            noseOffset = new Vector3(rocketCollider.center.x, noseY, rocketCollider.center.z);
+            rocketCameraController.lookOffset = new Vector3(rocketCollider.center.x, rocketCollider.center.y + 0.15f, rocketCollider.center.z);
+        }
+
+        rocketCameraController.noseLocalOffset = noseOffset;
+        rocketCameraController.noseRotationOffset = Vector3.zero;
     }
 
     private void ApplyConfigVisuals()
@@ -855,7 +1014,7 @@ public class RocketLandingPuzzle : MonoBehaviour
         GUI.Box(rect, GUIContent.none);
         GUILayout.BeginArea(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, rect.height - 20f));
         GUILayout.Label("Rocket experiment");
-        GUILayout.Label("Collect coin to enter. Space thrusts, W/S pitch, A/D yaw, Shift boosts, R reset.");
+        GUILayout.Label("Collect coin to enter. Space thrusts, W/S pitch, A/D yaw, Shift boosts, C camera, R reset.");
         GUILayout.Label(status);
         GUILayout.EndArea();
     }
@@ -914,5 +1073,23 @@ public class RocketLandingConsoleTrigger : MonoBehaviour
                other.GetComponentInParent<FirstPersonControllerSimple>() != null ||
                other.GetComponentInParent<CharacterController>() != null ||
                other.CompareTag("Player");
+    }
+}
+
+public class RocketCollisionRelay : MonoBehaviour
+{
+    private RocketLandingPuzzle owner;
+
+    public void Initialize(RocketLandingPuzzle puzzleOwner)
+    {
+        owner = puzzleOwner;
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (owner != null)
+        {
+            owner.HandleRocketCollision(collision);
+        }
     }
 }

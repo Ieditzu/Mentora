@@ -560,7 +560,11 @@ public class RocketCameraController : MonoBehaviour
     public bool followHeading;
     public Key toggleKey = Key.C;
     public Transform target;
+    public Rigidbody targetBody;
     public Vector3 lookOffset = new Vector3(0f, 1f, 0f);
+    public bool noseViewActive = true;
+    public Vector3 noseLocalOffset = new Vector3(0f, 1.75f, 0f);
+    public Vector3 noseRotationOffset = Vector3.zero;
     public float smoothTime = 0.2f;
     public float distance = 10f;
     public float minDistance = 4f;
@@ -599,6 +603,11 @@ public class RocketCameraController : MonoBehaviour
 
     private void Start()
     {
+        if (targetBody == null && target != null)
+        {
+            targetBody = target.GetComponent<Rigidbody>();
+        }
+
         if (target != null)
         {
             currentSmoothedPosition = target.position;
@@ -620,7 +629,7 @@ public class RocketCameraController : MonoBehaviour
 
         if (keyboard != null && toggleKey != Key.None && keyboard[toggleKey].wasPressedThisFrame)
         {
-            followHeading = !followHeading;
+            noseViewActive = !noseViewActive;
         }
 
         if (keyboard != null && leadToggleKey != Key.None && keyboard[leadToggleKey].wasPressedThisFrame)
@@ -633,7 +642,7 @@ public class RocketCameraController : MonoBehaviour
             prevFollowHeading = followHeading;
         }
 
-        if (!isOnLauncher && mouse != null && Cursor.lockState == CursorLockMode.Locked)
+        if (!isOnLauncher && !noseViewActive && mouse != null && Cursor.lockState == CursorLockMode.Locked)
         {
             Vector2 delta = mouse.delta.ReadValue();
             currentYaw += delta.x * yawSpeed;
@@ -641,7 +650,7 @@ public class RocketCameraController : MonoBehaviour
             currentPitch = Mathf.Clamp(currentPitch, minPitch, maxPitch);
         }
 
-        if (mouse != null && Cursor.lockState == CursorLockMode.Locked)
+        if (!noseViewActive && mouse != null && Cursor.lockState == CursorLockMode.Locked)
         {
             float scrollY = mouse.scroll.ReadValue().y;
             if (Mathf.Abs(scrollY) > 0.01f)
@@ -676,6 +685,34 @@ public class RocketCameraController : MonoBehaviour
     {
         if (target == null)
         {
+            return;
+        }
+
+        if (noseViewActive)
+        {
+            Vector3 nosePosition = target.TransformPoint(noseLocalOffset);
+            Vector3 forwardDirection = target.up;
+            if (targetBody != null && targetBody.velocity.sqrMagnitude > 0.25f)
+            {
+                forwardDirection = targetBody.velocity.normalized;
+            }
+
+            Vector3 correctedUp = Vector3.up;
+            Vector3 right = Vector3.Cross(correctedUp, forwardDirection);
+            if (right.sqrMagnitude < 0.0001f)
+            {
+                correctedUp = target.forward;
+                right = Vector3.Cross(correctedUp, forwardDirection);
+                if (right.sqrMagnitude < 0.0001f)
+                {
+                    correctedUp = Vector3.right;
+                }
+            }
+
+            Quaternion noseRotation = Quaternion.LookRotation(forwardDirection, correctedUp) * Quaternion.Euler(noseRotationOffset);
+            currentSmoothedPosition = nosePosition;
+            transform.position = nosePosition;
+            transform.rotation = noseRotation;
             return;
         }
 
