@@ -262,18 +262,7 @@ public class RocketController : MonoBehaviour
 
         if (yawing && !wasYawing)
         {
-            if (cameraRelativeYaw)
-            {
-                Vector3 flatNose = noseDir;
-                flatNose.y = 0f;
-                Vector3 flatCameraForward = cameraTransform.forward;
-                flatCameraForward.y = 0f;
-                latchedYawSign = Vector3.Dot(flatNose, flatCameraForward) >= 0f ? 1f : -1f;
-            }
-            else
-            {
-                latchedYawSign = 1f;
-            }
+            latchedYawSign = 1f;
         }
 
         if (!chainLatchSteering)

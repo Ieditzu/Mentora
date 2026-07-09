@@ -479,6 +479,7 @@ public class RocketLandingPuzzle : MonoBehaviour
         rocketController.mouseFreeLook = false;
         rocketController.cameraFreeByDefault = false;
         rocketController.alignHeadingToCamera = false;
+        rocketController.cameraRelativeYaw = false;
         rocketController.chainLatchSteering = true;
         rocketController.perAxisLatch = true;
 
