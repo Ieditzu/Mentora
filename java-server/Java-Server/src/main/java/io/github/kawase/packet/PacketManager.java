@@ -88,6 +88,7 @@ public class PacketManager {
             case 72 -> new FetchProgrammingProfileSummaryResponsePacket();
             case 74 -> new CodeWorldPythonRunPacket();
             case 75 -> new CodeWorldPythonResponsePacket();
+            case 76 -> new SetClientLanguagePacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

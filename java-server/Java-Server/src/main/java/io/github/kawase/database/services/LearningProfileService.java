@@ -255,7 +255,7 @@ public class LearningProfileService {
     }
 
     @Transactional(readOnly = true)
-    public String generateWeeklyParentReport(final Long childId) {
+    public String generateWeeklyParentReport(final Long childId, final String responseLanguage) {
         if (childId == null) {
             return "";
         }
@@ -289,7 +289,7 @@ public class LearningProfileService {
             recentEvents.addAll(collectRecentWeeklyEvents(python, weekStart, weekEnd));
         }
 
-        String prompt = buildWeeklyReportPrompt(childName, weekStart, weekEnd, completedThisWeek, cpp, python, general, recentEvents);
+        String prompt = buildWeeklyReportPrompt(childName, weekStart, weekEnd, completedThisWeek, cpp, python, general, recentEvents, responseLanguage);
         io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
         String report = ai.generate(prompt);
         if (report == null || report.isBlank() || report.startsWith("AI Error")) {
@@ -306,7 +306,8 @@ public class LearningProfileService {
                                            final Map<String, Object> cpp,
                                            final Map<String, Object> python,
                                            final Map<String, Object> general,
-                                           final List<String> recentEvents) {
+                                           final List<String> recentEvents,
+                                           final String responseLanguage) {
         int cppCorrect = getInt(cpp.get("correctCount"));
         int cppIncorrect = getInt(cpp.get("incorrectCount"));
         int pyCorrect = getInt(python.get("correctCount"));
@@ -323,6 +324,7 @@ public class LearningProfileService {
         return "You are the Mentora AI tutor writing a weekly report card letter to a parent.\n" +
                 "Write in warm natural language, not a table. Keep it to 2 short paragraphs plus one actionable next step.\n" +
                 "Do not invent facts beyond the data. If data is sparse, say that plainly.\n\n" +
+                "Write entirely in " + languageName(responseLanguage) + " (BCP-47 " + normalizeLanguageTag(responseLanguage) + "). Keep programming keywords unchanged.\n\n" +
                 "Child: " + childName + "\n" +
                 "Week: " + weekStart + " through " + weekEnd + "\n" +
                 "Completed tasks this week: " + completedTasks.size() + "\n" +
@@ -332,6 +334,30 @@ public class LearningProfileService {
                 "Overall attempts: correct=" + generalCorrect + ", incorrect=" + generalIncorrect + ", hints=" + getInt(general.get("hintsUsed")) + ", chatTurns=" + getInt(general.get("chatTurns")) + "\n" +
                 "Recent tracked events from this week: " + (recentEvents.isEmpty() ? "none" : String.join(" | ", recentEvents)) + "\n\n" +
                 "Write the letter starting with: This week " + childName + " ";
+    }
+
+    private String normalizeLanguageTag(final String languageTag) {
+        if (languageTag == null) return "en";
+
+        return switch (languageTag) {
+            case "en", "ro", "es", "fr", "de", "it", "pt-BR", "pl", "tr", "uk" -> languageTag;
+            default -> "en";
+        };
+    }
+
+    private String languageName(final String languageTag) {
+        return switch (normalizeLanguageTag(languageTag)) {
+            case "ro" -> "Romanian";
+            case "es" -> "Spanish";
+            case "fr" -> "French";
+            case "de" -> "German";
+            case "it" -> "Italian";
+            case "pt-BR" -> "Brazilian Portuguese";
+            case "pl" -> "Polish";
+            case "tr" -> "Turkish";
+            case "uk" -> "Ukrainian";
+            default -> "English";
+        };
     }
 
     private String buildFallbackWeeklyReport(final String childName,

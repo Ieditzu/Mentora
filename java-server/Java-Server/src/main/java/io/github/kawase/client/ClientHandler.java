@@ -65,6 +65,7 @@ public class ClientHandler {
                     && currentPacketId != 47 // CompanionSpeakPacket — ARIA greets before auth
                     && currentPacketId != 58 // CompanionVoiceTextPacket — Rudolf voice can run before auth
                     && currentPacketId != 59 // CompanionVoiceAudioPacket — Rudolf server-side STT can run before auth
+                    && currentPacketId != 76
                     && !client.isAuth()) {
                 connection.send(new ActionResponsePacket(currentPacketId, false, "Unauthorized. Please log in first.", -1).encode());
                 return;
@@ -73,6 +74,10 @@ public class ClientHandler {
             switch (packet) {
                 case HandShakePacket handShakePacket -> {
                     System.out.println("Got handshake from " + client.getHostID());
+                }
+
+                case SetClientLanguagePacket setClientLanguagePacket -> {
+                    client.setLanguage(normalizeLanguageTag(setClientLanguagePacket.getLanguageTag()));
                 }
 
                 case AuthPacket authPacket -> {
@@ -608,7 +613,8 @@ public class ClientHandler {
                     String response = ai.ask(
                             askAiPacket.getQuestion(),
                             askAiPacket.getContext(),
-                            profileContext
+                            profileContext,
+                            client.getLanguage()
                     );
                     
                     connection.send(new AiResponsePacket(response).encode());
@@ -709,7 +715,7 @@ public class ClientHandler {
                             .with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
                     final java.time.LocalDate weekEnd = weekStart.plusDays(6);
                     final String report = Server.getInstance().getLearningProfileService()
-                            .generateWeeklyParentReport(child.getId());
+                            .generateWeeklyParentReport(child.getId(), client.getLanguage());
                     final boolean aiGenerated = report != null && !report.startsWith("AI Error");
 
                     connection.send(new WeeklyReportResponsePacket(
@@ -838,6 +844,15 @@ public class ClientHandler {
         }
 
         return child;
+    }
+
+    private String normalizeLanguageTag(final String languageTag) {
+        if (languageTag == null) return "en";
+
+        return switch (languageTag) {
+            case "en", "ro", "es", "fr", "de", "it", "pt-BR", "pl", "tr", "uk" -> languageTag;
+            default -> "en";
+        };
     }
 
     private void sendCurrentLiveSession(final long childId, final String childName) {

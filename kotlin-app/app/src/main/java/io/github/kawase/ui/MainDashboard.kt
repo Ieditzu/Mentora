@@ -80,6 +80,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import io.github.kawase.R
+import io.github.kawase.localization.AppLanguages
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -775,10 +776,9 @@ fun SettingsScreen(viewModel: SocketViewModel) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(stringResource(R.string.language_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
                 Spacer(modifier = Modifier.height(12.dp))
-                listOf(
-                    "en" to stringResource(R.string.language_english),
-                    "ro" to stringResource(R.string.language_romanian)
-                ).forEach { (languageTag, label) ->
+                listOf(AppLanguages.SYSTEM_DEFAULT to stringResource(R.string.language_system_default))
+                    .plus(AppLanguages.supported.map { it.tag to it.nativeName })
+                    .forEach { (languageTag, label) ->
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { viewModel.updateAppLanguage(languageTag) },
                         verticalAlignment = Alignment.CenterVertically

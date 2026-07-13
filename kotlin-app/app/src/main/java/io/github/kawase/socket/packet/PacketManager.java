@@ -37,6 +37,7 @@ public class PacketManager {
             case 68: return new ParentChallengeCompletedPacket();
             case 69: return new FetchWeeklyReportPacket();
             case 70: return new WeeklyReportResponsePacket();
+            case 76: return new SetClientLanguagePacket();
         }
 
         return null;

@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -21,6 +22,7 @@ import io.github.kawase.ui.AuthScreen
 import io.github.kawase.ui.MainDashboard
 import io.github.kawase.ui.SocketViewModel
 import io.github.kawase.ui.theme.MentoraTheme
+import io.github.kawase.localization.AppLanguages
 import kotlinx.coroutines.flow.collectLatest
 import java.util.Locale
 
@@ -37,14 +39,20 @@ class MainActivity : ComponentActivity() {
             val secondaryColor by viewModel.secondaryColor
             val appLanguage by viewModel.appLanguage
             val context = LocalContext.current
-            val localizedContext = remember(appLanguage) {
+            val effectiveLanguage = remember(appLanguage, context.resources.configuration) {
+                AppLanguages.resolve(appLanguage, context.resources.configuration)
+            }
+            val localizedContext = remember(effectiveLanguage) {
                 val configuration = Configuration(context.resources.configuration).apply {
-                    setLocale(Locale.forLanguageTag(appLanguage))
+                    setLocale(Locale.forLanguageTag(effectiveLanguage))
                 }
                 context.createConfigurationContext(configuration)
             }
 
-            CompositionLocalProvider(LocalContext provides localizedContext) {
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedContext.resources.configuration
+            ) {
                 MentoraTheme(
                     darkTheme = isDarkMode,
                     primaryColor = primaryColor,

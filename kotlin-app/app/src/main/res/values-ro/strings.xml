@@ -19,6 +19,7 @@
     <string name="settings">Setări</string>
     <string name="language">Limbă</string>
     <string name="language_description">Alege limba utilizată în Mentora.</string>
+    <string name="language_system_default">Folosește limba dispozitivului</string>
     <string name="language_english">English</string>
     <string name="language_romanian">Română</string>
     <string name="parent_account">Cont părinte</string>

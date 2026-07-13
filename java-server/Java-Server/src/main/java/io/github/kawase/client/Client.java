@@ -17,5 +17,5 @@ public class Client {
 
     private Long parentId;
     private Long childId;
+    private String language = "en";
 }
-

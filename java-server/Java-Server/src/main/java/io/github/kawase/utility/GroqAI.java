@@ -64,10 +64,10 @@ public class GroqAI {
     }
 
     public String ask(final String question, final String context) {
-        return ask(question, context, "");
+        return ask(question, context, "", "en");
     }
 
-    public String ask(final String question, final String context, final String profileContext) {
+    public String ask(final String question, final String context, final String profileContext, final String responseLanguage) {
         StringBuilder promptBuilder = new StringBuilder();
         promptBuilder.append("You are an educational AI mentor inside the Mentora learning game. ");
         promptBuilder.append("Respond in a supportive, concise way that helps the student keep thinking. ");
@@ -77,8 +77,35 @@ public class GroqAI {
         }
         promptBuilder.append("Context: ").append(context == null ? "general" : context).append("\n");
         promptBuilder.append("Student request:\n").append(question == null ? "" : question).append("\n");
+        promptBuilder.append("Respond entirely in ").append(languageName(responseLanguage))
+                .append(" (BCP-47 ").append(normalizeLanguageTag(responseLanguage))
+                .append("). Keep programming keywords and code unchanged.\n");
         promptBuilder.append("Keep the answer to 1-4 short sentences.");
         return generate(promptBuilder.toString());
+    }
+
+    private String normalizeLanguageTag(final String languageTag) {
+        if (languageTag == null) return "en";
+
+        return switch (languageTag) {
+            case "en", "ro", "es", "fr", "de", "it", "pt-BR", "pl", "tr", "uk" -> languageTag;
+            default -> "en";
+        };
+    }
+
+    private String languageName(final String languageTag) {
+        return switch (normalizeLanguageTag(languageTag)) {
+            case "ro" -> "Romanian";
+            case "es" -> "Spanish";
+            case "fr" -> "French";
+            case "de" -> "German";
+            case "it" -> "Italian";
+            case "pt-BR" -> "Brazilian Portuguese";
+            case "pl" -> "Polish";
+            case "tr" -> "Turkish";
+            case "uk" -> "Ukrainian";
+            default -> "English";
+        };
     }
 
     public String generate(final String prompt) {

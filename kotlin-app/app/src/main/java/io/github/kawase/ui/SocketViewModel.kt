@@ -27,6 +27,7 @@ import io.github.kawase.ui.theme.PrimaryLight
 import io.github.kawase.ui.theme.SecondaryLight
 import io.github.kawase.ui.theme.BackgroundWhite
 import io.github.kawase.ui.theme.SurfaceGray
+import io.github.kawase.localization.AppLanguages
 
 import android.app.Application
 import android.app.NotificationChannel
@@ -93,7 +94,6 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         private const val CHANNEL_ID = "mentora_activity"
         private const val CHANNEL_NAME = "Mentora Activity"
         private const val APP_LANGUAGE_KEY = "app_language"
-        const val DEFAULT_LANGUAGE = "en"
     }
 
     init {
@@ -127,9 +127,9 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     var primaryColor = mutableStateOf(Color(prefs.getInt("primary_color", PrimaryLight.toArgb())))
     var secondaryColor = mutableStateOf(Color(prefs.getInt("secondary_color", SecondaryLight.toArgb())))
     var appLanguage = mutableStateOf(
-        prefs.getString(APP_LANGUAGE_KEY, DEFAULT_LANGUAGE)
-            ?.takeIf { it == "en" || it == "ro" }
-            ?: DEFAULT_LANGUAGE
+        prefs.getString(APP_LANGUAGE_KEY, AppLanguages.SYSTEM_DEFAULT)
+            ?.takeIf { it == AppLanguages.SYSTEM_DEFAULT || AppLanguages.supported.any { language -> language.tag == it } }
+            ?: AppLanguages.SYSTEM_DEFAULT
     )
 
     private val _isConnected = mutableStateOf(false)
@@ -164,9 +164,12 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateAppLanguage(languageTag: String) {
-        require(languageTag == "en" || languageTag == "ro") { "Unsupported language: $languageTag" }
+        require(languageTag == AppLanguages.SYSTEM_DEFAULT || AppLanguages.supported.any { it.tag == languageTag }) {
+            "Unsupported language: $languageTag"
+        }
         appLanguage.value = languageTag
         prefs.edit().putString(APP_LANGUAGE_KEY, languageTag).apply()
+        sendPacket(SetClientLanguagePacket(AppLanguages.resolve(languageTag, getApplication<Application>().resources.configuration)))
     }
 
     fun logout() {
@@ -373,6 +376,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
             Log.d("Mentora", "Socket opened")
             _isConnected.value = true
             send(HandShakePacket("android_client").encode())
+            send(SetClientLanguagePacket(AppLanguages.resolve(appLanguage.value, getApplication<Application>().resources.configuration)).encode())
             
             if (savedEmailHash != null && savedPasswordHash != null) {
                 send(AuthPacket(savedEmailHash, savedPasswordHash).encode())
