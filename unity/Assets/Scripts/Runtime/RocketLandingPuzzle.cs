@@ -376,7 +376,7 @@ public class RocketLandingPuzzle : MonoBehaviour
         label.transform.SetParent(consoleObject.transform, false);
         label.transform.localPosition = new Vector3(0f, 0.95f, 0f);
         TextMesh text = label.AddComponent<TextMesh>();
-        text.text = "ROCKET CODE";
+        MentoraLocalization.SetText(text, "ROCKET CODE");
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
         text.characterSize = 0.2f;

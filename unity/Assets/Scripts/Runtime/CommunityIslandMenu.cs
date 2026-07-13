@@ -65,7 +65,7 @@ public class CommunityIslandMenu : MonoBehaviour
     private bool useDarkTheme;
     private bool packetSubscribed;
     private bool fetchInProgress;
-    private string communityBodyMessage = "Press Fetch Courses to load community quizzes.";
+    private string communityBodyMessage = "";
 
     private static Button prevButton;
     private static Text prevButtonText;
@@ -123,6 +123,7 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         CacheLightTheme();
         EnsureTriggerVolume();
+        communityBodyMessage = MentoraLocalization.Localize("Press Fetch Courses to load community quizzes.");
     }
 
     private void OnEnable()
@@ -133,6 +134,15 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         CacheLightTheme();
         EnsureTriggerVolume();
+        MentoraLocalization.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged(MentoraLanguage _)
+    {
+        if (Application.isPlaying && running)
+        {
+            UpdateUIState();
+        }
     }
 
     private void OnValidate()
@@ -325,6 +335,7 @@ public class CommunityIslandMenu : MonoBehaviour
 
     private void OnDisable()
     {
+        MentoraLocalization.LanguageChanged -= OnLanguageChanged;
         UnsubscribeFromPackets();
     }
 
@@ -392,7 +403,7 @@ public class CommunityIslandMenu : MonoBehaviour
         ShowFetchButton(true);
         ShowThemeButton(true);
         ApplyTheme();
-        titleText.text = "Community";
+        MentoraLocalization.SetText(titleText, "Community");
         UpdateBodyText();
 
         if (prevButton != null) {
@@ -832,7 +843,7 @@ public class CommunityIslandMenu : MonoBehaviour
             leaveButton.onClick.AddListener(OnLeaveClicked);
             if (leaveButtonText != null)
             {
-                leaveButtonText.text = "Leave";
+                MentoraLocalization.SetText(leaveButtonText, "Leave");
             }
         }
 
@@ -891,7 +902,7 @@ public class CommunityIslandMenu : MonoBehaviour
         }
 
         fetchInProgress = true;
-        communityBodyMessage = "Fetching community quizzes from the server...";
+        communityBodyMessage = MentoraLocalization.Localize("Fetching community quizzes from the server...");
         UpdateBodyText();
         ShowFetchButton(true);
 
@@ -901,7 +912,7 @@ public class CommunityIslandMenu : MonoBehaviour
 
             if (GameClient.Instance == null)
             {
-                communityBodyMessage = "Game client is not available in this scene.";
+                communityBodyMessage = MentoraLocalization.Localize("Game client is not available in this scene.");
                 return;
             }
 
@@ -912,7 +923,7 @@ public class CommunityIslandMenu : MonoBehaviour
 
             if (!GameClient.Instance.IsConnected)
             {
-                communityBodyMessage = "Could not connect to the server.";
+                communityBodyMessage = MentoraLocalization.Localize("Could not connect to the server.");
                 return;
             }
 
@@ -920,7 +931,7 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         catch (System.Exception ex)
         {
-            communityBodyMessage = "Fetch failed: " + ex.Message;
+            communityBodyMessage = MentoraLocalization.Format("Fetch failed: {0}", ex.Message);
             fetchInProgress = false;
             ShowFetchButton(true);
             UpdateBodyText();
@@ -1078,7 +1089,7 @@ public class CommunityIslandMenu : MonoBehaviour
                 else
                 {
                     availableCourses = null;
-                    communityBodyMessage = "No published community quizzes were returned.";
+                    communityBodyMessage = MentoraLocalization.Localize("No published community quizzes were returned.");
                 }
                 UpdateUIState();
                 ShowFetchButton(true);
@@ -1101,7 +1112,7 @@ public class CommunityIslandMenu : MonoBehaviour
                 else
                 {
                     currentState = MenuState.List;
-                    communityBodyMessage = "Course details could not be loaded.";
+                    communityBodyMessage = MentoraLocalization.Localize("Course details could not be loaded.");
                 }
                 UpdateUIState();
                 ShowFetchButton(true);
@@ -1116,7 +1127,7 @@ public class CommunityIslandMenu : MonoBehaviour
                 UnityMainThreadDispatcher.Instance().Enqueue(() =>
                 {
                     fetchInProgress = false;
-                    communityBodyMessage = "Fetch failed: " + (string.IsNullOrWhiteSpace(actionPacket.Message) ? "Unknown error." : actionPacket.Message);
+                    communityBodyMessage = MentoraLocalization.Format("Fetch failed: {0}", string.IsNullOrWhiteSpace(actionPacket.Message) ? "Unknown error." : actionPacket.Message);
                     UpdateUIState();
                     ShowFetchButton(true);
                 });
@@ -1126,7 +1137,7 @@ public class CommunityIslandMenu : MonoBehaviour
                 UnityMainThreadDispatcher.Instance().Enqueue(() =>
                 {
                     fetchInProgress = false;
-                    communityBodyMessage = actionPacket.Success ? "Course completed successfully!" : "Failed to submit course completion.";
+                    communityBodyMessage = MentoraLocalization.Localize(actionPacket.Success ? "Course completed successfully!" : "Failed to submit course completion.");
                     currentState = MenuState.List;
                     UpdateUIState();
                     ShowFetchButton(true);
@@ -1139,18 +1150,18 @@ public class CommunityIslandMenu : MonoBehaviour
     {
         if (currentState == MenuState.List)
         {
-            titleText.text = "Community Courses";
+            MentoraLocalization.SetText(titleText, "Community Courses");
             for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
             
             if (availableCourses != null && availableCourses.Length > 0)
             {
                 PublishedCourseSummary course = availableCourses[currentCourseIndex];
-                string completedTag = course.completed ? "<color=#16a34a><b>[COMPLETED]</b></color> " : "";
+                string completedTag = course.completed ? "<color=#16a34a><b>" + MentoraLocalization.Localize("[COMPLETED]") + "</b></color> " : "";
                 
                 communityBodyMessage = $"<b><size=42>{course.title}</size></b>\n" +
-                                     $"<color={GetHexColor(secondaryTextColor)}><size=24>{currentCourseIndex + 1} of {availableCourses.Length}</size></color>\n\n" +
-                                     $"<b>Language:</b> {course.language}  |  <b>Difficulty:</b> {course.difficulty}\n" +
-                                     $"<b>Questions:</b> {course.questionCount}  |  <b>Reward:</b> {course.pointReward} pts\n\n" +
+                                     $"<color={GetHexColor(secondaryTextColor)}><size=24>{MentoraLocalization.Format("{0} of {1}", currentCourseIndex + 1, availableCourses.Length)}</size></color>\n\n" +
+                                     $"<b>{MentoraLocalization.Localize("Language")}:</b> {course.language}  |  <b>{MentoraLocalization.Localize("Difficulty")}:</b> {course.difficulty}\n" +
+                                     $"<b>{MentoraLocalization.Localize("Questions")}:</b> {course.questionCount}  |  <b>{MentoraLocalization.Localize("Reward")}:</b> {course.pointReward} {(MentoraLocalization.IsRomanian ? "pct" : "pts")}\n\n" +
                                      $"{completedTag}{course.summary}";
                 
                 if (prevButton != null) prevButton.gameObject.SetActive(availableCourses.Length > 1);
@@ -1158,7 +1169,7 @@ public class CommunityIslandMenu : MonoBehaviour
                 if (actionButton != null)
                 {
                     actionButton.gameObject.SetActive(true);
-                    if (actionButtonText != null) actionButtonText.text = "Enroll Now";
+                    if (actionButtonText != null) MentoraLocalization.SetText(actionButtonText, "Enroll Now");
                 }
             }
             else
@@ -1178,7 +1189,7 @@ public class CommunityIslandMenu : MonoBehaviour
             if (actionButton != null) actionButton.gameObject.SetActive(false);
             
             CourseQuestionDto q = currentCourseDetail.questions[currentQuestionIndex];
-            communityBodyMessage = $"<color={GetHexColor(secondaryTextColor)}><size=24>Question {currentQuestionIndex + 1} of {currentCourseDetail.questions.Length}</size></color>\n\n" +
+            communityBodyMessage = $"<color={GetHexColor(secondaryTextColor)}><size=24>{MentoraLocalization.Format("Question {0} of {1}", currentQuestionIndex + 1, currentCourseDetail.questions.Length)}</size></color>\n\n" +
                                  $"<b><size=34>{q.prompt}</size></b>";
             
             bodyText.alignment = TextAnchor.MiddleCenter;
@@ -1203,7 +1214,7 @@ public class CommunityIslandMenu : MonoBehaviour
         }
         else if (currentState == MenuState.Result)
         {
-            titleText.text = "Course Results";
+            MentoraLocalization.SetText(titleText, "Course Results");
             for (int i = 0; i < 4; i++) if (optionButtons[i] != null) optionButtons[i].gameObject.SetActive(false);
             if (prevButton != null) prevButton.gameObject.SetActive(false);
             if (nextButton != null) nextButton.gameObject.SetActive(false);
@@ -1211,8 +1222,8 @@ public class CommunityIslandMenu : MonoBehaviour
             float percentage = (float)currentScore / currentCourseDetail.questions.Length;
             string colorHex = percentage >= 0.7f ? "#16a34a" : (percentage >= 0.4f ? "#ca8a04" : "#dc2626");
             
-            communityBodyMessage = $"<size=48>Congratulations!</size>\n\n" +
-                                 $"Your final score is\n" +
+            communityBodyMessage = $"<size=48>{MentoraLocalization.Localize("Congratulations!")}</size>\n\n" +
+                                 $"{MentoraLocalization.Localize("Your final score is")}\n" +
                                  $"<b><size=72><color={colorHex}>{currentScore}</color></size></b> / {currentCourseDetail.questions.Length}";
             
             bodyText.alignment = TextAnchor.MiddleCenter;
@@ -1220,7 +1231,7 @@ public class CommunityIslandMenu : MonoBehaviour
             if (actionButton != null)
             {
                 actionButton.gameObject.SetActive(true);
-                if (actionButtonText != null) actionButtonText.text = "Finish & Claim Reward";
+                if (actionButtonText != null) MentoraLocalization.SetText(actionButtonText, "Finish & Claim Reward");
             }
         }
         
@@ -1238,7 +1249,7 @@ public class CommunityIslandMenu : MonoBehaviour
         {
             long courseId = availableCourses[currentCourseIndex].id;
             fetchInProgress = true;
-            communityBodyMessage = "Loading course details...";
+            communityBodyMessage = MentoraLocalization.Localize("Loading course details...");
             UpdateUIState();
             
             try
@@ -1247,7 +1258,7 @@ public class CommunityIslandMenu : MonoBehaviour
             }
             catch (System.Exception ex)
             {
-                communityBodyMessage = "Failed to load course: " + ex.Message;
+                communityBodyMessage = MentoraLocalization.Format("Failed to load course: {0}", ex.Message);
                 fetchInProgress = false;
                 UpdateUIState();
             }
@@ -1255,7 +1266,7 @@ public class CommunityIslandMenu : MonoBehaviour
         else if (currentState == MenuState.Result)
         {
             fetchInProgress = true;
-            communityBodyMessage = "Submitting score...";
+            communityBodyMessage = MentoraLocalization.Localize("Submitting score...");
             UpdateUIState();
             
             try
@@ -1264,7 +1275,7 @@ public class CommunityIslandMenu : MonoBehaviour
             }
             catch (System.Exception ex)
             {
-                communityBodyMessage = "Failed to submit score: " + ex.Message;
+                communityBodyMessage = MentoraLocalization.Format("Failed to submit score: {0}", ex.Message);
                 fetchInProgress = false;
                 currentState = MenuState.List;
                 UpdateUIState();
@@ -1473,7 +1484,7 @@ public class CommunityIslandMenu : MonoBehaviour
         button.colors = colors;
 
         Text text = EnsureText(root.transform, "Label", new Vector2(0.5f, 0.5f), size, fontSize, FontStyle.Bold, Color.white);
-        text.text = label;
+        MentoraLocalization.Register(text, label);
 
         Navigation navigation = button.navigation;
         navigation.mode = Navigation.Mode.None;

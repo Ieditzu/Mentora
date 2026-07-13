@@ -236,7 +236,7 @@ public class PythonDebugPadCinematic : MonoBehaviour
     private int score;
     private GameObject activePortal;
     private bool overlayInteractionActive;
-    private QuizLanguage selectedLanguage = QuizLanguage.Romanian;
+    private QuizLanguage selectedLanguage = MentoraLocalization.IsRomanian ? QuizLanguage.Romanian : QuizLanguage.English;
     private CodeChallenge activeChallenge;
     private bool awaitingExecution;
     private bool awaitingAiResponse;
@@ -2512,6 +2512,7 @@ public class PythonDebugPadCinematic : MonoBehaviour
     private void SelectLanguage(QuizLanguage language)
     {
         selectedLanguage = language;
+        MentoraLocalization.SetLanguage(language == QuizLanguage.Romanian ? MentoraLanguage.Romanian : MentoraLanguage.English);
         languageChosen = true;
         ApplyLocalizedStaticTexts();
     }

@@ -225,7 +225,7 @@ public class CppQuestionPadCinematic : MonoBehaviour
     private bool aiChatBackRequested;
     private bool aiChatSendRequested;
     private bool languageChosen;
-    private QuizLanguage selectedLanguage = QuizLanguage.Romanian;
+    private QuizLanguage selectedLanguage = MentoraLocalization.IsRomanian ? QuizLanguage.Romanian : QuizLanguage.English;
     private GameObject activePortal;
     private bool[] answeredCorrectly;
     private int activeQuestionIndex = -1;
@@ -1287,6 +1287,7 @@ public class CppQuestionPadCinematic : MonoBehaviour
     private void SelectLanguage(QuizLanguage language)
     {
         selectedLanguage = language;
+        MentoraLocalization.SetLanguage(language == QuizLanguage.Romanian ? MentoraLanguage.Romanian : MentoraLanguage.English);
         languageChosen = true;
     }
 

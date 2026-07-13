@@ -4459,6 +4459,7 @@ public class CodeWorldRuntime : MonoBehaviour
         text.alignment = anchor;
         text.color = color;
         text.text = value;
+        MentoraLocalization.Register(text, value);
         text.supportRichText = false;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
@@ -4483,6 +4484,7 @@ public class CodeWorldRuntime : MonoBehaviour
         text.alignment = anchor;
         text.color = color;
         text.text = value;
+        MentoraLocalization.Register(text, value);
         text.supportRichText = false;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
