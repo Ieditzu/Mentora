@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Ebeveyn öğrenme yardımcınız";
+"email_address" = "E-posta adresi";
+"password" = "Şifre";
+"continue" = "Devam et";
+"ios_socket_migration_message" = "iOS soket desteği, paylaşılan Kotlin modülüne taşınıyor.";
+"my_kids" = "Çocuklarım";
+"children_placeholder" = "Çocuklarınızın öğrenme ilerlemesi burada görünecek.";
+"home" = "Ana Sayfa";
+"settings" = "Ayarlar";
+"language" = "Dil";
+"use_device_language" = "Cihaz dilini kullan";
+"active_language_format" = "Etkin dil: %@";
+"account" = "Hesap";
+"sign_out" = "Çıkış yap";

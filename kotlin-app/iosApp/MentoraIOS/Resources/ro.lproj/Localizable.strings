@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Companionul tău pentru învățarea copilului";
+"email_address" = "Adresă de e-mail";
+"password" = "Parolă";
+"continue" = "Continuă";
+"ios_socket_migration_message" = "Suportul pentru socket-uri pe iOS este în curs de migrare către modulul Kotlin partajat.";
+"my_kids" = "Copiii mei";
+"children_placeholder" = "Progresul de învățare al copiilor tăi va apărea aici.";
+"home" = "Acasă";
+"settings" = "Setări";
+"language" = "Limbă";
+"use_device_language" = "Folosește limba dispozitivului";
+"active_language_format" = "Limbă activă: %@";
+"account" = "Cont";
+"sign_out" = "Deconectare";

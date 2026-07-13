@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Supporto all'apprendimento per genitori";
+"email_address" = "Indirizzo e-mail";
+"password" = "Password";
+"continue" = "Continua";
+"ios_socket_migration_message" = "L'interfaccia iOS nativa è pronta per la migrazione del client socket condiviso.";
+"my_kids" = "I miei figli";
+"children_placeholder" = "La sessione Mentora condivisa mostrerà qui i bambini una volta completato il client socket portabile.";
+"home" = "Home";
+"settings" = "Impostazioni";
+"language" = "Lingua";
+"use_device_language" = "Usa la lingua del dispositivo";
+"active_language_format" = "Lingua attiva: %@";
+"account" = "Account";
+"sign_out" = "Esci";

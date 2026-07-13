@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Ваш помічник для батьків у навчанні";
+"email_address" = "Електронна пошта";
+"password" = "Пароль";
+"continue" = "Продовжити";
+"ios_socket_migration_message" = "Підтримку сокетів iOS переносять до спільного модуля Kotlin.";
+"my_kids" = "Мої діти";
+"children_placeholder" = "Тут відображатиметься прогрес навчання ваших дітей.";
+"home" = "Головна";
+"settings" = "Налаштування";
+"language" = "Мова";
+"use_device_language" = "Використовувати мову пристрою";
+"active_language_format" = "Активна мова: %@";
+"account" = "Обліковий запис";
+"sign_out" = "Вийти";

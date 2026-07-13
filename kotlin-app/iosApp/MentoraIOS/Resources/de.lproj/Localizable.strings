@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Der Lernbegleiter für deine Familie";
+"email_address" = "E-Mail-Adresse";
+"password" = "Passwort";
+"continue" = "Weiter";
+"ios_socket_migration_message" = "Die Serververbindung wird bald verfügbar sein.";
+"my_kids" = "Meine Kinder";
+"children_placeholder" = "Deine Kinder werden hier angezeigt.";
+"home" = "Startseite";
+"settings" = "Einstellungen";
+"language" = "Sprache";
+"use_device_language" = "Sprache des Geräts verwenden";
+"active_language_format" = "Aktive Sprache: %@";
+"account" = "Konto";
+"sign_out" = "Abmelden";

@@ -1,0 +1,24 @@
+name: MentoraIOS
+options:
+  bundleIdPrefix: io.github.kawase
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+    SWIFT_VERSION: 5.0
+targets:
+  MentoraIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: MentoraIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kawase.mentora.ios
+        INFOPLIST_FILE: MentoraIOS/Info.plist
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS: $(inherited) -framework MentoraShared
+    preBuildScripts:
+      - name: Build shared Kotlin framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode

@@ -1,0 +1,15 @@
+"app_name" = "Mentora";
+"parent_learning_companion" = "Your parent learning companion";
+"email_address" = "Email address";
+"password" = "Password";
+"continue" = "Continue";
+"ios_socket_migration_message" = "iOS socket support is being migrated to the shared Kotlin module.";
+"my_kids" = "My Kids";
+"children_placeholder" = "Your children's learning progress will appear here.";
+"home" = "Home";
+"settings" = "Settings";
+"language" = "Language";
+"use_device_language" = "Use device language";
+"active_language_format" = "Active language: %@";
+"account" = "Account";
+"sign_out" = "Sign out";

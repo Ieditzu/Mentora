@@ -1,34 +1,24 @@
 package io.github.kawase.localization
 
 import android.content.res.Configuration
-import java.util.Locale
-
-data class AppLanguage(val tag: String, val nativeName: String)
+import io.github.kawase.shared.localization.LanguagePreference
+import io.github.kawase.shared.localization.MentoraLanguages
+import io.github.kawase.shared.localization.SupportedLanguage
 
 object AppLanguages {
     const val SYSTEM_DEFAULT = "system"
 
-    val supported = listOf(
-        AppLanguage("en", "English"),
-        AppLanguage("ro", "Română"),
-        AppLanguage("es", "Español"),
-        AppLanguage("fr", "Français"),
-        AppLanguage("de", "Deutsch"),
-        AppLanguage("it", "Italiano"),
-        AppLanguage("pt-BR", "Português (Brasil)"),
-        AppLanguage("pl", "Polski"),
-        AppLanguage("tr", "Türkçe"),
-        AppLanguage("uk", "Українська")
-    )
+    val supported: List<SupportedLanguage> = SupportedLanguage.entries
 
     fun resolve(preference: String, configuration: Configuration): String {
-        if (preference != SYSTEM_DEFAULT && supported.any { it.tag == preference }) return preference
+        val languagePreference = if (preference == SYSTEM_DEFAULT) {
+            LanguagePreference.System
+        } else {
+            LanguagePreference.Explicit(preference)
+        }
+        val deviceLanguageTags = (0 until configuration.locales.size())
+            .map { configuration.locales[it].toLanguageTag() }
 
-        val deviceLanguage = configuration.locales[0]
-        return supported.firstOrNull { it.tag.equals(deviceLanguage.toLanguageTag(), ignoreCase = true) }
-            ?.tag
-            ?: supported.firstOrNull { it.tag.substringBefore('-') == deviceLanguage.language }
-                ?.tag
-            ?: "en"
+        return MentoraLanguages.resolve(languagePreference, deviceLanguageTags).tag
     }
 }

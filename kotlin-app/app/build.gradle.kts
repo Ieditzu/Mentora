@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation("org.java-websocket:Java-WebSocket:1.5.3")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

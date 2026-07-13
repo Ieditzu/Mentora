@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Mentora"
 include(":app")
+include(":shared")
  
