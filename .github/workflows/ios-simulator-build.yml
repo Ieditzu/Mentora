@@ -1,0 +1,59 @@
+name: iOS Simulator Build
+
+on:
+  push:
+    paths:
+      - "kotlin-app/**"
+      - ".github/workflows/ios-simulator-build.yml"
+  pull_request:
+    paths:
+      - "kotlin-app/**"
+      - ".github/workflows/ios-simulator-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build iOS simulator app
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: kotlin-app
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('kotlin-app/gradle/libs.versions.toml', 'kotlin-app/gradle/wrapper/gradle-wrapper.properties', 'kotlin-app/shared/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-konan-
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec iosApp/project.yml --project iosApp
+
+      - name: Compile Kotlin framework and SwiftUI app
+        run: >-
+          xcodebuild
+          -project iosApp/MentoraIOS.xcodeproj
+          -scheme MentoraIOS
+          -configuration Debug
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
