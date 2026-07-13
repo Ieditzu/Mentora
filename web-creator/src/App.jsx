@@ -8,6 +8,7 @@ import {
   Clock, Code, Cpu
 } from 'lucide-react';
 import { api, API_BASE } from './lib/api';
+import { translate } from './lib/i18n';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -63,6 +64,7 @@ const mapBackendToFrontend = (courseData) => {
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("mentora_creator_token") || "");
   const [parentId, setParentId] = useState(localStorage.getItem("mentora_creator_parent_id") || "");
+  const [language, setLanguage] = useState(localStorage.getItem("mentora_creator_language") || "en");
   const [courses, setCourses] = useState([]);
   const [editorCourse, setEditorCourse] = useState(blankCourse());
   const [authState, setAuthState] = useState({ step: "email", mode: "login", email: "" });
@@ -71,6 +73,14 @@ export default function App() {
   
   // Navigation State
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, library, editor
+
+  const t = useCallback((text, variables) => translate(language, text, variables), [language]);
+
+  const toggleLanguage = () => {
+    const nextLanguage = language === "en" ? "ro" : "en";
+    setLanguage(nextLanguage);
+    localStorage.setItem("mentora_creator_language", nextLanguage);
+  };
 
   const showToast = useCallback((message, type = "info") => {
     setToast({ message, type });
@@ -100,7 +110,7 @@ export default function App() {
     localStorage.removeItem("mentora_creator_token");
     localStorage.removeItem("mentora_creator_parent_id");
     setAuthState({ step: "email", mode: "login", email: "" });
-    showToast("Logged out successfully");
+    showToast(t("Logged out successfully"));
   };
 
   const handleAuthLookup = async (email) => {
@@ -129,7 +139,7 @@ export default function App() {
       setParentId(String(response.parentId));
       localStorage.setItem("mentora_creator_token", response.token);
       localStorage.setItem("mentora_creator_parent_id", String(response.parentId));
-      showToast(authState.mode === "login" ? "Welcome back!" : "Account created!");
+      showToast(t(authState.mode === "login" ? "Welcome back!" : "Account created!"));
       setActiveTab('dashboard');
     } catch (err) {
       showToast(err.message, "error");
@@ -150,7 +160,7 @@ export default function App() {
       
       setEditorCourse(mapBackendToFrontend(data));
       await loadCourses(token);
-      showToast("Course saved successfully");
+      showToast(t("Course saved successfully"));
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -160,13 +170,13 @@ export default function App() {
 
   const handleDeleteCourse = async () => {
     if (!editorCourse.id) return;
-    if (!confirm("Are you sure you want to delete this course?")) return;
+    if (!confirm(t("Are you sure you want to delete this course?"))) return;
     setLoading(true);
     try {
       await api(`/api/web/courses/${editorCourse.id}`, { method: "DELETE" }, token);
       setEditorCourse(blankCourse());
       await loadCourses(token);
-      showToast("Course deleted");
+      showToast(t("Course deleted"));
       setActiveTab('library');
     } catch (err) {
       showToast(err.message, "error");
@@ -188,6 +198,14 @@ export default function App() {
   // Main UI Shell
   return (
     <div className="relative min-h-screen bg-bg-base text-text selection:bg-brand/30 selection:text-brand overflow-hidden font-body">
+      <button
+        type="button"
+        onClick={toggleLanguage}
+        className="absolute right-5 top-5 z-50 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-bold text-text hover:border-brand hover:text-white transition-colors"
+        aria-label={language === "en" ? t("Romanian") : t("English")}
+      >
+        {language === "en" ? "RO" : "EN"}
+      </button>
       {/* Background Decorative Elements */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand/10 blur-[120px] animate-blob" />
@@ -202,6 +220,7 @@ export default function App() {
             <AuthSection 
               state={authState} 
               loading={loading}
+              t={t}
               onLookup={handleAuthLookup} 
               onSubmit={handleAuthSubmit}
               onReset={() => setAuthState({ step: "email", mode: "login", email: "" })}
@@ -217,16 +236,16 @@ export default function App() {
                 </div>
                 <div>
                   <h1 className="text-lg font-heading font-bold text-white tracking-wide">Mentora</h1>
-                  <p className="text-[10px] text-brand font-mono uppercase tracking-widest leading-none">Creator</p>
+                  <p className="text-[10px] text-brand font-mono uppercase tracking-widest leading-none">{t("Creator")}</p>
                 </div>
               </div>
 
               <div className="flex-1 px-4 py-6 space-y-8 overflow-y-auto">
                 <div className="space-y-1">
-                  <p className="px-3 text-[10px] font-bold text-text-muted uppercase tracking-widest mb-3">Workspace</p>
-                  <SidebarItem icon={Layout} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-                  <SidebarItem icon={BookOpen} label="Course Library" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
-                  <SidebarItem icon={FileText} label="Active Editor" active={activeTab === 'editor'} onClick={() => setActiveTab('editor')} />
+                  <p className="px-3 text-[10px] font-bold text-text-muted uppercase tracking-widest mb-3">{t("Workspace")}</p>
+                  <SidebarItem icon={Layout} label={t("Dashboard")} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+                  <SidebarItem icon={BookOpen} label={t("Course Library")} active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
+                  <SidebarItem icon={FileText} label={t("Active Editor")} active={activeTab === 'editor'} onClick={() => setActiveTab('editor')} />
                 </div>
               </div>
 
@@ -236,9 +255,9 @@ export default function App() {
                     <User size={14} />
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <p className="text-xs font-bold text-white truncate">Creator #{parentId}</p>
+                    <p className="text-xs font-bold text-white truncate">{t("Creator")} #{parentId}</p>
                     <p className="text-[10px] text-success flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Connected
+                      <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> {t("Connected")}
                     </p>
                   </div>
                 </div>
@@ -247,7 +266,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors text-xs font-semibold"
                 >
                   <LogOut size={14} />
-                  Sign Out
+                  {t("Sign Out")}
                 </button>
               </div>
             </aside>
@@ -257,7 +276,7 @@ export default function App() {
               {/* Header */}
               <header className="h-16 border-b border-border/50 bg-bg-base/80 backdrop-blur-md flex items-center justify-between px-8 z-10 shrink-0">
                 <div className="flex items-center gap-2 text-sm text-text-muted">
-                  <span className="capitalize">{activeTab}</span>
+                  <span>{t(activeTab === 'dashboard' ? "Dashboard" : activeTab === 'library' ? "Course Library" : "Active Editor")}</span>
                   {activeTab === 'editor' && editorCourse.title && (
                     <>
                       <ChevronRight size={14} />
@@ -279,23 +298,23 @@ export default function App() {
                       className="max-w-5xl mx-auto space-y-8"
                     >
                       <div className="space-y-2">
-                        <h2 className="text-3xl font-heading font-bold text-white">Welcome back.</h2>
-                        <p className="text-text-muted">Here is the current status of your courses.</p>
+                        <h2 className="text-3xl font-heading font-bold text-white">{t("Welcome back.")}</h2>
+                        <p className="text-text-muted">{t("Here is the current status of your courses.")}</p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <StatCard label="Total Courses" value={courses.length} icon={BookOpen} trend="+2 this week" />
-                        <StatCard label="Total Questions" value={courses.reduce((acc, c) => acc + (c.questionCount || 0), 0)} icon={Layers} trend="Active" />
-                        <StatCard label="Published" value={courses.filter(c => c.published).length} icon={Globe} trend="Live" />
+                        <StatCard label={t("Total Courses")} value={courses.length} icon={BookOpen} trend={t("+2 this week")} />
+                        <StatCard label={t("Total Questions")} value={courses.reduce((acc, c) => acc + (c.questionCount || 0), 0)} icon={Layers} trend={t("Active")} />
+                        <StatCard label={t("Published")} value={courses.filter(c => c.published).length} icon={Globe} trend={t("Live")} />
                       </div>
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
                         <div className="card p-6 border-border/50 bg-surface/30">
-                          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Activity size={16} className="text-brand" /> Recent Activity</h3>
+                          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2"><Activity size={16} className="text-brand" /> {t("Recent Activity")}</h3>
                           {courses.length === 0 ? (
                             <div className="text-center py-8 text-text-muted">
-                              <p className="text-sm">No activity recorded yet.</p>
-                              <button onClick={() => { setEditorCourse(blankCourse()); setActiveTab('editor'); }} className="text-brand text-sm font-medium hover:underline mt-2">Create your first course</button>
+                              <p className="text-sm">{t("No activity recorded yet.")}</p>
+                              <button onClick={() => { setEditorCourse(blankCourse()); setActiveTab('editor'); }} className="text-brand text-sm font-medium hover:underline mt-2">{t("Create your first course")}</button>
                             </div>
                           ) : (
                             <div className="space-y-4">
@@ -303,7 +322,7 @@ export default function App() {
                                 <div key={c.id} className="flex items-center justify-between p-3 rounded-xl bg-surface hover:bg-surface-raised cursor-pointer transition-colors border border-border/50" onClick={() => loadCourseDetail(c.id)}>
                                   <div>
                                     <p className="text-sm font-bold text-white">{c.title}</p>
-                                    <p className="text-[10px] text-text-muted uppercase font-mono mt-0.5">{c.acronym || 'UNTITLED'}</p>
+                                    <p className="text-[10px] text-text-muted uppercase font-mono mt-0.5">{c.acronym || t("UNTITLED")}</p>
                                   </div>
                                   <div className={cn("w-2 h-2 rounded-full", c.published ? "bg-success" : "bg-text-dim")} />
                                 </div>
@@ -316,10 +335,10 @@ export default function App() {
                           <div className="w-16 h-16 rounded-2xl bg-brand/20 flex items-center justify-center text-brand mb-4">
                             <Plus size={32} />
                           </div>
-                          <h3 className="text-lg font-bold text-white mb-2">Create New Course</h3>
-                          <p className="text-sm text-text-muted mb-6 max-w-xs">Start building a new learning path for Mentora.</p>
+                          <h3 className="text-lg font-bold text-white mb-2">{t("Create New Course")}</h3>
+                          <p className="text-sm text-text-muted mb-6 max-w-xs">{t("Start building a new learning path for Mentora.")}</p>
                           <button onClick={() => { setEditorCourse(blankCourse()); setActiveTab('editor'); }} className="btn-primary">
-                            Create Course
+                            {t("Create Course")}
                           </button>
                         </div>
                       </div>
@@ -336,19 +355,19 @@ export default function App() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h2 className="text-2xl font-heading font-bold text-white">Course Library</h2>
-                          <p className="text-text-muted text-sm">Manage your draft and published courses.</p>
+                          <h2 className="text-2xl font-heading font-bold text-white">{t("Course Library")}</h2>
+                          <p className="text-text-muted text-sm">{t("Manage your draft and published courses.")}</p>
                         </div>
                         <button onClick={() => { setEditorCourse(blankCourse()); setActiveTab('editor'); }} className="btn-primary">
-                          <Plus size={16} /> New Course
+                          <Plus size={16} /> {t("New Course")}
                         </button>
                       </div>
 
                       {courses.length === 0 ? (
                         <div className="card p-16 flex flex-col items-center justify-center text-center border-dashed border-border">
                           <BookOpen size={48} className="text-text-dim mb-4 opacity-50" />
-                          <h3 className="text-lg font-bold text-white mb-2">Library Empty</h3>
-                          <p className="text-text-muted max-w-sm mb-6">You haven't created any courses yet. Begin by creating a new course in the editor.</p>
+                          <h3 className="text-lg font-bold text-white mb-2">{t("Library Empty")}</h3>
+                          <p className="text-text-muted max-w-sm mb-6">{t("You haven't created any courses yet. Begin by creating a new course in the editor.")}</p>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -385,7 +404,7 @@ export default function App() {
                                         ? "bg-success/10 text-success border-success/30" 
                                         : "bg-surface-raised text-text-dim border-border"
                                     )}>
-                                      {course.published ? "Published" : "Draft"}
+                                      {course.published ? t("Published") : t("Draft")}
                                     </span>
                                   </div>
 
@@ -393,14 +412,14 @@ export default function App() {
                                     {course.title}
                                   </h4>
                                   <p className="text-sm text-text-muted line-clamp-2 leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
-                                    {course.summary || "No description sequence defined."}
+                                    {course.summary || t("No description sequence defined.")}
                                   </p>
                                 </div>
 
                                 <div className="px-6 py-4 border-t border-border/50 bg-black/20 flex items-center justify-between relative z-10">
                                   <div className="flex items-center gap-4 text-[10px] font-bold text-text-dim uppercase tracking-widest">
                                     <div className="flex items-center gap-1.5"><Layers size={14}/> {course.questionCount || 0}</div>
-                                    <div className="flex items-center gap-1.5"><Zap size={14}/> {course.difficulty}</div>
+                                    <div className="flex items-center gap-1.5"><Zap size={14}/> {t(course.difficulty === 'beginner' ? "Beginner" : course.difficulty === 'intermediate' ? "Intermediate" : "Advanced")}</div>
                                   </div>
                                   <button 
                                     onClick={() => loadCourseDetail(course.id)}
@@ -428,19 +447,19 @@ export default function App() {
                       <div className="flex items-center justify-between mb-8 sticky top-0 bg-bg-base/90 backdrop-blur-md py-4 z-20 border-b border-transparent transition-all">
                         <div>
                           <h2 className="text-2xl font-heading font-bold text-white">
-                            {editorCourse.id ? 'Edit Course' : 'Create Course'}
+                            {t(editorCourse.id ? "Edit Course" : "Create Course")}
                           </h2>
-                          <p className="text-text-muted text-sm">Configure course details and questions.</p>
+                          <p className="text-text-muted text-sm">{t("Configure course details and questions.")}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           {editorCourse.id && (
                             <button onClick={handleDeleteCourse} disabled={loading} className="btn-danger">
-                              <Trash2 size={16} /> Delete
+                              <Trash2 size={16} /> {t("Delete")}
                             </button>
                           )}
                           <button onClick={handleSaveCourse} disabled={loading} className="btn-primary">
                             {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={16} />}
-                            Save Course
+                            {t("Save Course")}
                           </button>
                         </div>
                       </div>
@@ -449,25 +468,25 @@ export default function App() {
                         {/* Meta Settings */}
                         <div className="card p-8 space-y-6 bg-surface/50 backdrop-blur-sm border-white/5">
                           <h3 className="text-sm font-bold text-white border-b border-border/50 pb-2 flex items-center gap-2">
-                            <Settings size={16} className="text-brand" /> Course Settings
+                            <Settings size={16} className="text-brand" /> {t("Course Settings")}
                           </h3>
                           
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InputField label="Course Title" value={editorCourse.title} onChange={v => setEditorCourse({...editorCourse, title: v})} placeholder="e.g. Intro to Python" />
-                            <InputField label="Acronym" value={editorCourse.acronym} onChange={v => setEditorCourse({...editorCourse, acronym: v})} placeholder="e.g. PY-101" />
+                            <InputField label={t("Course Title")} value={editorCourse.title} onChange={v => setEditorCourse({...editorCourse, title: v})} placeholder={t("e.g. Intro to Python")} />
+                            <InputField label={t("Acronym")} value={editorCourse.acronym} onChange={v => setEditorCourse({...editorCourse, acronym: v})} placeholder="e.g. PY-101" />
                             <SelectField 
-                              label="Language" 
+                              label={t("Language")}
                               value={editorCourse.language} 
                               onChange={v => setEditorCourse({...editorCourse, language: v})}
-                              options={[{ label: 'General', value: 'general' }, { label: 'C++', value: 'cpp' }, { label: 'Python', value: 'python' }, { label: 'JavaScript', value: 'javascript' }]}
+                              options={[{ label: t('General'), value: 'general' }, { label: 'C++', value: 'cpp' }, { label: 'Python', value: 'python' }, { label: 'JavaScript', value: 'javascript' }]}
                             />
                             <SelectField 
-                              label="Difficulty" 
+                              label={t("Difficulty")}
                               value={editorCourse.difficulty} 
                               onChange={v => setEditorCourse({...editorCourse, difficulty: v})}
-                              options={[{ label: 'Beginner', value: 'beginner' }, { label: 'Intermediate', value: 'intermediate' }, { label: 'Advanced', value: 'advanced' }]}
+                              options={[{ label: t('Beginner'), value: 'beginner' }, { label: t('Intermediate'), value: 'intermediate' }, { label: t('Advanced'), value: 'advanced' }]}
                             />
-                            <InputField label="Points" type="number" value={editorCourse.pointReward} onChange={v => setEditorCourse({...editorCourse, pointReward: Number(v)})} />
+                            <InputField label={t("Points")} type="number" value={editorCourse.pointReward} onChange={v => setEditorCourse({...editorCourse, pointReward: Number(v)})} />
                             
                             <div className="flex flex-col justify-center pt-6">
                               <label className="flex items-center gap-3 cursor-pointer group">
@@ -481,14 +500,14 @@ export default function App() {
                                   <div className="w-10 h-6 bg-surface-raised rounded-full border border-border peer-checked:bg-brand transition-colors"></div>
                                   <div className="absolute left-1 w-4 h-4 bg-text-muted rounded-full peer-checked:translate-x-4 peer-checked:bg-white transition-transform"></div>
                                 </div>
-                                <span className="text-sm font-medium text-text group-hover:text-white transition-colors">Publish course</span>
+                                <span className="text-sm font-medium text-text group-hover:text-white transition-colors">{t("Publish course")}</span>
                               </label>
                             </div>
                           </div>
 
                           <div className="space-y-6 pt-4">
-                            <TextareaField label="Summary" rows={2} value={editorCourse.summary} onChange={v => setEditorCourse({...editorCourse, summary: v})} placeholder="A brief description for the course card..." />
-                            <TextareaField label="Description" rows={4} value={editorCourse.description} onChange={v => setEditorCourse({...editorCourse, description: v})} placeholder="Full overview of the course content..." />
+                            <TextareaField label={t("Summary")} rows={2} value={editorCourse.summary} onChange={v => setEditorCourse({...editorCourse, summary: v})} placeholder={t("A brief description for the course card...")} />
+                            <TextareaField label={t("Description")} rows={4} value={editorCourse.description} onChange={v => setEditorCourse({...editorCourse, description: v})} placeholder={t("Full overview of the course content...")} />
                           </div>
                         </div>
 
@@ -497,15 +516,15 @@ export default function App() {
                           <div className="flex items-center justify-between">
                             <div>
                               <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Layers size={20} className="text-brand" /> Questions
+                                <Layers size={20} className="text-brand" /> {t("Questions")}
                               </h3>
-                              <p className="text-xs text-text-muted">Add questions to your course.</p>
+                              <p className="text-xs text-text-muted">{t("Add questions to your course.")}</p>
                             </div>
                             <button 
                               onClick={() => setEditorCourse({...editorCourse, questions: [...editorCourse.questions, blankQuestion()]})}
                               className="btn-secondary text-sm py-2 px-4"
                             >
-                              <Plus size={14} /> Add Question
+                              <Plus size={14} /> {t("Add Question")}
                             </button>
                           </div>
 
@@ -525,6 +544,7 @@ export default function App() {
                                     const qs = editorCourse.questions.filter((_, i) => i !== idx);
                                     setEditorCourse({...editorCourse, questions: qs.length ? qs : [blankQuestion()]});
                                   }}
+                                  t={t}
                                 />
                               ))}
                             </AnimatePresence>
@@ -629,7 +649,7 @@ function TextareaField({ label, ...props }) {
   );
 }
 
-function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
+function AuthSection({ state, onLookup, onSubmit, onReset, loading, t }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -644,10 +664,10 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
           </div>
           <div>
             <h2 className="text-2xl font-heading font-bold text-white tracking-tight">
-              {state.step === 'email' ? 'Sign In' : 'Sign In'}
+              {t("Sign In")}
             </h2>
             <p className="text-sm text-text-muted mt-1">
-              {state.step === 'email' ? "Enter your email address to continue." : `Enter password for ${state.email}`}
+              {state.step === 'email' ? t("Enter your email address to continue.") : t("Enter password for {{email}}", { email: state.email })}
             </p>
           </div>
         </div>
@@ -655,18 +675,18 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
         <div className="space-y-6">
           {state.step === 'email' ? (
             <>
-              <InputField label="Email Address" value={email} onChange={setEmail} placeholder="creator@mentora.net" onKeyDown={e => e.key === 'Enter' && onLookup(email)} />
+              <InputField label={t("Email Address")} value={email} onChange={setEmail} placeholder="creator@mentora.net" onKeyDown={e => e.key === 'Enter' && onLookup(email)} />
               <button onClick={() => onLookup(email)} disabled={!email || loading} className="btn-primary w-full py-3.5 mt-2">
-                {loading ? "Continuing..." : "Continue"}
+                {loading ? t("Continuing...") : t("Continue")}
               </button>
             </>
           ) : (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-              <InputField label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && onSubmit(password)} />
+              <InputField label={t("Password")} type="password" value={password} onChange={setPassword} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && onSubmit(password)} />
               <div className="flex gap-3 pt-2">
-                <button onClick={onReset} className="btn-secondary flex-1 py-3">Back</button>
+                <button onClick={onReset} className="btn-secondary flex-1 py-3">{t("Back")}</button>
                 <button onClick={() => onSubmit(password)} disabled={!password || loading} className="btn-primary flex-[2] py-3">
-                  {loading ? "Signing in..." : "Sign In"}
+                  {loading ? t("Signing in...") : t("Sign In")}
                 </button>
               </div>
             </motion.div>
@@ -677,7 +697,7 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading }) {
   );
 }
 
-function QuestionNode({ index, question, onChange, onRemove }) {
+function QuestionNode({ index, question, onChange, onRemove, t }) {
   const handleChange = (f, v) => onChange({...question, [f]: v});
   return (
     <motion.div 
@@ -694,7 +714,7 @@ function QuestionNode({ index, question, onChange, onRemove }) {
           <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border flex items-center justify-center text-xs font-bold text-white shadow-inner">
             {index + 1}
           </div>
-          <span className="text-xs font-bold uppercase tracking-widest text-text-muted">Question</span>
+          <span className="text-xs font-bold uppercase tracking-widest text-text-muted">{t("Question")}</span>
         </div>
         <button onClick={onRemove} className="text-text-dim hover:text-danger hover:bg-danger/10 p-2 rounded-lg transition-colors">
           <Trash2 size={16} />
@@ -702,7 +722,7 @@ function QuestionNode({ index, question, onChange, onRemove }) {
       </div>
 
       <div className="relative z-10 space-y-6">
-        <TextareaField label="Question Prompt" rows={2} value={question.prompt} onChange={v => handleChange('prompt', v)} placeholder="Ask your question here..." />
+        <TextareaField label={t("Question Prompt")} rows={2} value={question.prompt} onChange={v => handleChange('prompt', v)} placeholder={t("Ask your question here...")} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {['A', 'B', 'C', 'D'].map((l, i) => (
@@ -728,13 +748,13 @@ function QuestionNode({ index, question, onChange, onRemove }) {
                 className="flex-1 bg-transparent border-none p-0 text-sm text-text placeholder:text-text-dim outline-none" 
                 value={question[`option${l}`]}
                 onChange={e => handleChange(`option${l}`, e.target.value)}
-                placeholder={`Option text...`}
+                placeholder={t("Option text...")}
               />
             </div>
           ))}
         </div>
 
-        <InputField label="Explanation" value={question.explanation} onChange={v => handleChange('explanation', v)} placeholder="Why is this the correct answer?" />
+        <InputField label={t("Explanation")} value={question.explanation} onChange={v => handleChange('explanation', v)} placeholder={t("Why is this the correct answer?")} />
       </div>
     </motion.div>
   );
