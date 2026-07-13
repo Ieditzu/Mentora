@@ -247,7 +247,7 @@ struct GoalsView: View {
                             }
                             Spacer()
                             Image(systemName: goal.isComplete ? "checkmark.circle.fill" : "lock.circle")
-                                .font(.title2).foregroundStyle(goal.isComplete ? store.accent : .tertiary)
+                                .font(.title2).foregroundStyle(goal.isComplete ? store.accent : Color.gray.opacity(0.6))
                         }
                     }
                 }
