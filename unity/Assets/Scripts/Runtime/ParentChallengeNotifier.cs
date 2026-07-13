@@ -114,7 +114,7 @@ public class ParentChallengeNotifier : MonoBehaviour
         go.transform.SetParent(parent, false);
         Text text = go.AddComponent<Text>();
         text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.text = value;
+        MentoraLocalization.Register(text, value);
         text.fontSize = fontSize;
         text.fontStyle = style;
         text.color = color;
@@ -124,7 +124,7 @@ public class ParentChallengeNotifier : MonoBehaviour
     private void ShowChallenge(string message)
     {
         if (canvas == null) BuildUi();
-        bodyText.text = string.IsNullOrWhiteSpace(message) ? "Try one more challenge tonight." : message.Trim();
+        bodyText.text = string.IsNullOrWhiteSpace(message) ? MentoraLocalization.Localize("Try one more challenge tonight.") : message.Trim();
         canvas.gameObject.SetActive(true);
 
         if (hideRoutine != null)

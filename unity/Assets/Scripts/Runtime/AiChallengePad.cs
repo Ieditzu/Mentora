@@ -229,7 +229,7 @@ public class AiChallengePad : MonoBehaviour
 
         running = true;
         runButton.interactable = false;
-        if (statusText) statusText.text = "Running…";
+        if (statusText) MentoraLocalization.SetText(statusText, "Running…");
         if (outputText) outputText.text = "";
         attemptCount++;
         SendLiveSessionUpdate("Running AI challenge attempt " + attemptCount);
@@ -297,7 +297,7 @@ public class AiChallengePad : MonoBehaviour
 
         // Show the pad with loading state
         padPanel.transform.parent.gameObject.SetActive(true);
-        if (titleText) titleText.text = "Analysing your learning profile…";
+        if (titleText) MentoraLocalization.SetText(titleText, "Analysing your learning profile…");
         if (descriptionText) descriptionText.text = "";
         if (codeEditor) codeEditor.text = "";
         if (outputText) outputText.text = "";
@@ -342,7 +342,7 @@ public class AiChallengePad : MonoBehaviour
         bool correct = response != null &&
             response.TrimStart().StartsWith("CORRECT", System.StringComparison.OrdinalIgnoreCase);
 
-        if (statusText) statusText.text = correct ? "✓  CORRECT!" : "✗  INCORRECT";
+        if (statusText) MentoraLocalization.SetText(statusText, correct ? "✓  CORRECT!" : "✗  INCORRECT");
         SendLiveSessionUpdate(correct ? "Solved AI challenge" : "AI challenge attempt was incorrect");
 
         if (correct && currentTaskId > 0)
@@ -414,6 +414,7 @@ public class AiChallengePad : MonoBehaviour
         var txt = go.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         txt.text = content;
+        MentoraLocalization.Register(txt, content);
         txt.fontSize = size;
         txt.color = color;
         var rt = go.GetComponent<RectTransform>();
@@ -462,7 +463,7 @@ public class AiChallengePad : MonoBehaviour
         txtGo.transform.SetParent(go.transform, false);
         var txt = txtGo.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        txt.text = label; txt.fontSize = fontSize;
+        MentoraLocalization.Register(txt, label); txt.fontSize = fontSize;
         txt.color = Color.white; txt.alignment = TextAnchor.MiddleCenter;
         var tRt = txtGo.GetComponent<RectTransform>();
         tRt.anchorMin = Vector2.zero; tRt.anchorMax = Vector2.one;

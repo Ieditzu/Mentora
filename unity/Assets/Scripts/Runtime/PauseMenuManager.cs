@@ -68,6 +68,7 @@ public class PauseMenuManager : MonoBehaviour
     private InputField multiplayerNameInput;
     private InputField multiplayerAddressInput;
     private Button playerModelButton;
+    private Button languageButton;
     private Button voiceChatButton;
     private Button rudolfVoiceModeButton;
     private Button microphoneDeviceButton;
@@ -1282,6 +1283,31 @@ public class PauseMenuManager : MonoBehaviour
         RefreshGuideDebugLinesButton();
     }
 
+    private void OnLanguageClicked()
+    {
+        MentoraLocalization.SetLanguage(
+            MentoraLocalization.IsRomanian ? MentoraLanguage.English : MentoraLanguage.Romanian);
+        RefreshLanguageButton();
+        RefreshGuideDebugLinesButton();
+        RefreshPlayerModelButton();
+        RefreshRudolfVoiceModeButton();
+        RefreshVoiceChatButton();
+    }
+
+    private void RefreshLanguageButton()
+    {
+        if (languageButton == null)
+        {
+            return;
+        }
+
+        Text label = languageButton.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            MentoraLocalization.SetText(label, "Language: " + MentoraLocalization.CurrentLanguageLabel);
+        }
+    }
+
     private void RefreshGuideDebugLinesButton()
     {
         if (guideDebugLinesButton == null)
@@ -1293,7 +1319,7 @@ public class PauseMenuManager : MonoBehaviour
         Text label = guideDebugLinesButton.GetComponentInChildren<Text>();
         if (label != null)
         {
-            label.text = "Rudolf Path Lines: " + (enabled ? "On" : "Off");
+            MentoraLocalization.SetText(label, "Rudolf Path Lines: " + (enabled ? "On" : "Off"));
         }
 
         Image image = guideDebugLinesButton.GetComponent<Image>();
@@ -1323,7 +1349,7 @@ public class PauseMenuManager : MonoBehaviour
         Text label = playerModelButton.GetComponentInChildren<Text>();
         if (label != null)
         {
-            label.text = "Model: " + multiplayerSession.CurrentPlayerModelLabel;
+            MentoraLocalization.SetText(label, "Model: " + multiplayerSession.CurrentPlayerModelLabel);
         }
     }
 
@@ -1338,7 +1364,7 @@ public class PauseMenuManager : MonoBehaviour
         Text label = rudolfVoiceModeButton.GetComponentInChildren<Text>();
         if (label != null)
         {
-            label.text = "Rudolf: " + RobotCompanion.GetRudolfVoiceModeLabel();
+            MentoraLocalization.SetText(label, "Rudolf: " + RobotCompanion.GetRudolfVoiceModeLabel());
         }
 
         Image image = rudolfVoiceModeButton.GetComponent<Image>();
@@ -1364,7 +1390,7 @@ public class PauseMenuManager : MonoBehaviour
         Text label = voiceChatButton.GetComponentInChildren<Text>();
         if (label != null)
         {
-            label.text = "Mode: " + multiplayerSession.GetVoiceModeLabel();
+            MentoraLocalization.SetText(label, "Mode: " + multiplayerSession.GetVoiceModeLabel());
         }
 
         Image image = voiceChatButton.GetComponent<Image>();
@@ -1378,7 +1404,7 @@ public class PauseMenuManager : MonoBehaviour
             Text micLabel = microphoneDeviceButton.GetComponentInChildren<Text>();
             if (micLabel != null)
             {
-                micLabel.text = "Mic: " + TruncateUiLabel(multiplayerSession.CurrentMicrophoneDevice, 24);
+                MentoraLocalization.SetText(micLabel, "Mic: " + TruncateUiLabel(multiplayerSession.CurrentMicrophoneDevice, 24));
             }
 
             microphoneDeviceButton.interactable = multiplayerSession.GetMicrophoneDevices().Length > 0;
@@ -1874,7 +1900,11 @@ public class PauseMenuManager : MonoBehaviour
         card.AddComponent<Image>().color = new Color(0.15f, 0.18f, 0.25f, 0.96f);
         card.AddComponent<Outline>().effectColor = new Color(0.0f, 0.7f, 1f, 0.25f);
 
-        CreateText("GlobalProfileVoiceLabel", card.transform, "Player + Voice", 15, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 102f), new Vector2(190f, 22f));
+        languageButton = CreateButton(card.transform, "LanguageBtn", "Language: English", new Vector2(0f, 102f), new Color(0.52f, 0.30f, 0.74f, 1f));
+        languageButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 26f);
+        languageButton.GetComponentInChildren<Text>().fontSize = 11;
+        languageButton.onClick.AddListener(OnLanguageClicked);
+        RefreshLanguageButton();
 
         playerModelButton = CreateButton(card.transform, "PlayerModelBtn", "Model: Girl", new Vector2(0f, 72f), new Color(0.26f, 0.50f, 0.58f, 1f));
         playerModelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(224f, 28f);
@@ -1917,7 +1947,7 @@ public class PauseMenuManager : MonoBehaviour
     {
         if (GameClient.Instance != null && GameClient.Instance.IsConnected)
         {
-            qrStatusText.text = "Generating...";
+            MentoraLocalization.SetText(qrStatusText, "Generating...");
             _ = GameClient.Instance.SendPacket(new GenerateQRLoginPacket());
         }
         else if (GameClient.Instance != null) { _ = ConnectAndTryAutoLogin(); }
@@ -3046,6 +3076,7 @@ public class PauseMenuManager : MonoBehaviour
         Text t = obj.AddComponent<Text>();
         t.text = content; t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         t.fontSize = size; t.fontStyle = style; t.alignment = align; t.color = col;
+        MentoraLocalization.Register(t, content);
         return t;
     }
 

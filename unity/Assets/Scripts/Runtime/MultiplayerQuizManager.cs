@@ -144,7 +144,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         if (theaterSubText != null && quizInteractionActive)
         {
             int secs = Mathf.CeilToInt(Mathf.Max(0f, timerRemaining));
-            theaterSubText.text  = "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions + "  |  " + secs + "s  |  Press 1-4 to answer";
+            theaterSubText.text  = MentoraLocalization.Format("Question {0} of {1}  |  {2}s  |  Press 1-4 to answer", currentQuestionIndex + 1, totalQuestions, secs);
             theaterSubText.color = timerRemaining < 5f ? new Color(1f, 0.4f, 0.4f) : new Color(0.7f, 0.7f, 1f);
         }
 
@@ -278,7 +278,7 @@ public class MultiplayerQuizManager : MonoBehaviour
             if (theaterAnswerTexts[i] != null && i == correctIndex)
                 theaterAnswerTexts[i].text = "✓ " + theaterAnswerTexts[i].text;
         }
-        if (theaterSubText != null) theaterSubText.text = "Time's up! See the correct answer above.";
+        if (theaterSubText != null) theaterSubText.text = MentoraLocalization.Localize("Time's up! See the correct answer above.");
         if (theaterQuestionText != null) theaterQuestionText.text = "";
     }
 
@@ -296,7 +296,7 @@ public class MultiplayerQuizManager : MonoBehaviour
                 if (i < sorted.Count)
                 {
                     string playerName = sessionManager != null ? sessionManager.ResolvePlayerName(sorted[i].Key) : "Player";
-                    theaterAnswerTexts[i].text = (i + 1) + ".  " + playerName + "   " + sorted[i].Value + " pts";
+                    theaterAnswerTexts[i].text = MentoraLocalization.Format("{0}.  {1}   {2} pts", i + 1, playerName, sorted[i].Value);
                 }
                 else theaterAnswerTexts[i].text = "";
             }
@@ -466,11 +466,11 @@ public class MultiplayerQuizManager : MonoBehaviour
         if (theaterQuestionText != null)
         {
             theaterQuestionText.fontSize = 48;
-            theaterQuestionText.text     = playerCount + " player" + (playerCount != 1 ? "s" : "") + " in the session";
+            theaterQuestionText.text     = MentoraLocalization.Format(playerCount == 1 ? "{0} player in the session" : "{0} players in the session", playerCount);
         }
         if (theaterSubText != null)
         {
-            theaterSubText.text  = "Quiz is starting…";
+            theaterSubText.text  = MentoraLocalization.Localize("Quiz is starting…");
             theaterSubText.color = new Color(0.7f, 0.7f, 1f);
         }
         for (int j = 0; j < 4; j++)
@@ -480,7 +480,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         // Countdown 5 → 1
         for (int i = 5; i >= 1; i--)
         {
-            if (theaterSubText != null) theaterSubText.text = "Get ready!";
+            if (theaterSubText != null) theaterSubText.text = MentoraLocalization.Localize("Get ready!");
             if (theaterQuestionText != null)
             {
                 theaterQuestionText.fontSize = 120;
@@ -505,7 +505,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         var q = questions[currentQuestionIndex];
         CaptureExpectedAnswerParticipants();
 
-        SetTheaterQuestion(q.prompt, q.options, "Question " + (currentQuestionIndex + 1) + " of " + totalQuestions + "  |  " + QuizTimerSeconds + "s");
+        SetTheaterQuestion(q.prompt, q.options, MentoraLocalization.Format("Question {0} of {1}", currentQuestionIndex + 1, totalQuestions) + "  |  " + QuizTimerSeconds + "s");
         ShowInteraction(q.options);
         timerRemaining = QuizTimerSeconds;
         timerActive    = true;
@@ -565,7 +565,7 @@ public class MultiplayerQuizManager : MonoBehaviour
         StopQuizUrgencyAudio();
         HideInteraction();
 
-        if (theaterSubText != null)      theaterSubText.text      = "Quiz Over! Final Scores:";
+        if (theaterSubText != null)      theaterSubText.text      = MentoraLocalization.Localize("Quiz Over! Final Scores:");
         if (theaterQuestionText != null) theaterQuestionText.text = "";
         ShowScoresOnTheater(scores);
     }
