@@ -77,7 +77,8 @@ export default function App() {
   const t = useCallback((text, variables) => translate(language, text, variables), [language]);
 
   const toggleLanguage = () => {
-    const nextLanguage = language === "en" ? "ro" : "en";
+    const supportedLanguages = ["en", "ro", "fr", "de"];
+    const nextLanguage = supportedLanguages[(supportedLanguages.indexOf(language) + 1) % supportedLanguages.length];
     setLanguage(nextLanguage);
     localStorage.setItem("mentora_creator_language", nextLanguage);
   };
@@ -202,9 +203,9 @@ export default function App() {
         type="button"
         onClick={toggleLanguage}
         className="absolute right-5 top-5 z-50 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-bold text-text hover:border-brand hover:text-white transition-colors"
-        aria-label={language === "en" ? t("Romanian") : t("English")}
+        aria-label={t("Change language")}
       >
-        {language === "en" ? "RO" : "EN"}
+        {language.toUpperCase()}
       </button>
       {/* Background Decorative Elements */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
