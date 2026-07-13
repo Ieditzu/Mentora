@@ -20,9 +20,6 @@ kotlin {
             baseName = "MentoraShared"
             isStatic = true
         }
-        iosTarget.compilations.getByName("main").cinterops.create("CommonCrypto") {
-            defFile(project.file("src/nativeInterop/cinterop/CommonCrypto.def"))
-        }
     }
 
     sourceSets {

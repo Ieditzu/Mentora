@@ -1,3 +1,0 @@
-headers = CommonCrypto/CommonCrypto.h
-package = platform.CommonCrypto
-linkerOpts = -framework Security
