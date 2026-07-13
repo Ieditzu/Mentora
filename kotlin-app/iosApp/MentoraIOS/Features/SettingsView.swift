@@ -1,20 +1,18 @@
 import SwiftUI
+import MentoraShared
 
 struct SettingsView: View {
-    @ObservedObject var store: MentoraPreviewStore
+    @EnvironmentObject private var appModel: AppModel
+    @ObservedObject var store: MentoraLiveStore
     var onSignOut: (() -> Void)?
     @State private var childName = ""
     @State private var developerChildID = ""
     @State private var developerToken = ""
     @State private var showLanguagePicker = false
-
-    private let colors: [Color] = [
-        Color(red: 0.39, green: 0.40, blue: 0.95), .purple, .pink, .red,
-        MentoraTheme.warning, .green, MentoraTheme.success, .cyan
-    ]
+    @AppStorage("mentora.darkMode") private var isDarkMode = false
 
     var body: some View {
-        GlassBackground(accent: store.accent) {
+        GlassBackground(accent: MentoraTheme.accent) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     MentoraPageTitle(title: "Settings", subtitle: "Personalize Mentora for your family")
@@ -44,10 +42,10 @@ struct SettingsView: View {
     private var accountCard: some View {
         GlassCard(padding: 20) {
             HStack(spacing: 16) {
-                AvatarView(name: store.parentEmail, accent: store.accent, size: 56)
+                AvatarView(name: accountName, accent: MentoraTheme.accent, size: 56)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Parent account").font(.caption.weight(.bold)).foregroundStyle(store.accent)
-                    Text(store.parentEmail).font(.headline.weight(.bold)).foregroundStyle(.primary)
+                    Text("Parent account").font(.caption.weight(.bold)).foregroundStyle(MentoraTheme.accent)
+                    Text(accountName).font(.headline.weight(.bold)).foregroundStyle(.primary)
                 }
                 Spacer()
             }
@@ -60,7 +58,9 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("App language").font(.headline.weight(.bold)).foregroundStyle(.primary)
-                        Text(currentLanguage.nativeName).font(.subheadline).foregroundStyle(.secondary)
+                        Text(currentLanguageName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right").font(.subheadline.weight(.bold)).foregroundStyle(.tertiary)
@@ -74,42 +74,28 @@ struct SettingsView: View {
 
     private var appearanceSection: some View {
         settingsSection(title: "App theme") {
-            Toggle(isOn: $store.isDarkMode) {
+            Toggle(isOn: $isDarkMode) {
                 Label("Dark mode", systemImage: "moon.fill")
                     .font(.headline.weight(.bold))
             }
-            .tint(store.accent)
+            .tint(MentoraTheme.accent)
             Divider().overlay(.primary.opacity(0.10))
-            Text("Theme color").font(.subheadline.weight(.bold))
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                ForEach(colors.indices, id: \.self) { index in
-                    let color = colors[index]
-                    Button { store.accent = color } label: {
-                        Circle().fill(color).frame(height: 38)
-                            .overlay {
-                                if store.accent == color {
-                                    Image(systemName: "checkmark").font(.caption.weight(.black)).foregroundStyle(.white)
-                                }
-                            }
-                            .overlay(Circle().strokeBorder(.white.opacity(0.7), lineWidth: 2))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Select theme color")
-                }
-            }
+            Text("Choose whether Mentora uses its dark appearance.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 
     private var childrenSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Manage kids").font(.title3.weight(.heavy))
-            ForEach(store.children) { child in
+            ForEach(store.snapshot.children, id: \.id) { child in
                 GlassCard(padding: 14, cornerRadius: 20) {
                     HStack(spacing: 12) {
-                        AvatarView(name: child.name, accent: store.accent, size: 46)
+                        AvatarView(name: child.name, accent: MentoraTheme.accent, size: 46)
                         Text(child.name).font(.headline.weight(.bold)).foregroundStyle(.primary)
                         Spacer()
-                        Button(role: .destructive) { store.remove(child) } label: { Image(systemName: "trash") }
+                        Button(role: .destructive) { store.removeChild(id: child.id) } label: { Image(systemName: "trash") }
                             .tint(MentoraTheme.danger)
                             .accessibilityLabel("Remove \(child.name)")
                     }
@@ -128,7 +114,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(store.accent)
+                    .tint(MentoraTheme.accent)
                     .disabled(childName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -141,7 +127,11 @@ struct SettingsView: View {
                 .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
             TextField("Manual token", text: $developerToken)
                 .textInputAutocapitalization(.never).textFieldStyle(.roundedBorder)
-            Button("Force game login") { }
+            Button("Force game login") {
+                guard let childID = Int64(developerChildID) else { return }
+                store.claimQRLogin(token: developerToken, for: childID)
+                developerToken = ""
+            }
                 .buttonStyle(.borderedProminent).tint(MentoraTheme.danger)
                 .disabled(developerChildID.isEmpty || developerToken.isEmpty)
         }
@@ -156,24 +146,48 @@ struct SettingsView: View {
         }
     }
 
-    private var currentLanguage: MentoraLanguage {
-        store.languages.first { $0.tag == store.selectedLanguage } ?? store.languages[0]
+    private var accountName: String {
+        if !appModel.email.isEmpty { return appModel.email }
+        guard store.snapshot.parentId >= 0 else { return "Parent account" }
+        return "Parent #\(store.snapshot.parentId)"
+    }
+
+    private var currentLanguageName: String {
+        appModel.languageOptions
+            .first { $0.tag == appModel.selectedLanguagePreference }?
+            .nativeName ?? "Use device language"
     }
 
     private var languagePicker: some View {
         NavigationStack {
-            List(store.languages) { language in
+            List {
                 Button {
-                    store.selectedLanguage = language.tag
+                    appModel.applyLanguage("system")
+                    store.setLanguage(appModel.resolvedLanguageTag)
+                    showLanguagePicker = false
+                } label: {
+                    HStack {
+                        Text("Use device language").foregroundStyle(.primary)
+                        Spacer()
+                        if appModel.selectedLanguagePreference == "system" {
+                            Image(systemName: "checkmark").foregroundStyle(MentoraTheme.accent)
+                        }
+                    }
+                }
+                ForEach(appModel.languageOptions, id: \.tag) { language in
+                Button {
+                    appModel.applyLanguage(language.tag)
+                    store.setLanguage(appModel.resolvedLanguageTag)
                     showLanguagePicker = false
                 } label: {
                     HStack {
                         Text(language.nativeName).foregroundStyle(.primary)
                         Spacer()
-                        if language.tag == store.selectedLanguage {
-                            Image(systemName: "checkmark").foregroundStyle(store.accent)
+                        if language.tag == appModel.selectedLanguagePreference {
+                            Image(systemName: "checkmark").foregroundStyle(MentoraTheme.accent)
                         }
                     }
+                }
                 }
             }
             .navigationTitle("App language")

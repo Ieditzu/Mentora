@@ -1,25 +1,32 @@
 import SwiftUI
+import MentoraShared
 
 struct HistoryView: View {
-    @ObservedObject var store: MentoraPreviewStore
+    @ObservedObject var store: MentoraLiveStore
 
     private var calendar: Calendar { .current }
-    private var groupedHistory: [(date: Date, entries: [MentoraHistoryEntry])] {
-        let groups = Dictionary(grouping: store.history) { calendar.startOfDay(for: $0.completedAt) }
+    private var history: [HistoryEntry] {
+        store.snapshot.completedTasks.map {
+            HistoryEntry(id: $0.id, title: $0.taskTitle, points: Int($0.pointValue), completedAt: parseDate($0.completedAt))
+        }
+    }
+
+    private var groupedHistory: [(date: Date, entries: [HistoryEntry])] {
+        let groups = Dictionary(grouping: history) { calendar.startOfDay(for: $0.completedAt) }
         return groups.map { ($0.key, $0.value.sorted { $0.completedAt > $1.completedAt }) }
             .sorted { $0.date > $1.date }
     }
 
     var body: some View {
-        GlassBackground(accent: store.accent) {
+        GlassBackground(accent: MentoraTheme.accent) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     MentoraPageTitle(title: "Task history", subtitle: "Completed tasks from the game")
-                    if store.history.isEmpty {
+                    if history.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "checkmark.circle")
                                 .font(.system(size: 48))
-                                .foregroundStyle(store.accent.opacity(0.5))
+                                .foregroundStyle(MentoraTheme.accent.opacity(0.5))
                             Text("No completed tasks").font(.title3.weight(.bold))
                             Text("Completed learning tasks will appear here.")
                                 .font(.subheadline).foregroundStyle(.secondary)
@@ -42,18 +49,18 @@ struct HistoryView: View {
 
     private var summary: some View {
         HStack(spacing: 10) {
-            MentoraMetric(label: "Total", value: "\(store.history.count)", tint: store.accent)
-            MentoraMetric(label: "Points", value: "\(store.history.reduce(0) { $0 + $1.points })", tint: MentoraTheme.success)
+            MentoraMetric(label: "Total", value: "\(history.count)", tint: MentoraTheme.accent)
+            MentoraMetric(label: "Points", value: "\(history.reduce(0) { $0 + $1.points })", tint: MentoraTheme.success)
             MentoraMetric(label: "Days", value: "\(groupedHistory.count)", tint: MentoraTheme.warning)
         }
     }
 
-    private func section(for date: Date, entries: [MentoraHistoryEntry]) -> some View {
+    private func section(for date: Date, entries: [HistoryEntry]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(date, format: .dateTime.weekday(.wide).month(.abbreviated).day())
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(store.accent)
+                    .foregroundStyle(MentoraTheme.accent)
                 Rectangle().fill(.primary.opacity(0.12)).frame(height: 1)
                 Text("\(entries.count) tasks, \(entries.reduce(0) { $0 + $1.points }) pts")
                     .font(.caption.weight(.medium))
@@ -64,13 +71,13 @@ struct HistoryView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(store.accent)
+                            .foregroundStyle(MentoraTheme.accent)
                             .frame(width: 34, height: 34)
-                            .background(store.accent.opacity(0.12), in: Circle())
+                            .background(MentoraTheme.accent.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary)
                             HStack(spacing: 8) {
-                                Text("+\(entry.points) pts").foregroundStyle(store.accent).fontWeight(.black)
+                                Text("+\(entry.points) pts").foregroundStyle(MentoraTheme.accent).fontWeight(.black)
                                 Text(entry.completedAt, format: .dateTime.hour().minute())
                                     .foregroundStyle(.secondary)
                             }
@@ -82,4 +89,24 @@ struct HistoryView: View {
             }
         }
     }
+
+    private func parseDate(_ value: String) -> Date {
+        let iso8601 = ISO8601DateFormatter()
+        if let date = iso8601.date(from: value) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        for format in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) { return date }
+        }
+        return .distantPast
+    }
+}
+
+private struct HistoryEntry: Identifiable {
+    let id: Int64
+    let title: String
+    let points: Int
+    let completedAt: Date
 }

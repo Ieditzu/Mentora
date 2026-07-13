@@ -27,23 +27,33 @@ private enum DashboardTab: CaseIterable {
 
 struct DashboardView: View {
     @EnvironmentObject private var appModel: AppModel
-    @StateObject private var store = MentoraPreviewStore()
+    @AppStorage("mentora.darkMode") private var isDarkMode = false
     @State private var selectedTab: DashboardTab = .home
-    @State private var qrChild: MentoraChild?
+    @State private var qrChild: QRLoginTarget?
+
+    private var store: MentoraLiveStore { appModel.liveStore }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             NavigationStack {
                 selectedScreen
             }
-            .preferredColorScheme(store.isDarkMode ? .dark : nil)
+            .preferredColorScheme(isDarkMode ? .dark : nil)
 
             floatingTabBar
                 .padding(.horizontal, 24)
                 .padding(.bottom, 18)
         }
         .sheet(item: $qrChild) { child in
-            QRLoginSheet(child: child)
+            QRLoginSheet(child: child) { token in
+                store.claimQRLogin(token: token, for: child.id)
+            }
+        }
+        .onChange(of: appModel.resolvedLanguageTag) { _, languageTag in
+            store.setLanguage(languageTag)
+        }
+        .onAppear {
+            store.setLanguage(appModel.resolvedLanguageTag)
         }
     }
 
@@ -53,8 +63,8 @@ struct DashboardView: View {
         case .home:
             HomeView(store: store, onOpenGoals: {
                 selectedTab = .goals
-            }, onRequestGameLogin: { child in
-                qrChild = child
+            }, onRequestGameLogin: { childID, childName in
+                qrChild = QRLoginTarget(id: childID, name: childName)
             })
         case .history:
             HistoryView(store: store)
@@ -62,6 +72,7 @@ struct DashboardView: View {
             GoalsView(store: store)
         case .settings:
             SettingsView(store: store, onSignOut: {
+                store.disconnect()
                 appModel.signOut()
             })
         }
@@ -81,7 +92,7 @@ struct DashboardView: View {
                             .font(.caption2.weight(.bold))
                     }
                     .frame(maxWidth: .infinity)
-                    .foregroundStyle(selectedTab == tab ? store.accent : .secondary)
+                    .foregroundStyle(selectedTab == tab ? MentoraTheme.accent : .secondary)
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
@@ -95,8 +106,14 @@ struct DashboardView: View {
     }
 }
 
+private struct QRLoginTarget: Identifiable {
+    let id: Int64
+    let name: String
+}
+
 private struct QRLoginSheet: View {
-    let child: MentoraChild
+    let child: QRLoginTarget
+    let onLogin: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var token = ""
 
@@ -108,7 +125,7 @@ private struct QRLoginSheet: View {
                     .foregroundStyle(MentoraTheme.accent)
                 Text("Log in \(child.name) to the game")
                     .font(.title3.weight(.heavy))
-                Text("Camera QR scanning will be enabled when the shared production transport is connected. You can still enter a game token manually.")
+                Text("Enter the token shown in the game to connect this child's session.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -116,6 +133,7 @@ private struct QRLoginSheet: View {
                     .textInputAutocapitalization(.never)
                     .textFieldStyle(.roundedBorder)
                 Button("Log in") {
+                    onLogin(token)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)

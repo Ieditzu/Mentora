@@ -1,21 +1,22 @@
 import SwiftUI
+import MentoraShared
 
 struct HomeView: View {
-    @ObservedObject var store: MentoraPreviewStore
+    @ObservedObject var store: MentoraLiveStore
     var onOpenGoals: (() -> Void)?
-    var onRequestGameLogin: ((MentoraChild) -> Void)?
+    var onRequestGameLogin: ((Int64, String) -> Void)?
 
     var body: some View {
-        GlassBackground(accent: store.accent) {
+        GlassBackground(accent: MentoraTheme.accent) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     MentoraPageTitle(title: "My kids", subtitle: "Monitor their learning progress")
                         .padding(.bottom, 8)
 
-                    if store.children.isEmpty {
+                    if store.snapshot.children.isEmpty {
                         emptyState
                     } else {
-                        ForEach(store.children) { child in
+                        ForEach(store.snapshot.children, id: \.id) { child in
                             childCard(child)
                         }
                     }
@@ -32,7 +33,7 @@ struct HomeView: View {
         VStack(spacing: 14) {
             Image(systemName: "face.smiling")
                 .font(.system(size: 56, weight: .semibold))
-                .foregroundStyle(store.accent.opacity(0.45))
+                .foregroundStyle(MentoraTheme.accent.opacity(0.45))
             Text("No kids added yet")
                 .font(.title3.weight(.bold))
             Text("Add your first child in Settings to start following their progress.")
@@ -44,14 +45,14 @@ struct HomeView: View {
         .padding(.vertical, 80)
     }
 
-    private func childCard(_ child: MentoraChild) -> some View {
+    private func childCard(_ child: Child) -> some View {
         Button {
-            store.select(child)
+            store.selectChild(child.id)
             onOpenGoals?()
         } label: {
             GlassCard(padding: 20) {
                 HStack(spacing: 16) {
-                    AvatarView(name: child.name, accent: store.accent, size: 60)
+                    AvatarView(name: child.name, accent: MentoraTheme.accent, size: 60)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 7) {
                             Text(child.name)
@@ -64,17 +65,17 @@ struct HomeView: View {
                         }
                         Label("\(child.points) points", systemImage: "star.fill")
                             .font(.subheadline)
-                            .foregroundStyle(store.accent)
+                            .foregroundStyle(MentoraTheme.accent)
                     }
                     Spacer(minLength: 8)
                     Button {
-                        onRequestGameLogin?(child)
+                        onRequestGameLogin?(child.id, child.name)
                     } label: {
                         Image(systemName: child.isOnline ? "desktopcomputer" : "qrcode.viewfinder")
                             .font(.headline)
-                            .foregroundStyle(child.isOnline ? MentoraTheme.danger : store.accent)
+                            .foregroundStyle(child.isOnline ? MentoraTheme.danger : MentoraTheme.accent)
                             .frame(width: 44, height: 44)
-                            .background((child.isOnline ? MentoraTheme.danger : store.accent).opacity(0.12), in: Circle())
+                            .background((child.isOnline ? MentoraTheme.danger : MentoraTheme.accent).opacity(0.12), in: Circle())
                     }
                     .buttonStyle(.plain)
                     Image(systemName: "chevron.right")

@@ -1,25 +1,45 @@
+import Foundation
 import SwiftUI
+import MentoraShared
 
+/// Parent learning dashboard backed exclusively by the encrypted server snapshot.
 struct GoalsView: View {
-    @ObservedObject var store: MentoraPreviewStore
+    @ObservedObject var store: MentoraLiveStore
     @State private var challenge = ""
     @State private var showingNewGoal = false
-    @State private var newGoalTitle = ""
 
-    private var insights: [MentoraInsight] {
-        [
-            MentoraInsight(title: "Python", accent: .green, strengths: ["Lists", "Functions"], needsSupport: ["Nested conditionals"], score: 78),
-            MentoraInsight(title: "C++", accent: .blue, strengths: ["Loops", "Variables"], needsSupport: ["Memory"], score: 64),
-            MentoraInsight(title: "General", accent: MentoraTheme.warning, strengths: ["Persistence", "Problem solving"], needsSupport: ["Reading errors"], score: 72)
-        ]
+    private let accent = MentoraTheme.accent
+
+    private var child: Child? {
+        guard let childID = store.selectedChildID else { return nil }
+        return store.snapshot.children.first { $0.id == childID }
+    }
+
+    private var profile: IosChildProfile? {
+        guard let childID = store.selectedChildID else { return nil }
+        return store.snapshot.profiles.first { $0.childId == childID }
+    }
+
+    private var liveSession: LiveSessionState? {
+        guard let childID = store.selectedChildID else { return nil }
+        return store.snapshot.liveSessions.first { $0.childId == childID }
+    }
+
+    private var weeklyReport: WeeklyReport? {
+        guard let childID = store.selectedChildID else { return nil }
+        return store.snapshot.weeklyReports.first { $0.childId == childID }
+    }
+
+    private var profileData: ServerProfileData? {
+        profile.flatMap(ServerProfileData.init)
     }
 
     var body: some View {
-        GlassBackground(accent: store.accent) {
+        GlassBackground(accent: accent) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     MentoraPageTitle(title: "Goals", subtitle: "Set goals and rewards")
-                    if let child = store.selectedChild {
+                    if let child {
                         selectedChildHeader(child)
                         liveSessionCard
                         challengeCard(for: child)
@@ -29,16 +49,7 @@ struct GoalsView: View {
                         insightsSection
                         goalsSection
                     } else {
-                        VStack(spacing: 12) {
-                            Image(systemName: "person.crop.circle.badge.questionmark")
-                                .font(.system(size: 48))
-                                .foregroundStyle(store.accent.opacity(0.5))
-                            Text("Select a child").font(.title3.weight(.bold))
-                            Text("Choose a child from Home to see their goals and insights.")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                            .frame(maxWidth: .infinity, minHeight: 360)
+                        emptyState
                     }
                 }
                 .padding(24)
@@ -50,25 +61,39 @@ struct GoalsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showingNewGoal = true } label: { Image(systemName: "plus.circle.fill") }
-                    .tint(store.accent)
+                    .tint(accent)
                     .accessibilityLabel("New goal")
+                    .disabled(child == nil)
             }
         }
-        .alert("New goal", isPresented: $showingNewGoal) {
-            TextField("Goal title", text: $newGoalTitle)
-            Button("Add") {
-                let title = newGoalTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !title.isEmpty else { return }
-                store.goals.append(MentoraGoal(title: title, reward: "A special reward", points: 25, isComplete: false))
-                newGoalTitle = ""
+        .sheet(isPresented: $showingNewGoal) {
+            if let child {
+                NewGoalSheet(childID: child.id, tasks: store.snapshot.tasks, store: store)
             }
-            Button("Cancel", role: .cancel) { newGoalTitle = "" }
+        }
+        .task(id: store.selectedChildID) {
+            if let childID = store.selectedChildID {
+                store.loadChildDetails(for: childID)
+            }
         }
     }
 
-    private func selectedChildHeader(_ child: MentoraChild) -> some View {
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.questionmark")
+                .font(.system(size: 48))
+                .foregroundStyle(accent.opacity(0.5))
+            Text("Select a child").font(.title3.weight(.bold))
+            Text("Choose a child from Home to see their goals and insights.")
+                .font(.subheadline).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 360)
+    }
+
+    private func selectedChildHeader(_ child: Child) -> some View {
         HStack(spacing: 12) {
-            AvatarView(name: child.name, accent: store.accent, size: 42)
+            AvatarView(name: child.name, accent: accent, size: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Learning plan for \(child.name)").font(.headline.weight(.bold))
                 Text("\(child.points) points collected").font(.caption).foregroundStyle(.secondary)
@@ -79,25 +104,28 @@ struct GoalsView: View {
     }
 
     private var liveSessionCard: some View {
-        GlassCard {
+        let state = liveSession
+        let isOnline = state?.isOnline == true
+        return GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label("Live session", systemImage: "eye.fill").font(.headline.weight(.heavy)).foregroundStyle(.primary)
+                    Label("Live session", systemImage: "eye.fill").font(.headline.weight(.heavy))
                     Spacer()
-                    Text(store.selectedChild?.isOnline == true ? "Online" : "Offline")
+                    Text(isOnline ? "Online" : "Offline")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(store.selectedChild?.isOnline == true ? MentoraTheme.success : .secondary)
+                        .foregroundStyle(isOnline ? MentoraTheme.success : .secondary)
                         .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background((store.selectedChild?.isOnline == true ? MentoraTheme.success : Color.gray).opacity(0.13), in: Capsule())
+                        .background((isOnline ? MentoraTheme.success : Color.gray).opacity(0.13), in: Capsule())
                 }
-                if store.selectedChild?.isOnline == true {
+                if let state, state.isOnline {
                     HStack(spacing: 8) {
-                        MentoraMetric(label: "Pad", value: "Loops", tint: store.accent)
-                        MentoraMetric(label: "Attempts", value: "2", tint: MentoraTheme.warning)
-                        MentoraMetric(label: "Hint", value: "No", tint: MentoraTheme.success)
+                        MentoraMetric(label: "Pad", value: state.padName.isEmpty ? "Exploring" : state.padName, tint: accent)
+                        MentoraMetric(label: "Attempts", value: "\(state.attemptCount)", tint: MentoraTheme.warning)
+                        MentoraMetric(label: "Hint", value: state.hasRequestedHint ? "Asked" : "No", tint: state.hasRequestedHint ? MentoraTheme.danger : MentoraTheme.success)
                     }
-                    Text("Mara is working through a repeat-until challenge.").font(.caption).foregroundStyle(.secondary)
-                    Text("for item in planets {\n    explore(item)\n}")
+                    Text(state.status.isEmpty ? "Watching current activity" : state.status)
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(state.codeText.isEmpty ? "Code appears here" : state.codeText)
                         .font(.system(.caption, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -109,7 +137,7 @@ struct GoalsView: View {
         }
     }
 
-    private func challengeCard(for child: MentoraChild) -> some View {
+    private func challengeCard(for child: Child) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Tonight's challenge", systemImage: "paperplane.fill")
@@ -119,15 +147,15 @@ struct GoalsView: View {
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
                 Button {
-                    store.lastChallenge = challenge
+                    store.sendChallenge(to: child.id, message: challenge)
                     challenge = ""
                 } label: {
                     Label("Send to game", systemImage: "paperplane.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(store.accent)
-                .disabled(challenge.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .tint(accent)
+                .disabled(challenge.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.isConnected)
             }
         }
     }
@@ -138,13 +166,16 @@ struct GoalsView: View {
                 HStack {
                     Label("Weekly AI report", systemImage: "sparkles").font(.headline.weight(.heavy))
                     Spacer()
-                    Button(action: {}) { Image(systemName: "arrow.clockwise") }
-                        .tint(store.accent)
+                    Button {
+                        if let childID = store.selectedChildID { store.loadChildDetails(for: childID) }
+                    } label: { Image(systemName: "arrow.clockwise") }
+                        .tint(accent)
                         .accessibilityLabel("Refresh report")
+                        .disabled(!store.isConnected)
                 }
-                Text("This week")
+                Text(weeklyReport.map { "\($0.weekStart) to \($0.weekEnd)" } ?? "Your child's weekly learning summary")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Mara is becoming more confident with loops and functions. A little more practice reading conditionals will help her solve longer challenges independently.")
+                Text(weeklyReport?.reportText ?? "No report has been generated yet.")
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -152,7 +183,9 @@ struct GoalsView: View {
     }
 
     private var heatmapCard: some View {
-        GlassCard {
+        let pointsByDay = completedPointsByDay(store.snapshot.completedTasks)
+        let days = (0..<56).compactMap { Calendar.current.date(byAdding: .day, value: -55 + $0, to: Date()) }
+        return GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Learning heatmap", systemImage: "calendar").font(.headline.weight(.heavy))
                 Text("Daily points from the last eight weeks").font(.caption).foregroundStyle(.secondary)
@@ -160,8 +193,9 @@ struct GoalsView: View {
                     ForEach(0..<8, id: \.self) { week in
                         VStack(spacing: 4) {
                             ForEach(0..<7, id: \.self) { day in
+                                let date = days[week * 7 + day]
                                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .fill(heatColor(for: week, day: day))
+                                    .fill(heatColor(for: pointsByDay[Calendar.current.startOfDay(for: date)] ?? 0))
                                     .frame(width: 15, height: 15)
                             }
                         }
@@ -177,49 +211,56 @@ struct GoalsView: View {
     }
 
     private func heatmapLegend(_ label: String, _ color: Color) -> some View {
-        Label(label, systemImage: "square.fill")
-            .font(.caption2).foregroundStyle(color)
+        Label(label, systemImage: "square.fill").font(.caption2).foregroundStyle(color)
     }
 
-    private func heatColor(for week: Int, day: Int) -> Color {
-        let value = (week * 3 + day * 2) % 6
-        switch value {
-        case 0: return .primary.opacity(0.07)
-        case 1, 2: return MentoraTheme.danger.opacity(0.72)
-        case 3, 4: return MentoraTheme.warning.opacity(0.75)
+    private func heatColor(for points: Int) -> Color {
+        switch points {
+        case ...0: return .primary.opacity(0.07)
+        case 1..<15: return MentoraTheme.danger.opacity(0.72)
+        case 15..<40: return MentoraTheme.warning.opacity(0.75)
         default: return MentoraTheme.success.opacity(0.80)
         }
     }
 
     private var radarCard: some View {
-        GlassCard {
+        let scores = profileData?.skillScores ?? ServerProfileData.emptyScores
+        let labels = ServerProfileData.axes
+        return GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Skill radar", systemImage: "scope").font(.headline.weight(.heavy))
                 Text("An overview of learning signals across each topic").font(.caption).foregroundStyle(.secondary)
-                SkillRadarShape(accent: store.accent)
+                SkillRadarShape(accent: accent, values: labels.map { scores[$0] ?? 0 }, labels: labels)
                     .frame(height: 210)
                 HStack(spacing: 8) {
-                    MentoraMetric(label: "Loops", value: "86%", tint: store.accent)
-                    MentoraMetric(label: "Functions", value: "78%", tint: store.accent)
-                    MentoraMetric(label: "Logic", value: "72%", tint: store.accent)
+                    ForEach(labels.sorted { (scores[$0] ?? 0) > (scores[$1] ?? 0) }.prefix(3), id: \.self) { label in
+                        MentoraMetric(label: label, value: "\(Int((scores[label] ?? 0) * 100))%", tint: accent)
+                    }
                 }
             }
         }
     }
 
     private var insightsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let insights = profileData?.insights ?? []
+        return VStack(alignment: .leading, spacing: 10) {
             Text("AI insights").font(.title3.weight(.heavy))
-            ForEach(insights) { insight in
-                GlassCard(padding: 16, cornerRadius: 20) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text(insight.title).font(.headline.weight(.heavy)).foregroundStyle(insight.accent)
-                            Spacer()
-                            Text("\(insight.score)%").font(.headline.weight(.black)).foregroundStyle(insight.accent)
+            if insights.isEmpty {
+                Text("The learning profile will appear after the child has completed activities.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                ForEach(insights) { insight in
+                    GlassCard(padding: 16, cornerRadius: 20) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(insight.title).font(.headline.weight(.heavy)).foregroundStyle(insight.accent)
+                                Spacer()
+                                Text("\(insight.score)%").font(.headline.weight(.black)).foregroundStyle(insight.accent)
+                            }
+                            if !insight.strengths.isEmpty { insightRow("Strengths", insight.strengths, color: MentoraTheme.success) }
+                            if !insight.needsSupport.isEmpty { insightRow("Needs help", insight.needsSupport, color: MentoraTheme.danger) }
+                            if !insight.summary.isEmpty { Text(insight.summary).font(.caption).foregroundStyle(.secondary) }
                         }
-                        insightRow("Strengths", insight.strengths, color: MentoraTheme.success)
-                        insightRow("Needs help", insight.needsSupport, color: MentoraTheme.danger)
                     }
                 }
             }
@@ -236,32 +277,182 @@ struct GoalsView: View {
     private var goalsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Rewards").font(.title3.weight(.heavy))
-            ForEach(store.goals) { goal in
-                Button { store.toggle(goal) } label: {
-                    GlassCard(padding: 18) {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(goal.title).font(.headline.weight(.bold)).foregroundStyle(goal.isComplete ? store.accent : .primary)
-                                Label("\(goal.reward) - \(goal.points) points", systemImage: "gift.fill")
-                                    .font(.caption).foregroundStyle(.secondary)
+            if store.snapshot.goals.isEmpty {
+                Text("No goals are set yet.").font(.subheadline).foregroundStyle(.secondary)
+            }
+            ForEach(store.snapshot.goals, id: \.id) { goal in
+                GlassCard(padding: 18) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(goal.title).font(.headline.weight(.bold)).foregroundStyle(goal.isCompleted ? accent : .primary)
+                            Label("\(goal.reward) - \(goal.requiredPoints) points", systemImage: "gift.fill")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: goal.isCompleted ? "checkmark.circle.fill" : "lock.circle")
+                            .font(.title2).foregroundStyle(goal.isCompleted ? accent : Color.gray.opacity(0.6))
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(goal.isCompleted ? "Completed" : "Locked until its server requirements are met")
+            }
+        }
+    }
+
+    private func completedPointsByDay(_ tasks: [CompletedTask]) -> [Date: Int] {
+        tasks.reduce(into: [:]) { totals, task in
+            guard let date = parseServerDate(task.completedAt) else { return }
+            totals[Calendar.current.startOfDay(for: date), default: 0] += Int(task.pointValue)
+        }
+    }
+
+    private func parseServerDate(_ value: String) -> Date? {
+        ISO8601DateFormatter().date(from: value)
+            ?? DateFormatter.serverTimestamp.date(from: value)
+            ?? DateFormatter.serverDate.date(from: value)
+    }
+}
+
+private struct NewGoalSheet: View {
+    let childID: Int64
+    let tasks: [MentoraShared.Task]
+    @ObservedObject var store: MentoraLiveStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var reward = ""
+    @State private var points = "50"
+    @State private var requiredTaskID: Int64 = -1
+    @State private var usesPoints = true
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Goal") {
+                    TextField("Goal title", text: $title)
+                    TextField("Reward", text: $reward)
+                }
+                Section("How to complete") {
+                    Picker("Requirement", selection: $usesPoints) {
+                        Text("Points").tag(true)
+                        Text("A task").tag(false)
+                    }.pickerStyle(.segmented)
+                    if usesPoints {
+                        TextField("Points required", text: $points)
+                            .keyboardType(.numberPad)
+                    } else if tasks.isEmpty {
+                        Text("No tasks have been loaded yet.").foregroundStyle(.secondary)
+                    } else {
+                        Picker("Task", selection: $requiredTaskID) {
+                            Text("Choose a task").tag(Int64(-1))
+                            ForEach(tasks, id: \.id) { task in
+                                Text("\(task.name) (\(task.points) points)").tag(task.id)
                             }
-                            Spacer()
-                            Image(systemName: goal.isComplete ? "checkmark.circle.fill" : "lock.circle")
-                                .font(.title2).foregroundStyle(goal.isComplete ? store.accent : Color.gray.opacity(0.6))
                         }
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Marks this goal as \(goal.isComplete ? "incomplete" : "complete")")
+            }
+            .navigationTitle("New goal")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        let requiredPoints = usesPoints ? Int32(points) ?? 0 : 0
+                        store.addGoal(childID: childID, title: title, reward: reward, requiredPoints: requiredPoints, requiredTaskID: usesPoints ? -1 : requiredTaskID)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || reward.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (!usesPoints && requiredTaskID == -1) || !store.isConnected)
+                }
             }
         }
     }
 }
 
+private struct ServerInsight: Identifiable {
+    let id: String
+    let title: String
+    let accent: Color
+    let strengths: [String]
+    let needsSupport: [String]
+    let score: Int
+    let summary: String
+}
+
+private struct ServerProfileData {
+    static let axes = ["Loops", "Functions", "Conditionals", "Recursion", "Memory", "Data Structures"]
+    static let emptyScores = Dictionary(uniqueKeysWithValues: axes.map { ($0, CGFloat(0)) })
+
+    let insights: [ServerInsight]
+    let skillScores: [String: CGFloat]
+
+    init?(_ profile: IosChildProfile) {
+        guard let raw = profile.gameStatsJson.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return nil }
+
+        var aggregate = Dictionary(uniqueKeysWithValues: Self.axes.map { ($0, (correct: 0, incorrect: 0)) })
+        let sourceProfiles: [(String, Color)] = [("aiProfileCpp", .blue), ("aiProfilePython", .green), ("aiProfileGeneral", MentoraTheme.warning)]
+        insights = sourceProfiles.compactMap { key, color in
+            guard let profile = root[key] as? [String: Any] else { return nil }
+            let correct = (profile["correctCount"] as? NSNumber)?.intValue ?? 0
+            let incorrect = (profile["incorrectCount"] as? NSNumber)?.intValue ?? 0
+            let total = correct + incorrect
+            let topicScores = Self.topicScores(profile["topics"] as? [String: Any])
+            let strengths = topicScores.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(3).map(\.key)
+            let needsHelp = topicScores.filter { $0.value < 0 }.sorted { $0.value < $1.value }.prefix(3).map(\.key)
+            for (topic, values) in Self.topicStats(profile["topics"] as? [String: Any]) {
+                Self.axes.forEach { axis in
+                    guard Self.matches(topic, axis: axis) else { return }
+                    aggregate[axis, default: (0, 0)].correct += values.correct
+                    aggregate[axis, default: (0, 0)].incorrect += values.incorrect
+                }
+            }
+            for (concept, values) in Self.topicStats(profile["concepts"] as? [String: Any]) {
+                Self.axes.forEach { axis in
+                    guard Self.matches(concept, axis: axis) else { return }
+                    aggregate[axis, default: (0, 0)].correct += values.correct
+                    aggregate[axis, default: (0, 0)].incorrect += values.incorrect
+                }
+            }
+            let title = key.replacingOccurrences(of: "aiProfile", with: "")
+            let summary = (profile["summaryOneLine"] as? String) ?? (profile["summaryText"] as? String) ?? ""
+            return ServerInsight(id: key, title: title.isEmpty ? "General" : title, accent: color, strengths: strengths, needsSupport: needsHelp, score: total == 0 ? 0 : Int((Double(correct) / Double(total) * 100).rounded()), summary: summary)
+        }
+        skillScores = Dictionary(uniqueKeysWithValues: Self.axes.map { axis in
+            let values = aggregate[axis] ?? (0, 0)
+            let total = values.correct + values.incorrect
+            return (axis, total == 0 ? 0 : CGFloat(values.correct) / CGFloat(total))
+        })
+    }
+
+    private static func topicStats(_ topics: [String: Any]?) -> [String: (correct: Int, incorrect: Int)] {
+        (topics ?? [:]).reduce(into: [:]) { result, item in
+            guard let values = item.value as? [String: Any] else { return }
+            result[item.key] = ((values["correct"] as? NSNumber)?.intValue ?? 0, (values["incorrect"] as? NSNumber)?.intValue ?? 0)
+        }
+    }
+
+    private static func topicScores(_ topics: [String: Any]?) -> [String: Int] {
+        topicStats(topics).mapValues { $0.correct - $0.incorrect }
+    }
+
+    private static func matches(_ topic: String, axis: String) -> Bool {
+        let topic = topic.lowercased()
+        let markers: [String]
+        switch axis {
+        case "Loops": markers = ["loop", "for", "while", "range"]
+        case "Functions": markers = ["function", "def ", "return"]
+        case "Conditionals": markers = ["conditional", "condition", "if", "else", "switch"]
+        case "Recursion": markers = ["recursion", "recursive"]
+        case "Memory": markers = ["memory", "pointer", "reference", "address", "pass-by-reference"]
+        default: markers = ["data", "structure", "array", "vector", "list", "collection", "dictionary", "map"]
+        }
+        return markers.contains { topic.contains($0) }
+    }
+}
+
 private struct SkillRadarShape: View {
     let accent: Color
-    private let values: [CGFloat] = [0.86, 0.78, 0.65, 0.48, 0.52, 0.72]
-    private let labels = ["Loops", "Functions", "Logic", "Recursion", "Memory", "Data"]
+    let values: [CGFloat]
+    let labels: [String]
 
     var body: some View {
         GeometryReader { proxy in
@@ -270,19 +461,14 @@ private struct SkillRadarShape: View {
             let radius = min(rect.width, rect.height) * 0.30
             ZStack {
                 ForEach(1...4, id: \.self) { ring in
-                    Polygon(sides: 6, scale: CGFloat(ring) / 4, center: center, radius: radius)
-                        .stroke(.primary.opacity(0.12), lineWidth: 1)
+                    Polygon(sides: labels.count, scale: CGFloat(ring) / 4, center: center, radius: radius).stroke(.primary.opacity(0.12), lineWidth: 1)
                 }
-                ForEach(0..<6, id: \.self) { index in
-                    Path { path in
-                        path.move(to: center)
-                        path.addLine(to: point(index: index, scale: 1, center: center, radius: radius))
-                    }
-                    .stroke(.primary.opacity(0.12), lineWidth: 1)
+                ForEach(labels.indices, id: \.self) { index in
+                    Path { path in path.move(to: center); path.addLine(to: point(index: index, scale: 1, center: center, radius: radius)) }.stroke(.primary.opacity(0.12), lineWidth: 1)
                 }
-                Polygon(sides: 6, individualScales: values, center: center, radius: radius)
+                Polygon(sides: labels.count, individualScales: values, center: center, radius: radius)
                     .fill(accent.opacity(0.22))
-                    .overlay(Polygon(sides: 6, individualScales: values, center: center, radius: radius).stroke(accent, lineWidth: 2))
+                    .overlay(Polygon(sides: labels.count, individualScales: values, center: center, radius: radius).stroke(accent, lineWidth: 2))
                 ForEach(labels.indices, id: \.self) { index in
                     Text(labels[index]).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                         .position(point(index: index, scale: 1.28, center: center, radius: radius))
@@ -292,7 +478,7 @@ private struct SkillRadarShape: View {
     }
 
     private func point(index: Int, scale: CGFloat, center: CGPoint, radius: CGFloat) -> CGPoint {
-        let angle = CGFloat(index) * .pi * 2 / 6 - .pi / 2
+        let angle = CGFloat(index) * .pi * 2 / CGFloat(labels.count) - .pi / 2
         return CGPoint(x: center.x + cos(angle) * radius * scale, y: center.y + sin(angle) * radius * scale)
     }
 }
@@ -315,4 +501,20 @@ private struct Polygon: Shape {
         path.closeSubpath()
         return path
     }
+}
+
+private extension DateFormatter {
+    static let serverTimestamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    static let serverDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }
