@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -78,6 +79,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import io.github.kawase.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -95,11 +97,11 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
-sealed class Screen(val route: String, val icon: ImageVector, val label: String) {
-    object Home : Screen("home", Icons.Default.Home, "Home")
-    object History : Screen("history", Icons.AutoMirrored.Filled.List, "History")
-    object Goals : Screen("goals", Icons.Default.Star, "Goals")
-    object Settings : Screen("settings", Icons.Default.Settings, "Settings")
+sealed class Screen(val route: String, val icon: ImageVector, @param:androidx.annotation.StringRes val labelRes: Int) {
+    object Home : Screen("home", Icons.Default.Home, R.string.nav_home)
+    object History : Screen("history", Icons.AutoMirrored.Filled.List, R.string.nav_history)
+    object Goals : Screen("goals", Icons.Default.Star, R.string.nav_goals)
+    object Settings : Screen("settings", Icons.Default.Settings, R.string.nav_settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -143,12 +145,12 @@ fun MainDashboard(viewModel: SocketViewModel) {
                     actions = {
                         if (currentRoute == Screen.Home.route) {
                             IconButton(onClick = { viewModel.fetchChildren() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = viewModel.primaryColor.value)
+                                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh), tint = viewModel.primaryColor.value)
                             }
                         }
                         if (currentRoute == Screen.Goals.route && selectedChildId != -1L) {
                             IconButton(onClick = { showAddGoalDialog = true }) {
-                                Icon(Icons.Default.AddCircle, contentDescription = "New Goal", tint = viewModel.primaryColor.value, modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.AddCircle, contentDescription = stringResource(R.string.new_goal), tint = viewModel.primaryColor.value, modifier = Modifier.size(28.dp))
                             }
                         }
                     },
@@ -210,7 +212,7 @@ fun MainDashboard(viewModel: SocketViewModel) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(
                                             screen.icon, 
-                                            contentDescription = screen.label,
+                                            contentDescription = stringResource(screen.labelRes),
                                             modifier = Modifier.size(24.dp).graphicsLayer(scaleX = animatedScale, scaleY = animatedScale),
                                             tint = animatedColor
                                         )
@@ -312,7 +314,7 @@ fun QRScannerSimulatorDialog(
             tonalElevation = 8.dp
         ) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Scan QR Code for ${child.name}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.scan_qr_for, child.name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                 
                 if (hasCameraPermission) {
                     Box(modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp))) {
@@ -320,7 +322,7 @@ fun QRScannerSimulatorDialog(
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxWidth().height(300.dp).background(Color.Black.copy(alpha = 0.1f), RoundedCornerShape(24.dp)), contentAlignment = Alignment.Center) {
-                        Text("Camera permission required", color = MaterialTheme.colorScheme.onSurface)
+                        Text(stringResource(R.string.camera_permission_required), color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
@@ -330,7 +332,7 @@ fun QRScannerSimulatorDialog(
                 OutlinedTextField(
                     value = manualToken,
                     onValueChange = { if (!it.contains("\n")) manualToken = it },
-                    label = { Text("Or enter token manually") },
+                    label = { Text(stringResource(R.string.enter_token_manually)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     singleLine = true,
@@ -352,7 +354,7 @@ fun QRScannerSimulatorDialog(
                 )
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     Button(
                         onClick = { 
                             keyboardController?.hide()
@@ -362,7 +364,7 @@ fun QRScannerSimulatorDialog(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
                     ) {
-                        Text("Log In", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.login), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -482,13 +484,13 @@ private fun decodeQrCode(imageProxy: ImageProxy): String? {
 fun HomeScreen(viewModel: SocketViewModel, children: List<Child>, onChildSelected: (Long) -> Unit, onLogIntoGame: (Child) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Text(
-            "My Kids",
+            stringResource(R.string.my_kids),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            "Monitor your children's progress",
+            stringResource(R.string.monitor_progress),
             style = MaterialTheme.typography.bodyMedium,
             color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f)
         )
@@ -500,9 +502,9 @@ fun HomeScreen(viewModel: SocketViewModel, children: List<Child>, onChildSelecte
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(80.dp), tint = viewModel.primaryColor.value.copy(alpha = 0.3f))
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("No kids added yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.no_kids_added), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     TextButton(onClick = { /* navigate to settings */ }) {
-                        Text("Add a kid in Settings", color = viewModel.primaryColor.value, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.add_kid_in_settings), color = viewModel.primaryColor.value, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -549,7 +551,7 @@ fun HomeScreen(viewModel: SocketViewModel, children: List<Child>, onChildSelecte
                                     Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp), tint = viewModel.primaryColor.value)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        "${child.points} Points",
+                                        stringResource(R.string.points_format, child.points),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f)
                                     )
@@ -563,7 +565,7 @@ fun HomeScreen(viewModel: SocketViewModel, children: List<Child>, onChildSelecte
                                 ) {
                                     Icon(
                                         Icons.Default.QrCodeScanner,
-                                        contentDescription = "Log into Game",
+                                        contentDescription = stringResource(R.string.log_into_game),
                                         tint = viewModel.primaryColor.value,
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -575,7 +577,7 @@ fun HomeScreen(viewModel: SocketViewModel, children: List<Child>, onChildSelecte
                                 ) {
                                     Icon(
                                         Icons.Default.Devices,
-                                        contentDescription = "Force New Login",
+                                        contentDescription = stringResource(R.string.force_new_login),
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -638,7 +640,7 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
     
     fun processBitmap(bitmap: Bitmap?) {
         if (bitmap == null) {
-            android.widget.Toast.makeText(context, "Failed to capture or load image", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(R.string.image_load_failed), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         try {
@@ -656,7 +658,7 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
             onImageSelected(base64)
         } catch (e: Exception) {
             e.printStackTrace()
-            android.widget.Toast.makeText(context, "Error processing image", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(R.string.image_processing_failed), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -669,7 +671,7 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
                 processBitmap(bitmap)
             } catch (e: Exception) {
                 e.printStackTrace()
-                android.widget.Toast.makeText(context, "Error loading from gallery", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, context.getString(R.string.gallery_load_failed), android.widget.Toast.LENGTH_SHORT).show()
             }
         }
         onDismiss()
@@ -682,20 +684,20 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Update Profile Picture") },
-        text = { Text("Choose a source for your new profile picture.") },
+        title = { Text(stringResource(R.string.update_profile_picture)) },
+        text = { Text(stringResource(R.string.choose_picture_source)) },
         confirmButton = {
             TextButton(onClick = { 
                 try {
                     galleryLauncher.launch("image/*")
                 } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "Could not open gallery", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, context.getString(R.string.gallery_open_failed), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PhotoLibrary, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Gallery")
+                    Text(stringResource(R.string.gallery))
                 }
             }
         },
@@ -704,13 +706,13 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
                 try {
                     cameraLauncher.launch()
                 } catch (e: Exception) {
-                    android.widget.Toast.makeText(context, "Could not open camera", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, context.getString(R.string.camera_open_failed), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CameraAlt, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Camera")
+                    Text(stringResource(R.string.camera))
                 }
             }
         }
@@ -740,7 +742,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
     var showPfpPickerForId by remember { mutableStateOf<Long?>(null) } // -1 for parent, childId for kids
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(scrollState)) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(32.dp))
         
         Surface(
@@ -754,7 +756,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 }
                 Spacer(modifier = Modifier.width(20.dp))
                 Column {
-                    Text("Parent Account", style = MaterialTheme.typography.labelMedium, color = viewModel.primaryColor.value, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.parent_account), style = MaterialTheme.typography.labelMedium, color = viewModel.primaryColor.value, fontWeight = FontWeight.Bold)
                     Text(email, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
@@ -762,7 +764,35 @@ fun SettingsScreen(viewModel: SocketViewModel) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Text("App Theme", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().border(1.dp, if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f), RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text(stringResource(R.string.language_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                Spacer(modifier = Modifier.height(12.dp))
+                listOf(
+                    "en" to stringResource(R.string.language_english),
+                    "ro" to stringResource(R.string.language_romanian)
+                ).forEach { (languageTag, label) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { viewModel.updateAppLanguage(languageTag) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = viewModel.appLanguage.value == languageTag, onClick = { viewModel.updateAppLanguage(languageTag) })
+                        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(stringResource(R.string.app_theme), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(16.dp))
 
         Surface(
@@ -772,7 +802,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dark Mode", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.dark_mode), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Switch(
                         checked = viewModel.isDarkMode.value,
                         onCheckedChange = { viewModel.toggleDarkMode() },
@@ -786,7 +816,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                Text("Theme Color", style = MaterialTheme.typography.labelMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.5f))
+                Text(stringResource(R.string.theme_color), style = MaterialTheme.typography.labelMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.5f))
                 Spacer(modifier = Modifier.height(12.dp))
                 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -806,7 +836,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
 
         Spacer(modifier = Modifier.height(32.dp))
         
-        Text("Manage Kids", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.manage_kids), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(16.dp))
         
         viewModel.children.forEach { child ->
@@ -823,7 +853,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                     Text(child.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     
                     IconButton(onClick = { viewModel.removeChild(child.id) }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Remove Child", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.remove_child), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
                     }
                 }
             }
@@ -839,7 +869,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 OutlinedTextField(
                     value = childName,
                     onValueChange = { if (!it.contains("\n")) childName = it },
-                    label = { Text("Kid's Name") },
+                    label = { Text(stringResource(R.string.kid_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     singleLine = true,
@@ -865,14 +895,14 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = viewModel.primaryColor.value)
                 ) {
-                    Text("Add Kid", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(stringResource(R.string.add_kid), fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
         
         Spacer(modifier = Modifier.height(32.dp))
 
-        Text("Developer Options", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+        Text(stringResource(R.string.developer_options), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
         Spacer(modifier = Modifier.height(16.dp))
         
         var devChildId by remember { mutableStateOf("") }
@@ -887,7 +917,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 OutlinedTextField(
                     value = devChildId,
                     onValueChange = { devChildId = it },
-                    label = { Text("Manual Child ID") },
+                    label = { Text(stringResource(R.string.manual_child_id)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -901,7 +931,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 OutlinedTextField(
                     value = devToken,
                     onValueChange = { devToken = it },
-                    label = { Text("Manual Token") },
+                    label = { Text(stringResource(R.string.manual_token)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -923,7 +953,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Force Game Login", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(stringResource(R.string.force_game_login), fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -937,7 +967,7 @@ fun SettingsScreen(viewModel: SocketViewModel) {
         ) {
             Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Logout", fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.logout), fontWeight = FontWeight.Bold)
         }
         
         Spacer(modifier = Modifier.height(100.dp))
@@ -966,8 +996,8 @@ fun HistoryScreen(viewModel: SocketViewModel) {
     val totalPoints = remember(history) { history.sumOf { it.pointValue } }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("Task History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-        Text("Completed tasks from the game", style = MaterialTheme.typography.bodyMedium, color = subtextColor)
+        Text(stringResource(R.string.task_history), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+        Text(stringResource(R.string.completed_tasks_from_game), style = MaterialTheme.typography.bodyMedium, color = subtextColor)
 
         if (history.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -976,9 +1006,9 @@ fun HistoryScreen(viewModel: SocketViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                StatChip(label = "Total", value = "${history.size}", color = viewModel.primaryColor.value, isDark = isDark, modifier = Modifier.weight(1f))
-                StatChip(label = "Points", value = "$totalPoints", color = Color(0xFF4CAF50), isDark = isDark, modifier = Modifier.weight(1f))
-                StatChip(label = "Days", value = "${grouped.size}", color = Color(0xFFFF9800), isDark = isDark, modifier = Modifier.weight(1f))
+                StatChip(label = stringResource(R.string.total), value = "${history.size}", color = viewModel.primaryColor.value, isDark = isDark, modifier = Modifier.weight(1f))
+                StatChip(label = stringResource(R.string.points), value = "$totalPoints", color = Color(0xFF4CAF50), isDark = isDark, modifier = Modifier.weight(1f))
+                StatChip(label = stringResource(R.string.days), value = "${grouped.size}", color = Color(0xFFFF9800), isDark = isDark, modifier = Modifier.weight(1f))
             }
         }
 
@@ -986,7 +1016,7 @@ fun HistoryScreen(viewModel: SocketViewModel) {
 
         if (history.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("No tasks completed yet.", color = if (isDark) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.3f))
+                Text(stringResource(R.string.no_tasks_completed), color = if (isDark) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.3f))
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1008,7 +1038,7 @@ fun HistoryScreen(viewModel: SocketViewModel) {
                             Box(modifier = Modifier.weight(1f).height(1.dp).background(if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.06f)))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "${tasks.size} tasks  +$dayPoints pts",
+                                stringResource(R.string.task_summary, tasks.size, dayPoints),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = subtextColor
                             )
@@ -1031,7 +1061,7 @@ fun HistoryScreen(viewModel: SocketViewModel) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(task.taskTitle, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("${task.pointValue} pts", style = MaterialTheme.typography.bodySmall, color = viewModel.primaryColor.value, fontWeight = FontWeight.Black)
+                                        Text(stringResource(R.string.points_short, task.pointValue), style = MaterialTheme.typography.bodySmall, color = viewModel.primaryColor.value, fontWeight = FontWeight.Black)
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(task.completedAt.substringAfter(" ").substringAfter("T").take(5), style = MaterialTheme.typography.bodySmall, color = subtextColor)
                                     }
@@ -1141,15 +1171,15 @@ fun ProfileInsightCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Column {
                             Text("${profile.correctCount}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = Color(0xFF4CAF50))
-                            Text("Correct", style = MaterialTheme.typography.labelSmall, color = subtextColor)
+                            Text(stringResource(R.string.correct), style = MaterialTheme.typography.labelSmall, color = subtextColor)
                         }
                         Column {
                             Text("${profile.incorrectCount}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = Color(0xFFF44336))
-                            Text("Wrong", style = MaterialTheme.typography.labelSmall, color = subtextColor)
+                            Text(stringResource(R.string.wrong), style = MaterialTheme.typography.labelSmall, color = subtextColor)
                         }
                         Column {
                             Text("${profile.hintsUsed}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = Color(0xFFFF9800))
-                            Text("Hints", style = MaterialTheme.typography.labelSmall, color = subtextColor)
+                            Text(stringResource(R.string.hints), style = MaterialTheme.typography.labelSmall, color = subtextColor)
                         }
                     }
 
@@ -1161,7 +1191,7 @@ fun ProfileInsightCard(
                         onClick = onDetailClick
                     ) {
                         Text(
-                            "View full details",
+                            stringResource(R.string.view_full_details),
                             modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
@@ -1189,7 +1219,7 @@ fun ProfileDetailDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(stringResource(R.string.close))
             }
         },
         title = {
@@ -1254,11 +1284,11 @@ fun LiveSessionCard(state: LiveSessionState?, primaryColor: Color, isDarkMode: B
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Visibility, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("Live Session", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.live_session), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.weight(1f))
                 Surface(shape = CircleShape, color = if (online) Color(0xFF10B981).copy(alpha = 0.14f) else Color.Gray.copy(alpha = 0.14f)) {
                     Text(
-                        if (online) "Online" else "Offline",
+                        stringResource(if (online) R.string.online else R.string.offline),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
@@ -1268,15 +1298,15 @@ fun LiveSessionCard(state: LiveSessionState?, primaryColor: Color, isDarkMode: B
             }
 
             if (state == null || !online) {
-                Text("No active game feed yet.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                Text(stringResource(R.string.no_active_game_feed), style = MaterialTheme.typography.bodySmall, color = subtextColor)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    MiniMetric("Pad", state.padName.ifBlank { "Exploring" }, primaryColor, modifier = Modifier.weight(1f))
-                    MiniMetric("Attempts", state.attemptCount.toString(), Color(0xFFFF9800), modifier = Modifier.weight(1f))
-                    MiniMetric("Hint", if (state.hintRequested) "Asked" else "No", if (state.hintRequested) Color(0xFFEF4444) else Color(0xFF10B981), modifier = Modifier.weight(1f))
+                    MiniMetric(stringResource(R.string.pad), state.padName.ifBlank { stringResource(R.string.exploring) }, primaryColor, modifier = Modifier.weight(1f))
+                    MiniMetric(stringResource(R.string.attempts), state.attemptCount.toString(), Color(0xFFFF9800), modifier = Modifier.weight(1f))
+                    MiniMetric(stringResource(R.string.hint), stringResource(if (state.hintRequested) R.string.asked else R.string.no), if (state.hintRequested) Color(0xFFEF4444) else Color(0xFF10B981), modifier = Modifier.weight(1f))
                 }
 
-                Text(state.status.ifBlank { "Watching the current activity." }, style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                Text(state.status.ifBlank { stringResource(R.string.watching_current_activity) }, style = MaterialTheme.typography.bodySmall, color = subtextColor)
 
                 Box(
                     modifier = Modifier
@@ -1286,7 +1316,7 @@ fun LiveSessionCard(state: LiveSessionState?, primaryColor: Color, isDarkMode: B
                         .padding(12.dp)
                 ) {
                     Text(
-                        state.codeText.ifBlank { "// Code appears here while they type" },
+                        state.codeText.ifBlank { stringResource(R.string.code_appears_here) },
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         color = if (state.codeText.isBlank()) subtextColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
@@ -1329,16 +1359,16 @@ fun ParentChallengeCard(
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Tonight's Challenge", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Send a parent note into the game for $childName.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                    Text(stringResource(R.string.tonights_challenge), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.send_parent_note, childName), style = MaterialTheme.typography.bodySmall, color = subtextColor)
                 }
             }
 
             OutlinedTextField(
                 value = message,
                 onValueChange = { if (it.length <= 240) message = it },
-                label = { Text("Challenge message") },
-                placeholder = { Text("Try the factorial task before dinner.") },
+                label = { Text(stringResource(R.string.challenge_message)) },
+                placeholder = { Text(stringResource(R.string.challenge_message_hint)) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 minLines = 2,
@@ -1362,7 +1392,7 @@ fun ParentChallengeCard(
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
             ) {
-                Text("Send to Game", fontWeight = FontWeight.Bold, color = Color.White)
+                Text(stringResource(R.string.send_to_game), fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }
@@ -1389,20 +1419,20 @@ fun WeeklyReportCard(
                 Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Weekly AI Report", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                    Text(report?.let { "${it.weekStart} to ${it.weekEnd}" } ?: "Generated every Monday from learning data.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                    Text(stringResource(R.string.weekly_ai_report), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(report?.let { "${it.weekStart} to ${it.weekEnd}" } ?: stringResource(R.string.weekly_report_description), style = MaterialTheme.typography.bodySmall, color = subtextColor)
                 }
                 IconButton(onClick = onRefresh, enabled = !isLoading) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = primaryColor)
                     } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh report", tint = primaryColor)
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh_report), tint = primaryColor)
                     }
                 }
             }
 
             Text(
-                report?.reportText ?: "No report generated yet.",
+                report?.reportText ?: stringResource(R.string.no_report_generated),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -1433,8 +1463,8 @@ fun LearningHeatmapCard(history: List<CompletedTask>, primaryColor: Color, isDar
                 Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text("Learning Heatmap", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Last 8 weeks by completed-task quality.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                    Text(stringResource(R.string.learning_heatmap), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.learning_heatmap_description), style = MaterialTheme.typography.bodySmall, color = subtextColor)
                 }
             }
 
@@ -1456,9 +1486,9 @@ fun LearningHeatmapCard(history: List<CompletedTask>, primaryColor: Color, isDar
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeatmapLegendDot("Low", Color(0xFFEF4444))
-                HeatmapLegendDot("Good", Color(0xFFF59E0B))
-                HeatmapLegendDot("Strong", Color(0xFF10B981))
+                HeatmapLegendDot(stringResource(R.string.low), Color(0xFFEF4444))
+                HeatmapLegendDot(stringResource(R.string.good), Color(0xFFF59E0B))
+                HeatmapLegendDot(stringResource(R.string.strong), Color(0xFF10B981))
             }
         }
     }
@@ -1507,8 +1537,8 @@ fun SkillRadarCard(profiles: List<AiProfile>, primaryColor: Color, isDarkMode: B
                 Icon(Icons.Default.Radar, contentDescription = null, tint = primaryColor, modifier = Modifier.size(22.dp))
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text("Skill Radar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Competency estimate from correct attempts and help patterns.", style = MaterialTheme.typography.bodySmall, color = subtextColor)
+                    Text(stringResource(R.string.skill_radar), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.skill_radar_description), style = MaterialTheme.typography.bodySmall, color = subtextColor)
                 }
             }
 
@@ -1623,8 +1653,8 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Text("Goals", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-            Text("Set goals and rewards", style = MaterialTheme.typography.bodyMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f))
+            Text(stringResource(R.string.nav_goals), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+            Text(stringResource(R.string.set_goals_rewards), style = MaterialTheme.typography.bodyMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f))
             Spacer(modifier = Modifier.height(24.dp))
         }
 
@@ -1675,10 +1705,10 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
             item {
-                Text("AI Insights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.ai_insights), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(4.dp))
                 if (profiles.isEmpty()) {
-                    Text("Building profile from recent activity...", style = MaterialTheme.typography.bodyMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.5f))
+                    Text(stringResource(R.string.building_profile), style = MaterialTheme.typography.bodyMedium, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.5f))
                 }
             }
 
@@ -1698,7 +1728,7 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
         if (goals.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillParentMaxHeight(0.4f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("No goals set yet.", color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.3f))
+                    Text(stringResource(R.string.no_goals_set), color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.3f))
                 }
             }
         } else {
@@ -1720,7 +1750,7 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(14.dp), tint = viewModel.primaryColor.value)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Reward: ${goal.reward}", style = MaterialTheme.typography.bodySmall, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f))
+                                Text(stringResource(R.string.reward_format, goal.reward), style = MaterialTheme.typography.bodySmall, color = if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.6f))
                             }
                         }
 
@@ -1785,7 +1815,7 @@ fun AddGoalDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    "New Goal", 
+                    stringResource(R.string.new_goal),
                     style = MaterialTheme.typography.headlineSmall, 
                     fontWeight = FontWeight.Black, 
                     color = MaterialTheme.colorScheme.onSurface
@@ -1796,7 +1826,7 @@ fun AddGoalDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { if (!it.contains("\n")) title = it },
-                    label = { Text("Goal Name") },
+                    label = { Text(stringResource(R.string.goal_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     singleLine = true,
@@ -1813,7 +1843,7 @@ fun AddGoalDialog(
                 OutlinedTextField(
                     value = reward,
                     onValueChange = { if (!it.contains("\n")) reward = it },
-                    label = { Text("Reward") },
+                    label = { Text(stringResource(R.string.reward)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     singleLine = true,
@@ -1835,19 +1865,19 @@ fun AddGoalDialog(
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                 
-                Text("How to complete", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.how_to_complete), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilterChip(
                         selected = usePoints,
                         onClick = { usePoints = true },
-                        label = { Text("Points") },
+                        label = { Text(stringResource(R.string.points)) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = !usePoints,
                         onClick = { usePoints = false },
-                        label = { Text("Static Task") },
+                        label = { Text(stringResource(R.string.static_task)) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
@@ -1857,7 +1887,7 @@ fun AddGoalDialog(
                     OutlinedTextField(
                         value = points,
                         onValueChange = { if (!it.contains("\n")) points = it },
-                        label = { Text("Points Required") },
+                        label = { Text(stringResource(R.string.points_required)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         singleLine = true,
@@ -1878,7 +1908,7 @@ fun AddGoalDialog(
                         )
                     )
                 } else {
-                    Text("Select Task:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.select_task), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                         items(tasks) { task ->
                             Surface(
@@ -1904,7 +1934,7 @@ fun AddGoalDialog(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -1916,7 +1946,7 @@ fun AddGoalDialog(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
                     ) {
-                        Text("Save Goal", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.save_goal), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
