@@ -27,6 +27,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import io.github.kawase.R
 
 @Composable
@@ -72,7 +73,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
         ) {
             Image(
                 painter = painterResource(id = R.drawable.logo),
-                contentDescription = "Mentora Logo",
+                contentDescription = stringResource(R.string.logo_description),
                 modifier = Modifier
                     .size(150.dp)
                     .shadow(30.dp, RoundedCornerShape(40.dp))
@@ -84,13 +85,13 @@ fun AuthScreen(viewModel: SocketViewModel) {
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Mentora",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Black
             )
             Text(
-                text = "Parental Monitoring Suite",
+                text = stringResource(R.string.parental_monitoring_suite),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 letterSpacing = 1.sp
@@ -112,7 +113,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (isLogin) "Login" else "Create Account",
+                        text = stringResource(if (isLogin) R.string.login else R.string.create_account),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -122,7 +123,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Email Address") },
+                        label = { Text(stringResource(R.string.email_address)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = viewModel.primaryColor.value) },
@@ -138,7 +139,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password") },
+                        label = { Text(stringResource(R.string.password)) },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -166,7 +167,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
                         elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 8.dp)
                     ) {
                         Text(
-                            if (isLogin) "Login" else "Register",
+                            stringResource(if (isLogin) R.string.login else R.string.register),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
@@ -177,7 +178,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
 
                     TextButton(onClick = { isLogin = !isLogin }) {
                         Text(
-                            if (isLogin) "Don't have an account? Register" else "Already have an account? Login",
+                            stringResource(if (isLogin) R.string.no_account_register else R.string.already_account_login),
                             color = viewModel.primaryColor.value,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -193,7 +194,7 @@ fun AuthScreen(viewModel: SocketViewModel) {
                     trackColor = viewModel.primaryColor.value.copy(alpha = 0.1f)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Connecting...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(stringResource(R.string.connecting), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
     }

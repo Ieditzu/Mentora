@@ -92,6 +92,8 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val CHANNEL_ID = "mentora_activity"
         private const val CHANNEL_NAME = "Mentora Activity"
+        private const val APP_LANGUAGE_KEY = "app_language"
+        const val DEFAULT_LANGUAGE = "en"
     }
 
     init {
@@ -124,6 +126,11 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     var isDarkMode = mutableStateOf(prefs.getBoolean("dark_mode", false))
     var primaryColor = mutableStateOf(Color(prefs.getInt("primary_color", PrimaryLight.toArgb())))
     var secondaryColor = mutableStateOf(Color(prefs.getInt("secondary_color", SecondaryLight.toArgb())))
+    var appLanguage = mutableStateOf(
+        prefs.getString(APP_LANGUAGE_KEY, DEFAULT_LANGUAGE)
+            ?.takeIf { it == "en" || it == "ro" }
+            ?: DEFAULT_LANGUAGE
+    )
 
     private val _isConnected = mutableStateOf(false)
     val isConnected: State<Boolean> = _isConnected
@@ -154,6 +161,12 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     fun updatePrimaryColor(color: Color) {
         primaryColor.value = color
         prefs.edit().putInt("primary_color", color.toArgb()).apply()
+    }
+
+    fun updateAppLanguage(languageTag: String) {
+        require(languageTag == "en" || languageTag == "ro") { "Unsupported language: $languageTag" }
+        appLanguage.value = languageTag
+        prefs.edit().putString(APP_LANGUAGE_KEY, languageTag).apply()
     }
 
     fun logout() {
