@@ -1,12 +1,13 @@
 package io.github.kawase.shared.protocol
 
 import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.size_tVar
+import kotlinx.cinterop.refTo
 import kotlinx.cinterop.usePinned
 import platform.CommonCrypto.CCCrypt
 import platform.CommonCrypto.CC_SHA256
@@ -22,11 +23,13 @@ import platform.Security.errSecSuccess
 import platform.Security.kSecRandomDefault
 import platform.posix.CLOCK_MONOTONIC
 import platform.posix.clock_gettime
+import platform.posix.size_tVar
 import platform.posix.timespec
 
 /** Apple implementation backed only by the system CommonCrypto and Security frameworks. */
+@OptIn(ExperimentalForeignApi::class)
 internal actual object PlatformCrypto {
-    private const val ivLength = kCCBlockSizeAES128
+    private val ivLength = kCCBlockSizeAES128.toInt()
 
     actual fun encryptAesCbcPkcs7(data: ByteArray, password: String): ByteArray {
         val iv = ByteArray(ivLength)
