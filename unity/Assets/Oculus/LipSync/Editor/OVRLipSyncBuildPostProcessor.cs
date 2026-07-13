@@ -70,7 +70,9 @@ class OVRLipSyncBuildPostProcessor : MonoBehaviour
             return;
         }
 
-        var targetGUID = project.TargetGuidByName(PBXProject.GetUnityTargetName());
+        // Unity now generates separate application and framework targets. This post-processing
+        // step embeds the dylib into the iOS application target.
+        var targetGUID = project.GetUnityMainTargetGuid();
         // Limit the target to ARM64
         project.SetBuildProperty(targetGUID, "ARCHS", "arm64");
 
