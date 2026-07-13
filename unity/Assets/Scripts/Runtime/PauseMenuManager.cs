@@ -1285,8 +1285,8 @@ public class PauseMenuManager : MonoBehaviour
 
     private void OnLanguageClicked()
     {
-        MentoraLocalization.SetLanguage(
-            MentoraLocalization.IsRomanian ? MentoraLanguage.English : MentoraLanguage.Romanian);
+        MentoraLanguage nextLanguage = (MentoraLanguage)(((int)MentoraLocalization.CurrentLanguage + 1) % 4);
+        MentoraLocalization.SetLanguage(nextLanguage);
         RefreshLanguageButton();
         RefreshGuideDebugLinesButton();
         RefreshPlayerModelButton();

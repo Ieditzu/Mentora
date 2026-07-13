@@ -2656,7 +2656,10 @@ public class CodeChallengePadCinematic : MonoBehaviour
     private void SelectLanguage(QuizLanguage language)
     {
         selectedLanguage = language;
-        MentoraLocalization.SetLanguage(language == QuizLanguage.Romanian ? MentoraLanguage.Romanian : MentoraLanguage.English);
+        if (MentoraLocalization.CurrentLanguage == MentoraLanguage.Romanian || MentoraLocalization.CurrentLanguage == MentoraLanguage.English)
+        {
+            MentoraLocalization.SetLanguage(language == QuizLanguage.Romanian ? MentoraLanguage.Romanian : MentoraLanguage.English);
+        }
         languageChosen = true;
         ApplyLocalizedStaticTexts();
     }

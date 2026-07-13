@@ -10,7 +10,9 @@ using UnityEngine.UI;
 public enum MentoraLanguage
 {
     Romanian = 0,
-    English = 1
+    English = 1,
+    French = 2,
+    German = 3
 }
 
 public sealed class MentoraLocalization : MonoBehaviour
@@ -172,6 +174,84 @@ public sealed class MentoraLocalization : MonoBehaviour
             { "Try one more challenge tonight.", "Încearcă încă o provocare în seara aceasta." }
         };
 
+    // French and German deliberately use the English source keys as a stable catalog ID.
+    // Text without a translation safely falls back to English.
+    private static readonly Dictionary<string, string> FrenchByEnglish =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "PAUSED", "PAUSE" }, { "Not logged in", "Non connecté" }, { "Generate QR Login", "Générer la connexion QR" },
+            { "Log Out", "Se déconnecter" }, { "Quick Actions", "Actions rapides" }, { "Resume", "Reprendre" },
+            { "View Goals", "Voir les objectifs" }, { "Settings", "Paramètres" }, { "Multiplayer", "Multijoueur" },
+            { "Quit Game", "Quitter le jeu" }, { "Dev Options", "Options développeur" }, { "SETTINGS", "PARAMÈTRES" },
+            { "Back", "Retour" }, { "DEV OPTIONS", "OPTIONS DÉVELOPPEUR" }, { "Create Profile", "Créer un profil" },
+            { "Refresh", "Actualiser" }, { "Port", "Port" }, { "Official", "Officiel" }, { "Local", "Local" },
+            { "MULTIPLAYER", "MULTIJOUEUR" }, { "Session", "Session" }, { "Host Game", "Héberger une partie" },
+            { "Join Game", "Rejoindre une partie" }, { "Friends / LAN", "Amis / LAN" }, { "JOIN GAME", "REJOINDRE UNE PARTIE" },
+            { "Host IP", "IP de l'hôte" }, { "Port: 7777 (auto)", "Port : 7777 (auto)" }, { "Join", "Rejoindre" },
+            { "Cancel", "Annuler" }, { "FRIENDS ON LAN", "AMIS SUR LE LAN" }, { "Manual IP", "IP manuelle" },
+            { "Close", "Fermer" }, { "Disconnect", "Déconnecter" }, { "Offline", "Hors ligne" },
+            { "Your Name", "Votre nom" }, { "Enter your name", "Saisissez votre nom" }, { "Open Settings", "Ouvrir les paramètres" },
+            { "Quiz Options", "Options du quiz" }, { "HOST GAME", "HÉBERGER UNE PARTIE" }, { "Local Island", "Île locale" },
+            { "Quiz Island", "Île du quiz" }, { "Code Quest Island", "Île Code Quest" }, { "QUIZ OPTIONS", "OPTIONS DU QUIZ" },
+            { "Quiz Controls", "Contrôles du quiz" }, { "↻  Fetch Quizzes", "↻  Charger les quiz" },
+            { "✦  AI Profile Quiz", "✦  Quiz de profil IA" }, { "▶  Start Quiz", "▶  Démarrer le quiz" },
+            { "PARENT GOALS", "OBJECTIFS DES PARENTS" }, { "Log in to see goals", "Connectez-vous pour voir les objectifs" },
+            { "No goals set by parent yet", "Aucun objectif défini par le parent" }, { "Reward: ", "Récompense : " },
+            { "Sensitivity", "Sensibilité" }, { "Player + Voice", "Joueur et voix" }, { "Language: Romanian", "Langue : roumain" },
+            { "Language: English", "Langue : anglais" }, { "Language: French", "Langue : français" }, { "Language: German", "Langue : allemand" },
+            { "Model: Girl", "Modèle : fille" }, { "Mode: Always On", "Mode : toujours actif" },
+            { "Mic: Default", "Micro : par défaut" }, { "Generating...", "Génération..." }, { "Scan the QR code below", "Scannez le code QR ci-dessous" },
+            { "Loading profiles...", "Chargement des profils..." }, { "Switching...", "Changement..." }, { "Current: ", "Actuel : " },
+            { "day streak", "jours consécutifs" }, { "tasks", "tâches" }, { "Community", "Communauté" },
+            { "Community Courses", "Cours communautaires" }, { "✕ Close", "✕ Fermer" }, { "Start", "Démarrer" },
+            { "Enroll Now", "S'inscrire maintenant" }, { "Course Results", "Résultats du cours" },
+            { "Finish & Claim Reward", "Terminer et obtenir la récompense" }, { "STOP", "ARRÊTER" }, { "RUN", "EXÉCUTER" },
+            { "History: none", "Historique : aucun" }, { "VERIFY", "VÉRIFIER" }, { "RESET", "RÉINITIALISER" },
+            { "Running…", "Exécution…" }, { "✓  CORRECT!", "✓  CORRECT !" }, { "✗  INCORRECT", "✗  INCORRECT" },
+            { "Language", "Langue" }, { "Difficulty", "Difficulté" }, { "Questions", "Questions" }, { "Reward", "Récompense" },
+            { "Congratulations!", "Félicitations !" }, { "Your final score is", "Votre score final est" },
+            { "Get ready!", "Préparez-vous !" }, { "Quiz Over! Final Scores:", "Quiz terminé ! Scores finaux :" },
+            { "▶  Run", "▶  Exécuter" }, { "✕  Exit", "✕  Quitter" }, { "Challenge from parent", "Défi du parent" }
+        };
+
+    private static readonly Dictionary<string, string> GermanByEnglish =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "PAUSED", "PAUSIERT" }, { "Not logged in", "Nicht angemeldet" }, { "Generate QR Login", "QR-Anmeldung erstellen" },
+            { "Log Out", "Abmelden" }, { "Quick Actions", "Schnellaktionen" }, { "Resume", "Fortsetzen" },
+            { "View Goals", "Ziele anzeigen" }, { "Settings", "Einstellungen" }, { "Multiplayer", "Mehrspieler" },
+            { "Quit Game", "Spiel beenden" }, { "Dev Options", "Entwickleroptionen" }, { "SETTINGS", "EINSTELLUNGEN" },
+            { "Back", "Zurück" }, { "DEV OPTIONS", "ENTWICKLEROPTIONEN" }, { "Create Profile", "Profil erstellen" },
+            { "Refresh", "Aktualisieren" }, { "Port", "Port" }, { "Official", "Offiziell" }, { "Local", "Lokal" },
+            { "MULTIPLAYER", "MEHRSPIELER" }, { "Session", "Sitzung" }, { "Host Game", "Spiel hosten" },
+            { "Join Game", "Spiel beitreten" }, { "Friends / LAN", "Freunde / LAN" }, { "JOIN GAME", "SPIEL BEITRETEN" },
+            { "Host IP", "Host-IP" }, { "Port: 7777 (auto)", "Port: 7777 (automatisch)" }, { "Join", "Beitreten" },
+            { "Cancel", "Abbrechen" }, { "FRIENDS ON LAN", "FREUNDE IM LAN" }, { "Manual IP", "Manuelle IP" },
+            { "Close", "Schließen" }, { "Disconnect", "Trennen" }, { "Offline", "Offline" },
+            { "Your Name", "Dein Name" }, { "Enter your name", "Gib deinen Namen ein" }, { "Open Settings", "Einstellungen öffnen" },
+            { "Quiz Options", "Quizoptionen" }, { "HOST GAME", "SPIEL HOSTEN" }, { "Local Island", "Lokale Insel" },
+            { "Quiz Island", "Quiz-Insel" }, { "Code Quest Island", "Code-Quest-Insel" }, { "QUIZ OPTIONS", "QUIZOPTIONEN" },
+            { "Quiz Controls", "Quizsteuerung" }, { "↻  Fetch Quizzes", "↻  Quiz laden" },
+            { "✦  AI Profile Quiz", "✦  KI-Profilquiz" }, { "▶  Start Quiz", "▶  Quiz starten" },
+            { "PARENT GOALS", "ELTERNZIELE" }, { "Log in to see goals", "Melde dich an, um Ziele zu sehen" },
+            { "No goals set by parent yet", "Noch keine Elternziele festgelegt" }, { "Reward: ", "Belohnung: " },
+            { "Sensitivity", "Empfindlichkeit" }, { "Player + Voice", "Spieler und Stimme" }, { "Language: Romanian", "Sprache: Rumänisch" },
+            { "Language: English", "Sprache: Englisch" }, { "Language: French", "Sprache: Französisch" }, { "Language: German", "Sprache: Deutsch" },
+            { "Model: Girl", "Modell: Mädchen" }, { "Mode: Always On", "Modus: Immer aktiv" },
+            { "Mic: Default", "Mikrofon: Standard" }, { "Generating...", "Wird erstellt..." }, { "Scan the QR code below", "Scanne den QR-Code unten" },
+            { "Loading profiles...", "Profile werden geladen..." }, { "Switching...", "Wird gewechselt..." }, { "Current: ", "Aktuell: " },
+            { "day streak", "Tage in Folge" }, { "tasks", "Aufgaben" }, { "Community", "Community" },
+            { "Community Courses", "Community-Kurse" }, { "✕ Close", "✕ Schließen" }, { "Start", "Starten" },
+            { "Enroll Now", "Jetzt anmelden" }, { "Course Results", "Kursergebnisse" },
+            { "Finish & Claim Reward", "Abschließen und Belohnung erhalten" }, { "STOP", "STOPP" }, { "RUN", "AUSFÜHREN" },
+            { "History: none", "Verlauf: keiner" }, { "VERIFY", "PRÜFEN" }, { "RESET", "ZURÜCKSETZEN" },
+            { "Running…", "Wird ausgeführt…" }, { "✓  CORRECT!", "✓  RICHTIG!" }, { "✗  INCORRECT", "✗  FALSCH" },
+            { "Language", "Sprache" }, { "Difficulty", "Schwierigkeit" }, { "Questions", "Fragen" }, { "Reward", "Belohnung" },
+            { "Congratulations!", "Glückwunsch!" }, { "Your final score is", "Dein Endergebnis ist" },
+            { "Get ready!", "Mach dich bereit!" }, { "Quiz Over! Final Scores:", "Quiz beendet! Endergebnisse:" },
+            { "▶  Run", "▶  Ausführen" }, { "✕  Exit", "✕  Beenden" }, { "Challenge from parent", "Herausforderung vom Elternteil" }
+        };
+
     private static MentoraLocalization instance;
     private static MentoraLanguage currentLanguage;
     private float nextScanTime;
@@ -180,7 +260,13 @@ public sealed class MentoraLocalization : MonoBehaviour
 
     public static MentoraLanguage CurrentLanguage => currentLanguage;
     public static bool IsRomanian => currentLanguage == MentoraLanguage.Romanian;
-    public static string CurrentLanguageLabel => IsRomanian ? "Romanian" : "English";
+    public static string CurrentLanguageLabel => currentLanguage switch
+    {
+        MentoraLanguage.Romanian => "Romanian",
+        MentoraLanguage.French => "French",
+        MentoraLanguage.German => "German",
+        _ => "English"
+    };
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
@@ -235,12 +321,20 @@ public sealed class MentoraLocalization : MonoBehaviour
 
     public static string Localize(string englishText)
     {
-        if (!IsRomanian || string.IsNullOrEmpty(englishText))
+        if (string.IsNullOrEmpty(englishText))
         {
             return englishText;
         }
 
-        return RomanianByEnglish.TryGetValue(englishText, out string romanian) ? romanian : englishText;
+        Dictionary<string, string> catalog = currentLanguage switch
+        {
+            MentoraLanguage.Romanian => RomanianByEnglish,
+            MentoraLanguage.French => FrenchByEnglish,
+            MentoraLanguage.German => GermanByEnglish,
+            _ => null
+        };
+
+        return catalog != null && catalog.TryGetValue(englishText, out string translated) ? translated : englishText;
     }
 
     public static string Format(string englishFormat, params object[] arguments)
@@ -298,7 +392,7 @@ public sealed class MentoraLocalization : MonoBehaviour
             }
 
             string value = text.text;
-            if (RomanianByEnglish.ContainsKey(value))
+            if (RomanianByEnglish.ContainsKey(value) || FrenchByEnglish.ContainsKey(value) || GermanByEnglish.ContainsKey(value))
             {
                 Register(text, value);
             }
