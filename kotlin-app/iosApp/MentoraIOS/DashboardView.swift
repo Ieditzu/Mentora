@@ -49,7 +49,7 @@ struct DashboardView: View {
                 store.claimQRLogin(token: token, for: child.id)
             }
         }
-        .onChange(of: appModel.resolvedLanguageTag) { _, languageTag in
+        .onChange(of: appModel.resolvedLanguageTag) { languageTag in
             store.setLanguage(languageTag)
         }
         .onAppear {
@@ -116,6 +116,7 @@ private struct QRLoginSheet: View {
     let onLogin: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var token = ""
+    @State private var showsScanner = false
 
     var body: some View {
         NavigationStack {
@@ -132,6 +133,12 @@ private struct QRLoginSheet: View {
                 TextField("Game token", text: $token)
                     .textInputAutocapitalization(.never)
                     .textFieldStyle(.roundedBorder)
+                Button {
+                    showsScanner = true
+                } label: {
+                    Label("Scan QR code", systemImage: "camera.viewfinder")
+                }
+                .buttonStyle(.bordered)
                 Button("Log in") {
                     onLogin(token)
                     dismiss()
@@ -143,6 +150,12 @@ private struct QRLoginSheet: View {
             .padding(24)
             .navigationTitle("QR game login")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Cancel") { dismiss() } } }
+        }
+        .sheet(isPresented: $showsScanner) {
+            QRCodeScannerSheet { scannedToken in
+                onLogin(scannedToken)
+                dismiss()
+            }
         }
     }
 }

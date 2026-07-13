@@ -181,7 +181,7 @@ final class MentoraLiveStore: ObservableObject {
 
     private func configureTransportCallbacks() {
         transport.onStateChange = { [weak self] state in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 self.connectionState = state
                 if state == .connected {
@@ -191,13 +191,13 @@ final class MentoraLiveStore: ObservableObject {
         }
 
         transport.onBinaryMessage = { [weak self] data in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async {
                 self?.receive(data)
             }
         }
 
         transport.onError = { [weak self] error in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async {
                 self?.lastErrorMessage = error.localizedDescription
             }
         }

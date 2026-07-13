@@ -42,7 +42,11 @@ struct SettingsView: View {
     private var accountCard: some View {
         GlassCard(padding: 20) {
             HStack(spacing: 16) {
-                AvatarView(name: accountName, accent: MentoraTheme.accent, size: 56)
+                MentoraProfilePicturePicker(onPictureReady: { picture in
+                    store.updateProfilePicture(childID: -1, base64Picture: picture)
+                }) {
+                    AvatarView(name: accountName, accent: MentoraTheme.accent, size: 56)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Parent account").font(.caption.weight(.bold)).foregroundStyle(MentoraTheme.accent)
                     Text(accountName).font(.headline.weight(.bold)).foregroundStyle(.primary)
@@ -92,7 +96,11 @@ struct SettingsView: View {
             ForEach(store.snapshot.children, id: \.id) { child in
                 GlassCard(padding: 14, cornerRadius: 20) {
                     HStack(spacing: 12) {
-                        AvatarView(name: child.name, accent: MentoraTheme.accent, size: 46)
+                        MentoraProfilePicturePicker(onPictureReady: { picture in
+                            store.updateProfilePicture(childID: child.id, base64Picture: picture)
+                        }) {
+                            AvatarView(name: child.name, accent: MentoraTheme.accent, size: 46)
+                        }
                         Text(child.name).font(.headline.weight(.bold)).foregroundStyle(.primary)
                         Spacer()
                         Button(role: .destructive) { store.removeChild(id: child.id) } label: { Image(systemName: "trash") }
