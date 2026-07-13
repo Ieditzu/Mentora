@@ -14,18 +14,31 @@ final class AppModel: ObservableObject {
     private let session = IosSessionBridge(deviceLanguageTags: Locale.preferredLanguages)
     private let languagePreferenceKey = "mentora.languagePreference"
     private var cancellables = Set<AnyCancellable>()
+    private var savedCredentials: MentoraSavedCredentials?
 
     init() {
         selectedLanguagePreference = UserDefaults.standard.string(forKey: languagePreferenceKey) ?? "system"
         languageOptions = session.availableLanguageOptions()
         liveStore = MentoraLiveStore()
         refreshLanguage()
+        savedCredentials = try? MentoraCredentialStore.load()
+        email = savedCredentials?.email ?? ""
         liveStore.$snapshot
             .map(\.isLoggedIn)
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] isLoggedIn in
                 self?.isAuthenticated = isLoggedIn
+            }
+            .store(in: &cancellables)
+        liveStore.$connectionState
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                guard state == .connected,
+                      let self,
+                      let credentials = self.savedCredentials else { return }
+                self.liveStore.login(email: credentials.email, password: credentials.password)
             }
             .store(in: &cancellables)
         liveStore.connect(to: "wss://neuro.serenityutils.club")
@@ -44,16 +57,20 @@ final class AppModel: ObservableObject {
 
     func login(email: String, password: String) {
         self.email = email
+        saveCredentials(email: email, password: password)
         liveStore.login(email: email, password: password)
     }
 
     func register(email: String, password: String) {
         self.email = email
+        saveCredentials(email: email, password: password)
         liveStore.register(email: email, password: password)
     }
 
     func signOut() {
         liveStore.disconnect()
+        try? MentoraCredentialStore.clear()
+        savedCredentials = nil
         email = ""
         isAuthenticated = false
     }
@@ -70,5 +87,16 @@ final class AppModel: ObservableObject {
         )
         resolvedLanguageTag = session.resolvedLanguageTag()
         liveStore.setLanguage(resolvedLanguageTag)
+    }
+
+    private func saveCredentials(email: String, password: String) {
+        guard !email.isEmpty, !password.isEmpty else { return }
+        do {
+            try MentoraCredentialStore.save(email: email, password: password)
+            savedCredentials = MentoraSavedCredentials(email: email, password: password)
+        } catch {
+            // The app can still sign in for this session if Keychain storage is unavailable.
+            savedCredentials = nil
+        }
     }
 }
