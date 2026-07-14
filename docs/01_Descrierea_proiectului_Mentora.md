@@ -49,6 +49,8 @@ Mentora include mai multe moduri de învățare prin practică:
 - **Rocket Landing**, un experiment de programare și simulare în care elevul configurează și controlează o rachetă pentru aterizare;
 - **AI Challenge**, care generează activități adaptate progresului și oferă dialog de mentorat.
 
+Code Quest Island este zona centrală pentru activitățile de programare în lumea 3D. Din meniul Pause Menu, insula poate fi generată pentru o sesiune nouă de lucru liber, iar elevul este teleportat direct pe platformă. Insula conține cinci portaluri: „Easy – Build”, „Medium – Fix”, „Hard – Systems”, „AI Profile Quest” și „Free Sandbox”. Portalurile Easy, Medium și Hard deschid misiuni cu obiective verificabile în lumea 3D: construirea și colorarea unui beacon, repararea unui pod prin ștergerea obstacolelor și crearea unor scânduri și restaurarea unui nucleu de energie protejat. Portalul AI Profile Quest solicită o provocare adaptată profilului elevului, iar portalul Free Sandbox deschide un spațiu fără obiectiv fix, în care elevul poate crea și modifica liber obiecte folosind cod Python.
+
 Codul elevului este trimis serverului, executat într-un mediu controlat, iar rezultatul este transmis înapoi în joc.
 
 Feedback și evaluare

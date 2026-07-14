@@ -74,6 +74,12 @@ Python este rulat cu `python3 -I -B -S`, iar C++ este compilat cu `g++ -O2`. Pen
 
 Rudolf utilizează ținte de ghidare pentru insulele Python, C++, Code Quest, Quiz, Community și CodeWorld. El corelează poziția elevului și activitatea aleasă cu profilul de învățare primit de la server, incluzând progresul, răspunsurile, indiciile, punctele, obiectivele și provocările. `RobotVoiceBridge` oferă interacțiune vocală și TTS, iar `RobotLookAt` și `RudolfIslandGuideTarget` susțin orientarea vizuală și ghidarea în lumea 3D.
 
+Code Quest Island este implementată procedural de `CodeWorldQuestIsland`. La construire sunt create platforma cilindrică, marginea luminoasă, coliziunile de deplasare, panoul de identificare, elementele decorative și portalurile `Easy`, `Medium`, `Hard`, `AiProfile` și `Sandbox`. Fiecare portal are un trigger 3D și este conectat la `CodeWorldQuestPortal`. La intrarea jucătorului, portalul pornește fie modul Sandbox, fie o provocare `CodeWorldChallengeDefinition`.
+
+Provocările fixe sunt definite în `CodeWorldQuestDefinitions`. Misiunea Easy verifică existența unui obiect `beacon`, poziționarea lui pe markerul galben, înălțimea și culoarea roșie. Misiunea Medium verifică ștergerea obiectului `rubble`, existența a cel puțin trei obiecte `plank_`, crearea obiectului `finish_flag` și colorarea lui în verde. Misiunea Hard verifică eliminarea obiectului `broken_core`, crearea unui `power_core` cyan în zona de reparații și construirea elementelor de protecție. Provocarea `AiProfile` primește o sarcină generată de server și verifică obiective precum crearea obiectului `profile_goal` și a cel puțin trei obiecte.
+
+Din `PauseMenuManager`, metoda `GenerateFreshForFreestyle` elimină instanța veche a insulei și creează o instanță nouă la runtime, apoi jucătorul este teleportat la poziția de spawn. Portalul `Sandbox` apelează `CodeWorldRuntime.StartSandboxFromPortal`, iar portalurile de provocare apelează `CodeWorldRuntime.StartChallengeFromPortal`. În modul Sandbox, editorul Python este activat, scena de obiecte este resetată, iar elevul poate rula comenzi pentru a crea, poziționa, redimensiona, colora și modifica obiecte în lumea 3D.
+
 Denumirile claselor și ale serviciilor descriu responsabilitatea lor, iar pachetele sunt grupate după domeniu: autentificare, copil, curs, joc, limbaj, AI și companion. Protocolul este extensibil prin adăugarea unui packet type, a unei clase concrete și a înregistrării în `PacketManager`.
 
 5.1. Internaționalizare în Unity
