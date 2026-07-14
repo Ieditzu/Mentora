@@ -19,8 +19,102 @@ public sealed class CodeWorldQuestIsland : MonoBehaviour
     private static readonly Vector3 HubCenter = new Vector3(220f, 30f, 430f);
     private static readonly Color GroundColor = new Color(0.09f, 0.14f, 0.18f);
     private static readonly Color EdgeColor = new Color(0.08f, 0.55f, 0.76f);
-    public static Vector3 SpawnPosition => HubCenter + new Vector3(0f, 2.4f, -8f);
-    public static Quaternion SpawnRotation => Quaternion.Euler(0f, 0f, 0f);
+    private static readonly Vector3 LocalSpawnOffset = new Vector3(0f, 2.4f, -8f);
+
+    /// <summary>
+    /// Returns the actual spawn pose of the island in the current scene. The island can be
+    /// repositioned in the editor, so the multiplayer menu must not use a fixed world position.
+    /// </summary>
+    public static Vector3 SpawnPosition
+    {
+        get
+        {
+            CodeWorldQuestIsland island = FindExistingIsland();
+            return island != null
+                ? island.transform.TransformPoint(HubCenter + LocalSpawnOffset)
+                : HubCenter + LocalSpawnOffset;
+        }
+    }
+
+    public static Quaternion SpawnRotation
+    {
+        get
+        {
+            CodeWorldQuestIsland island = FindExistingIsland();
+            return GetSpawnRotation(island);
+        }
+    }
+
+    public static Vector3 GetSpawnPosition(CodeWorldQuestIsland island)
+    {
+        return island != null
+            ? island.transform.TransformPoint(HubCenter + LocalSpawnOffset)
+            : HubCenter + LocalSpawnOffset;
+    }
+
+    public static Quaternion GetSpawnRotation(CodeWorldQuestIsland island)
+    {
+        return island != null ? island.transform.rotation : Quaternion.identity;
+    }
+
+    /// <summary>
+    /// Makes the Code Quest hub available for both portal entry and PauseMenu entry.
+    /// </summary>
+    public static CodeWorldQuestIsland EnsureSpawned()
+    {
+        CodeWorldQuestIsland island = FindExistingIsland();
+        if (island != null)
+        {
+            if (!island.gameObject.activeSelf)
+            {
+                island.gameObject.SetActive(true);
+            }
+
+            island.Build();
+            return island;
+        }
+
+        GameObject root = new GameObject("CodeWorldQuestIsland");
+        island = root.AddComponent<CodeWorldQuestIsland>();
+        island.Build();
+        return island;
+    }
+
+    /// <summary>
+    /// Recreates the Code Quest hub at runtime for a fresh free-style session started
+    /// from the Pause Menu. The generated island is independent from any scene instance.
+    /// </summary>
+    public static CodeWorldQuestIsland GenerateFreshForFreestyle()
+    {
+        CodeWorldQuestIsland[] existingIslands = FindObjectsOfType<CodeWorldQuestIsland>(true);
+        for (int index = 0; index < existingIslands.Length; index++)
+        {
+            CodeWorldQuestIsland existingIsland = existingIslands[index];
+            if (existingIsland == null) continue;
+
+            existingIsland.gameObject.SetActive(false);
+            Destroy(existingIsland.gameObject);
+        }
+
+        GameObject root = new GameObject("CodeWorldQuestIsland");
+        CodeWorldQuestIsland island = root.AddComponent<CodeWorldQuestIsland>();
+        island.Build();
+        return island;
+    }
+
+    private static CodeWorldQuestIsland FindExistingIsland()
+    {
+        CodeWorldQuestIsland[] islands = FindObjectsOfType<CodeWorldQuestIsland>(true);
+        for (int index = 0; index < islands.Length; index++)
+        {
+            if (islands[index] != null)
+            {
+                return islands[index];
+            }
+        }
+
+        return null;
+    }
 
     public void Build()
     {

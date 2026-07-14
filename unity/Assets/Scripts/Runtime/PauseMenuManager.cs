@@ -689,14 +689,6 @@ public class PauseMenuManager : MonoBehaviour
         quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         quitButton.onClick.AddListener(QuitGame);
 
-        devOptionsButton = CreateButton(actions.transform, "TasksBtn", "Dev Options", new Vector2(0f, -142f), new Color(0.45f, 0.45f, 0.5f, 1f));
-        devOptionsButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
-        devOptionsButton.onClick.AddListener(() => {
-            if (qrCodeImage != null) qrCodeImage.gameObject.SetActive(false);
-            ShowPanel(tasksPanel);
-        });
-        RefreshDevOptionsVisibility();
-
         settingsPanel = CreateUiObject("SettingsPanel", canvas.transform);
         RectTransform settingsRect = settingsPanel.GetComponent<RectTransform>();
         settingsRect.sizeDelta = new Vector2(660f, 500f);
@@ -1611,8 +1603,9 @@ public class PauseMenuManager : MonoBehaviour
 
     private static void TeleportPlayerToCodeQuestIsland()
     {
-        Vector3 spawnPosition = CodeWorldQuestIsland.SpawnPosition;
-        Quaternion spawnRotation = CodeWorldQuestIsland.SpawnRotation;
+        CodeWorldQuestIsland island = CodeWorldQuestIsland.GenerateFreshForFreestyle();
+        Vector3 spawnPosition = CodeWorldQuestIsland.GetSpawnPosition(island);
+        Quaternion spawnRotation = CodeWorldQuestIsland.GetSpawnRotation(island);
         FirstPersonControllerSimple fps = PlayerCache.GetFps();
         if (fps != null)
         {
