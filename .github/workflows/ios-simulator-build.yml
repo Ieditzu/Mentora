@@ -1,4 +1,4 @@
-name: iOS Simulator Build
+name: iOS Build
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: Build iOS simulator app
+    name: Build iOS IPA
     runs-on: macos-15
     defaults:
       run:
@@ -47,15 +47,29 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec iosApp/project.yml --project iosApp
 
-      - name: Compile Kotlin framework and SwiftUI app
+      - name: Archive app
         run: >-
-          xcodebuild
+          xcodebuild archive
           -project iosApp/MentoraIOS.xcodeproj
           -scheme MentoraIOS
-          -configuration Debug
-          -sdk iphonesimulator
-          -destination 'generic/platform=iOS Simulator'
-          ARCHS=arm64
-          ONLY_ACTIVE_ARCH=YES
+          -configuration Release
+          -sdk iphoneos
+          -archivePath ${{ runner.temp }}/MentoraIOS.xcarchive
           CODE_SIGNING_ALLOWED=NO
-          build
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        run: |
+          mkdir -p ${{ runner.temp }}/ipa/Payload
+          cp -r "${{ runner.temp }}/MentoraIOS.xcarchive/Products/Applications/MentoraIOS.app" \
+            "${{ runner.temp }}/ipa/Payload/"
+          cd ${{ runner.temp }}/ipa
+          zip -r MentoraIOS.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MentoraIOS
+          path: ${{ runner.temp }}/ipa/MentoraIOS.ipa
+          retention-days: 14
