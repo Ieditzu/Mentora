@@ -111,11 +111,27 @@ fun MainDashboard(viewModel: SocketViewModel) {
     val navController = rememberNavController()
     var selectedChildId by remember { mutableStateOf(-1L) }
     val children = viewModel.children
-    
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showAddGoalDialog by remember { mutableStateOf(false) }
     var showQRDialog by remember { mutableStateOf<Child?>(null) }
+
+    // Hoist camera permission here so rememberLauncherForActivityResult is always
+    // registered at MainDashboard level, not inside a conditionally-composed dialog.
+    val context = LocalContext.current
+    var hasCameraPermissionForQR by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    val cameraQrPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted -> hasCameraPermissionForQR = granted }
+    )
+    LaunchedEffect(showQRDialog) {
+        if (showQRDialog != null && !hasCameraPermissionForQR) {
+            cameraQrPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "bg")
     val rotation by infiniteTransition.animateFloat(
@@ -272,6 +288,7 @@ fun MainDashboard(viewModel: SocketViewModel) {
             child = child,
             isDarkMode = viewModel.isDarkMode.value,
             primaryColor = viewModel.primaryColor.value,
+            hasCameraPermission = hasCameraPermissionForQR,
             onDismiss = { showQRDialog = null },
             onConfirm = { token ->
                 viewModel.claimQRLogin(token, child.id)
@@ -286,25 +303,10 @@ fun QRScannerSimulatorDialog(
     child: Child,
     isDarkMode: Boolean,
     primaryColor: Color,
+    hasCameraPermission: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var hasCameraPermission by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted -> hasCameraPermission = granted }
-    )
-
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            hasCameraPermission = true
-        } else {
-            launcher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
@@ -380,9 +382,11 @@ fun QRScannerView(onCodeScanned: (String) -> Unit) {
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
     val scanned = remember { AtomicBoolean(false) }
+    val disposed = remember { AtomicBoolean(false) }
 
     DisposableEffect(Unit) {
         onDispose {
+            disposed.set(true)
             runCatching {
                 if (cameraProviderFuture.isDone) {
                     cameraProviderFuture.get().unbindAll()
@@ -396,8 +400,9 @@ fun QRScannerView(onCodeScanned: (String) -> Unit) {
         factory = { ctx ->
             val previewView = PreviewView(ctx)
             val mainExecutor = ContextCompat.getMainExecutor(ctx)
-            
+
             cameraProviderFuture.addListener({
+                if (disposed.get()) return@addListener
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
@@ -418,6 +423,8 @@ fun QRScannerView(onCodeScanned: (String) -> Unit) {
                         if (code != null && scanned.compareAndSet(false, true)) {
                             mainExecutor.execute { onCodeScanned(code) }
                         }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     } finally {
                         imageProxy.close()
                     }
@@ -638,7 +645,17 @@ fun DefaultAvatar(name: String, primaryColor: Color) {
 @Composable
 fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    
+    var hasCameraPermission by remember { mutableStateOf(false) }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted -> hasCameraPermission = granted }
+    )
+
+    LaunchedEffect(Unit) {
+        hasCameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun processBitmap(bitmap: Bitmap?) {
         if (bitmap == null) {
             android.widget.Toast.makeText(context, context.getString(R.string.image_load_failed), android.widget.Toast.LENGTH_SHORT).show()
@@ -705,7 +722,11 @@ fun ImagePickerBottomSheet(onImageSelected: (String) -> Unit, onDismiss: () -> U
         dismissButton = {
             TextButton(onClick = { 
                 try {
-                    cameraLauncher.launch()
+                    if (hasCameraPermission) {
+                        cameraLauncher.launch()
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
                 } catch (e: Exception) {
                     android.widget.Toast.makeText(context, context.getString(R.string.camera_open_failed), android.widget.Toast.LENGTH_SHORT).show()
                 }
