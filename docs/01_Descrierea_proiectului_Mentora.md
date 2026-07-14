@@ -71,9 +71,13 @@ Colaborare și interactivitate
 
 Modul multiplayer LAN permite descoperirea sesiunilor, conectarea la un host, sincronizarea avatarurilor, quiz-uri comune, voce, profiluri de programare și editarea colaborativă în CodeWorld. Scorul quiz-ului ține cont și de timpul de răspuns.
 
-Companionul educațional
+Companionul educațional Rudolf
 
-Robotul companion reacționează la intrarea în zone de programare și la reușitele sau eșecurile elevului. Poate comunica prin text și voce, iar replicile pot folosi contextul profilului de învățare.
+Rudolf este companionul educațional al elevului și îl însoțește în explorarea lumii Mentora. El reacționează la intrarea în zonele de programare, la accesarea insulelor și la rezultatele activităților. Prin ghidaj contextual, Rudolf poate conduce elevul către zona Python, zona C++, Code Quest Island, Quiz Island, Community Island și CodeWorld. Astfel, elevul primește orientare clară către activitatea potrivită, fie că dorește să rezolve o sarcină de cod, să participe la un quiz, să descopere un curs comunitar sau să controleze obiecte din lume prin programare.
+
+Rudolf comunică prin mesaje afișate în joc și prin voce. Sistemul include moduri configurabile pentru voce, microfon și modelul vocal, integrare TTS și legătură cu serviciile AI. Companionul are acces contextual la profilul de învățare al copilului: progresul la Python și C++, numărul de răspunsuri corecte, conceptele exersate, indiciile utilizate, punctele acumulate, obiectivele active și provocările finalizate. Pe baza acestor informații, Rudolf poate formula explicații pe înțelesul elevului, poate aprecia evoluția lui, poate propune activitatea următoare și poate oferi sprijin personalizat atunci când copilul întâmpină dificultăți.
+
+În modul multiplayer, Rudolf funcționează împreună cu sesiunile de joc și cu activitățile colaborative. Comportamentul său este susținut de componentele `RobotCompanion`, `RobotVoiceBridge`, `RobotLookAt` și `RudolfIslandGuideTarget`, care gestionează reacțiile, vocea, orientarea vizuală și ghidarea către insule.
 
 5. ELEMENTE DE ORIGINALITATE
 
@@ -89,7 +93,7 @@ Originalitatea soluției rezultă din combinarea unor mecanisme care, de regulă
 
 Fiecare tip de utilizator are o interfață adaptată: joc 3D pentru elev, dashboard Compose pentru părinte și aplicație web pentru creator. Aplicația Android include suport pentru ecrane tactile și scanare QR, iar jocul conține controale mobile și componente pentru VR. Interfețele web și Android folosesc layout-uri responsive și componente reutilizabile.
 
-Proiectul este împărțit pe platforme pentru a putea fi folosit pe dispozitive diferite: Windows/Linux pentru server și dezvoltare, Android pentru aplicația parentală, browser modern pentru editorul web și dispozitive compatibile Unity pentru joc.
+Proiectul este împărțit pe platforme pentru a putea fi folosit pe dispozitive diferite: Windows și Linux pentru server și dezvoltare, Windows/Linux pentru jocul desktop, Android și iOS pentru aplicația mobilă parentală, browser modern pentru editorul web și dispozitive compatibile Unity/OpenXR pentru jocul VR.
 
 Internaționalizare
 

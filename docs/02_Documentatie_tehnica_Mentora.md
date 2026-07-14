@@ -70,7 +70,9 @@ Python este rulat cu `python3 -I -B -S`, iar C++ este compilat cu `g++ -O2`. Pen
 
 5. ORGANIZAREA CLIENȚILOR
 
-În Unity, responsabilitățile sunt împărțite între `GameClient`, pad-urile Python și C++, `CodeWorldRuntime`, `CodeWorldQuestIsland`, `AiChallengePad`, `CommunityIslandMenu`, `MultiplayerQuizManager`, `RocketLandingPuzzle`, `RobotCompanion`, `MultiplayerSessionManager` și managerii de interfață. Aceste componente susțin Code Quest Island, Quiz Island, Community Island, CodeWorld, provocările AI, experimentul Rocket Landing, companionul Rudolf și multiplayerul LAN cu voce. `MentoraLocalization` păstrează alegerea limbii în `PlayerPrefs`, actualizează etichetele uGUI înregistrate și oferă un punct unic pentru adăugarea traducerilor. În Android, `SocketViewModel` centralizează starea, comunicarea și limba salvată în preferințe, iar `AppLanguages` și `MainActivity` selectează contextul Compose pentru limba aleasă sau limba sistemului. Interfața Android include română, engleză, franceză și germană, alături de limbile suplimentare din selector. În web, `App.jsx` gestionează navigarea, autentificarea, editorul și preferința de limbă, `src/lib/i18n.js` păstrează catalogul de traduceri, iar `src/lib/api.js` standardizează apelurile HTTP și tratarea erorilor.
+În Unity, responsabilitățile sunt împărțite între `GameClient`, pad-urile Python și C++, `CodeWorldRuntime`, `CodeWorldQuestIsland`, `AiChallengePad`, `CommunityIslandMenu`, `MultiplayerQuizManager`, `RocketLandingPuzzle`, `RobotCompanion`, `RobotVoiceBridge`, `RobotLookAt`, `RudolfIslandGuideTarget`, `MultiplayerSessionManager` și managerii de interfață. Aceste componente susțin Code Quest Island, Quiz Island, Community Island, CodeWorld, provocările AI, experimentul Rocket Landing, companionul Rudolf și multiplayerul LAN cu voce. `MentoraLocalization` păstrează alegerea limbii în `PlayerPrefs`, actualizează etichetele uGUI înregistrate și oferă un punct unic pentru adăugarea traducerilor. În Android, `SocketViewModel` centralizează starea, comunicarea și limba salvată în preferințe, iar `AppLanguages` și `MainActivity` selectează contextul Compose pentru limba aleasă sau limba sistemului. Interfața Android include română, engleză, franceză și germană, alături de limbile suplimentare din selector. Componenta mobilă are și punte Kotlin Multiplatform pentru iOS, cu sesiune, autentificare, comunicare WebSocket, profiluri, taskuri, obiective și rapoarte. În web, `App.jsx` gestionează navigarea, autentificarea, editorul și preferința de limbă, `src/lib/i18n.js` păstrează catalogul de traduceri, iar `src/lib/api.js` standardizează apelurile HTTP și tratarea erorilor.
+
+Rudolf utilizează ținte de ghidare pentru insulele Python, C++, Code Quest, Quiz, Community și CodeWorld. El corelează poziția elevului și activitatea aleasă cu profilul de învățare primit de la server, incluzând progresul, răspunsurile, indiciile, punctele, obiectivele și provocările. `RobotVoiceBridge` oferă interacțiune vocală și TTS, iar `RobotLookAt` și `RudolfIslandGuideTarget` susțin orientarea vizuală și ghidarea în lumea 3D.
 
 Denumirile claselor și ale serviciilor descriu responsabilitatea lor, iar pachetele sunt grupate după domeniu: autentificare, copil, curs, joc, limbaj, AI și companion. Protocolul este extensibil prin adăugarea unui packet type, a unei clase concrete și a înregistrării în `PacketManager`.
 
@@ -94,7 +96,7 @@ Creator-ul Web este disponibil în română, engleză, franceză și germană ș
 4. Trimite soluția și primește rezultatul, scorul și explicația.
 5. Progresul, punctele și evenimentele de învățare sunt salvate pe server.
 
-6.2. Aplicația Android
+6.2. Aplicația mobilă Android și iOS
 
 1. Părintele își creează cont sau se autentifică.
 2. Adaugă ori selectează copilul.
@@ -135,9 +137,9 @@ npm run dev
 
 Dacă backendul nu este la adresa proxy implicită, se configurează `VITE_API_BASE`.
 
-7.3. Android
+7.3. Aplicația mobilă Android și iOS
 
-Se deschide directorul `kotlin-app` în Android Studio, se sincronizează Gradle, se selectează un emulator sau un dispozitiv cu Android 7.0+ și se rulează configurația `app`. Dispozitivul trebuie să poată ajunge la serverul WebSocket.
+Pentru Android se deschide directorul `kotlin-app` în Android Studio, se sincronizează Gradle, se selectează un emulator sau un dispozitiv cu Android 7.0+ și se rulează configurația `app`. Pentru iOS, modulul Kotlin Multiplatform generează puntea Swift pentru aplicația mobilă, iar proiectul iOS se deschide în Xcode și se configurează pentru un simulator sau dispozitiv Apple. Aplicația mobilă trebuie să poată ajunge la serverul WebSocket.
 
 7.4. Unity
 

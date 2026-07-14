@@ -51,9 +51,10 @@ Pentru dezvoltare
 - Minimum 15 GB spațiu liber pentru proiect, cache și pachete.
 - Placă video dedicată recomandată pentru editarea scenelor HDRP.
 
-5. CERINȚE PENTRU APLICAȚIA ANDROID
+5. CERINȚE PENTRU APLICAȚIA MOBILĂ ANDROID ȘI iOS
 
-- Android 7.0 sau mai nou (`minSdk 24`).
+- Android 7.0 sau mai nou (`minSdk 24`) pentru varianta Android.
+- iOS compatibil cu versiunea Xcode și SDK-ul folosite pentru buildul iOS.
 - Minimum 2 GB memorie RAM.
 - Aproximativ 100 MB spațiu liber pentru aplicație și date.
 - Internet sau acces la rețeaua serverului.
@@ -62,7 +63,7 @@ Pentru dezvoltare
 
 Aplicația utilizează permisiuni pentru internet, verificarea stării rețelei, cameră și notificări, oferind conectare QR și actualizări relevante pentru părinte.
 
-Pentru dezvoltare sunt necesare Android Studio, Android SDK compatibil, JDK configurat de Android Studio și un emulator ori dispozitiv fizic cu Android 7.0+.
+Pentru dezvoltare Android sunt necesare Android Studio, Android SDK compatibil, JDK configurat de Android Studio și un emulator ori dispozitiv fizic cu Android 7.0+. Pentru iOS sunt necesare macOS, Xcode, iOS SDK și un simulator sau dispozitiv Apple. Modulul Kotlin Multiplatform oferă puntea comună pentru autentificare, WebSocket, profiluri, taskuri, obiective și rapoarte.
 
 6. CERINȚE PENTRU EDITORUL WEB
 
@@ -100,4 +101,4 @@ Configurarea rețelei permite dispozitivelor din LAN să comunice pe porturile n
 
 9. REZUMAT
 
-Mentora poate fi demonstrată pe un calculator Linux care rulează serverul, PostgreSQL, Python și G++, împreună cu un dispozitiv Android, un browser modern și una sau mai multe instanțe Unity. Arhitectura permite dimensionarea resurselor serverului în funcție de numărul de utilizatori simultani și de frecvența execuțiilor de cod sau a cererilor AI.
+Mentora poate fi demonstrată pe un calculator Linux care rulează serverul, PostgreSQL, Python și G++, împreună cu un dispozitiv Android sau iOS, un browser modern și una sau mai multe instanțe Unity pe Windows, Linux, Android sau iOS/VR. Arhitectura permite dimensionarea resurselor serverului în funcție de numărul de utilizatori simultani și de frecvența execuțiilor de cod sau a cererilor AI.
