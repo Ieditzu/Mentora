@@ -169,7 +169,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         }
         appLanguage.value = languageTag
         prefs.edit().putString(APP_LANGUAGE_KEY, languageTag).apply()
-        sendPacket(SetClientLanguagePacket(AppLanguages.resolve(languageTag, getApplication<Application>().resources.configuration)))
+        sendPacket(HandShakePacket("android_client;lang=${AppLanguages.resolve(languageTag, getApplication<Application>().resources.configuration)}"))
     }
 
     fun logout() {
@@ -375,8 +375,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         override fun onOpen(handshakedata: ServerHandshake?) {
             Log.d("Mentora", "Socket opened")
             _isConnected.value = true
-            send(HandShakePacket("android_client").encode())
-            send(SetClientLanguagePacket(AppLanguages.resolve(appLanguage.value, getApplication<Application>().resources.configuration)).encode())
+            send(HandShakePacket("android_client;lang=${AppLanguages.resolve(appLanguage.value, getApplication<Application>().resources.configuration)}").encode())
             
             if (savedEmailHash != null && savedPasswordHash != null) {
                 send(AuthPacket(savedEmailHash, savedPasswordHash).encode())
