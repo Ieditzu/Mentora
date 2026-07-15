@@ -125,7 +125,10 @@ private struct AuthenticationView: View {
             }
         }
         .animation(.easeInOut(duration: 1.2), value: glowOffset)
-        .onAppear { glowOffset = true }
+        .onAppear {
+            glowOffset = true
+            if email.isEmpty { email = appModel.email }
+        }
         .preferredColorScheme(nil)
     }
 

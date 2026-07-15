@@ -35,7 +35,7 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
                     .tint(MentoraTheme.danger)
                 }
-                .padding(24)
+                .padding(16)
                 .padding(.bottom, 108)
             }
         }

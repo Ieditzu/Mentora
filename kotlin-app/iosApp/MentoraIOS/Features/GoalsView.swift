@@ -53,7 +53,7 @@ struct GoalsView: View {
                         emptyState
                     }
                 }
-                .padding(24)
+                .padding(16)
                 .padding(.bottom, 108)
             }
         }

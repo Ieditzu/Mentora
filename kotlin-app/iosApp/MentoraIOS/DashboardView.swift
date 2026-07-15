@@ -36,41 +36,37 @@ struct DashboardView: View {
     private var accent: Color { MentoraAccentPalette.color(for: accentIdentifier) }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Circle()
-                .fill(accent.opacity(0.16))
-                .frame(width: 420, height: 420)
-                .blur(radius: 96)
-                .offset(x: -150, y: -340)
-            Circle()
-                .fill(accent.opacity(0.10))
-                .frame(width: 500, height: 500)
-                .blur(radius: 110)
-                .offset(x: 190, y: 360)
-            NavigationStack {
-                selectedScreen
-                    .toolbar {
-                        ToolbarItem(placement: .principal) {
-                            Text("MENTORA")
-                                .font(.subheadline.weight(.black))
-                                .tracking(2)
-                        }
-                        if selectedTab == .home {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button { store.loadDashboard() } label: {
-                                    Image(systemName: "arrow.clockwise")
+        GeometryReader { proxy in
+            let compact = proxy.size.width < 390 || proxy.size.height < 700
+            ZStack(alignment: .bottom) {
+                NavigationStack {
+                    selectedScreen
+                        .toolbar {
+                            ToolbarItem(placement: .principal) {
+                                Text("MENTORA")
+                                    .font(.subheadline.weight(.black))
+                                    .tracking(2)
+                            }
+                            if selectedTab == .home {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button { store.loadDashboard() } label: {
+                                        Image(systemName: "arrow.clockwise")
+                                    }
+                                    .tint(accent)
+                                    .accessibilityLabel("Refresh")
                                 }
-                                .tint(accent)
-                                .accessibilityLabel("Refresh")
                             }
                         }
-                    }
-            }
-            .preferredColorScheme(isDarkMode ? .dark : nil)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .preferredColorScheme(isDarkMode ? .dark : nil)
 
-            floatingTabBar
-                .padding(.horizontal, 24)
-                .padding(.bottom, 18)
+                floatingTabBar
+                    .padding(.horizontal, compact ? 12 : 24)
+                    .padding(.bottom, compact ? 8 : 18)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
         }
         .sheet(item: $qrChild) { child in
             QRLoginSheet(child: child) { token in
@@ -138,7 +134,7 @@ struct DashboardView: View {
                 .accessibilityHint(tab == .home || store.selectedChildID != nil ? "Open \(tab.title)" : "Select a child first")
             }
         }
-        .padding(8)
+        .padding(6)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.primary.opacity(0.10), lineWidth: 1))
         .shadow(color: .black.opacity(0.14), radius: 16, y: 8)

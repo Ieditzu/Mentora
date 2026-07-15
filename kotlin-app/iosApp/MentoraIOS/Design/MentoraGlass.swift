@@ -62,18 +62,28 @@ struct GlassBackground<Content: View>: View {
     var body: some View {
         ZStack {
             Color(uiColor: .systemBackground).ignoresSafeArea()
-            Circle()
-                .fill(accent.opacity(0.18))
-                .frame(width: 310, height: 310)
-                .blur(radius: 72)
-                .offset(x: -125, y: -300)
-            Circle()
-                .fill(accent.opacity(0.12))
-                .frame(width: 360, height: 360)
-                .blur(radius: 88)
-                .offset(x: 150, y: 350)
+            GeometryReader { proxy in
+                ZStack {
+                    Circle()
+                        .fill(accent.opacity(0.18))
+                        .frame(width: min(310, proxy.size.width), height: min(310, proxy.size.width))
+                        .blur(radius: 72)
+                        .position(x: 30, y: 40)
+                    Circle()
+                        .fill(accent.opacity(0.12))
+                        .frame(width: min(360, proxy.size.width), height: min(360, proxy.size.width))
+                        .blur(radius: 88)
+                        .position(x: proxy.size.width - 20, y: proxy.size.height - 40)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
+            }
+            .allowsHitTesting(false)
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 }
 

@@ -22,7 +22,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                .padding(24)
+                .padding(16)
                 .padding(.bottom, 108)
             }
         }
@@ -54,14 +54,16 @@ struct HomeView: View {
             store.selectChild(child.id)
             onOpenGoals?()
         } label: {
-            GlassCard(padding: 20) {
-                HStack(spacing: 16) {
-                    AvatarView(name: child.name, base64Picture: child.profilePicture, accent: MentoraTheme.accent, size: 60)
+            GlassCard(padding: 16) {
+                HStack(spacing: 12) {
+                    AvatarView(name: child.name, base64Picture: child.profilePicture, accent: MentoraTheme.accent, size: 52)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 7) {
                             Text(child.name)
                                 .font(.title3.weight(.heavy))
                                 .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                             if child.isOnline {
                                 Circle().fill(MentoraTheme.success).frame(width: 8, height: 8)
                                     .accessibilityLabel("Online")
@@ -71,14 +73,15 @@ struct HomeView: View {
                             .font(.subheadline)
                             .foregroundStyle(MentoraTheme.accent)
                     }
-                    Spacer(minLength: 8)
+                    .layoutPriority(1)
+                    Spacer(minLength: 4)
                     Button {
                         onRequestGameLogin?(child.id, child.name)
                     } label: {
                         Image(systemName: child.isOnline ? "desktopcomputer" : "qrcode.viewfinder")
                             .font(.headline)
                             .foregroundStyle(child.isOnline ? MentoraTheme.danger : MentoraTheme.accent)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 40, height: 40)
                             .background((child.isOnline ? MentoraTheme.danger : MentoraTheme.accent).opacity(0.12), in: Circle())
                     }
                     .buttonStyle(.plain)
