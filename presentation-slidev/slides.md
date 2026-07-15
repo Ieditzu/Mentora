@@ -166,23 +166,27 @@ PERSOANA 1: CodeWorld răspunde direct criteriului de utilitate și interactivit
 -->
 
 ---
-layout: image-right
-image: /RudolfGuide2.png
-backgroundSize: cover
-class: visual-split
----
 
 <div class="speaker-tag">Persoana 2</div>
 <div class="kicker">Companion educațional</div>
 
 # Rudolf: ghid personal, contextual și vocal
 
-- Îl poate conduce pe elev către Python, C++, Code Quest, Quiz, Community sau CodeWorld.
-- Reacționează la poziția elevului, activitatea aleasă și rezultatele obținute.
-- Folosește mesaje în joc, orientare vizuală, voice bridge și text-to-speech.
-- Are acces contextual la profil: progres, răspunsuri, indicii, puncte, obiective și provocări.
-
-<div class="card cyan" style="margin-top:.8rem"><strong>Rolul lui Rudolf:</strong> transformă datele despre progres într-o recomandare clară, pe înțelesul copilului.</div>
+<div class="rudolf-layout">
+  <div class="rudolf-copy">
+    <ul>
+      <li>Îl conduce pe elev către Python, C++, Code Quest, Quiz, Community sau CodeWorld.</li>
+      <li>Reacționează la poziție, activitatea aleasă și rezultatele obținute.</li>
+      <li>Folosește dialog în joc, orientare vizuală, voice bridge și text-to-speech.</li>
+      <li>Are acces contextual la profil: progres, răspunsuri, indicii, puncte și obiective.</li>
+    </ul>
+    <div class="card cyan"><strong>Rolul lui Rudolf:</strong> transformă datele despre progres într-o recomandare clară, pe înțelesul copilului.</div>
+  </div>
+  <div class="rudolf-gallery">
+    <figure><img src="./public/RudolfGuide2.png" /><figcaption>Ghidare vizuală către insula potrivită</figcaption></figure>
+    <figure><img src="./public/rudolfAnswer.png" /><figcaption>Dialog contextual și răspuns personalizat</figcaption></figure>
+  </div>
+</div>
 
 <!--
 PERSOANA 2: Rudolf este mai mult decât un personaj decorativ. El leagă lumea 3D de profilul elevului: poate oferi ghidaj către activitatea potrivită și explicații adaptate contextului real al copilului.
@@ -517,34 +521,13 @@ PERSOANA 1: Documentația este separată logic. Avem informațiile generale pent
 
 ---
 
-<div class="speaker-tag">Persoana 2</div>
-<div class="kicker">Acoperirea regulamentului · 100 puncte</div>
-
-# Fiecare capitol este susținut de implementarea proiectului
-
-<div style="margin-top:.7rem">
-  <div class="rule-line"><span class="chapter">I · 10p</span><span class="proof">Arhitectură multi-client, tehnologii justificate, model modular și rulare pe mai multe dispozitive.</span><span class="score">10 / 10</span></div>
-  <div class="rule-line"><span class="chapter">II · 20p</span><span class="proof">Module extensibile, protocol, sandbox, testare de fluxuri, Git, securitate și distribuire.</span><span class="score">20 / 20</span></div>
-  <div class="rule-line"><span class="chapter">III · 10p</span><span class="proof">Interfață 3D, web și mobil; rezoluții adaptabile, navigare intuitivă și RO/EN/FR/DE.</span><span class="score">10 / 10</span></div>
-  <div class="rule-line"><span class="chapter">IV · 40p</span><span class="proof">Cod real, simulări, quiz-uri, feedback, profil AI, cursuri gestionabile și conținut verificabil.</span><span class="score">40 / 40</span></div>
-  <div class="rule-line"><span class="chapter">V · 10p</span><span class="proof">Circuit elev–părinte–creator, CodeWorld colaborativ, Code Quest procedural și Rudolf contextual.</span><span class="score">10 / 10</span></div>
-  <div class="rule-line"><span class="chapter">VI · 10p</span><span class="proof">Prezentare coerentă, documentație generală, tehnică și de sistem, plus ghid de instalare și utilizare.</span><span class="score">10 / 10</span></div>
-</div>
-
-<div class="card green" style="margin-top:1rem;text-align:center"><strong>Mentora demonstrează nu doar o idee, ci un produs educațional complet, interactiv și extensibil.</strong></div>
-
-<!--
-PERSOANA 2: Acesta este rezumatul raportat direct la barem. Fiecare capitol are o funcționalitate și o parte de implementare pe care o putem demonstra în aplicație și în documentație.
--->
-
----
-
 <div class="speaker-tag">Persoana 1 + Persoana 2</div>
 <img src="./public/game_picture.png" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" />
 <div class="cover-overlay" />
 <div class="cover-content">
   <div class="kicker">Concluzie</div>
   <h1 class="cover-title" style="font-size:4.2rem">În Mentora, elevul <span>construiește</span> ca să învețe.</h1>
+  <p class="final-motto">Mentora demonstrează nu doar o idee, ci un produs educațional complet, interactiv și extensibil.</p>
   <p class="cover-subtitle">Cod · explorare 3D · feedback · AI · colaborare · familie · conținut creat de comunitate.</p>
   <div class="pill-row" style="margin-top:1.5rem"><span class="pill">Mulțumim!</span><span class="pill">Urmează demonstrația live</span></div>
 </div>

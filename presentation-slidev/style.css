@@ -583,6 +583,78 @@
 .visual-split h1 { font-size: 2.65rem; }
 .visual-split li { margin: .34rem 0; }
 
+.rudolf-layout {
+  display: grid;
+  grid-template-columns: 42% 58%;
+  gap: 1.2rem;
+  align-items: stretch;
+  margin-top: .8rem;
+}
+
+.rudolf-copy {
+  display: flex;
+  flex-direction: column;
+  gap: .7rem;
+}
+
+.rudolf-copy ul {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.rudolf-copy .card {
+  flex: 1;
+  min-height: 7rem;
+}
+
+.rudolf-gallery {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.rudolf-gallery figure {
+  position: relative;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid rgba(50,216,199,.34);
+  border-radius: 1rem;
+  background: #080a10;
+  box-shadow: 0 18px 45px rgba(0,0,0,.35);
+}
+
+.rudolf-gallery img {
+  display: block;
+  width: 100%;
+  height: 13rem;
+  object-fit: cover;
+}
+
+.rudolf-gallery figcaption {
+  position: absolute;
+  left: .65rem;
+  bottom: .55rem;
+  padding: .34rem .58rem;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  background: rgba(5,7,13,.84);
+  color: #f5f7fb;
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+.final-motto {
+  max-width: 43rem;
+  margin: 1rem 0 .75rem;
+  padding-left: 1rem;
+  border-left: 4px solid var(--mentora-green);
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .tall-grid > .card { min-height: 15.5rem; }
 .large-grid > .card { min-height: 17rem; }
 .security-grid > .card { min-height: 23rem; }
