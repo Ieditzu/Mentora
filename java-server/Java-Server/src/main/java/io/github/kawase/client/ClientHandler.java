@@ -102,13 +102,17 @@ public class ClientHandler {
 
                 case RegisterParentPacket registerParentPacket -> {
                     System.out.println("Register Parent: " + registerParentPacket.getEmail());
-                    final var parent = Server.getInstance().getParentService().createParentAccount(
-                            registerParentPacket.getEmail(),
-                            registerParentPacket.getPasswordHash()
-                    );
-                    client.setAuth(true);
-                    client.setParentId(parent.getId());
-                    connection.send(new ActionResponsePacket(packet.getId(), true, "Registered successfully", parent.getId()).encode());
+                    try {
+                        final var parent = Server.getInstance().getParentService().createParentAccount(
+                                registerParentPacket.getEmail(),
+                                registerParentPacket.getPasswordHash()
+                        );
+                        client.setAuth(true);
+                        client.setParentId(parent.getId());
+                        connection.send(new ActionResponsePacket(packet.getId(), true, "Registered successfully", parent.getId()).encode());
+                    } catch (RuntimeException exception) {
+                        connection.send(new ActionResponsePacket(packet.getId(), false, exception.getMessage(), -1).encode());
+                    }
                 }
 
                 case AddChildPacket addChildPacket -> {
