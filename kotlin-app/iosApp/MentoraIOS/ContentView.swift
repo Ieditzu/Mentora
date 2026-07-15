@@ -25,49 +25,51 @@ private struct AuthenticationView: View {
     private var isSubmitting: Bool { store.authenticationState.isPending }
 
     var body: some View {
-        ZStack {
-            Color(uiColor: .systemBackground).ignoresSafeArea()
-            Circle()
-                .fill(MentoraTheme.accent.opacity(0.40))
-                .frame(width: 520, height: 520)
-                .blur(radius: 80)
-                .offset(x: glowOffset ? 180 : -180, y: glowOffset ? -250 : -90)
-            Circle()
-                .fill(MentoraTheme.secondary.opacity(0.30))
-                .frame(width: 460, height: 460)
-                .blur(radius: 90)
-                .offset(x: glowOffset ? -160 : 180, y: glowOffset ? 310 : 180)
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 760
+            ZStack {
+                Color(uiColor: .systemBackground).ignoresSafeArea()
+                Circle()
+                    .fill(MentoraTheme.accent.opacity(0.34))
+                    .frame(width: compact ? 360 : 520, height: compact ? 360 : 520)
+                    .blur(radius: compact ? 56 : 80)
+                    .offset(x: glowOffset ? 130 : -130, y: glowOffset ? -210 : -70)
+                Circle()
+                    .fill(MentoraTheme.secondary.opacity(0.25))
+                    .frame(width: compact ? 320 : 460, height: compact ? 320 : 460)
+                    .blur(radius: compact ? 60 : 90)
+                    .offset(x: glowOffset ? -120 : 130, y: glowOffset ? 290 : 160)
 
-            ScrollView {
+                ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    Spacer(minLength: 42)
+                    Spacer(minLength: compact ? 16 : 42)
                     Image(systemName: "graduationcap.fill")
-                        .font(.system(size: 76, weight: .black))
+                        .font(.system(size: compact ? 56 : 76, weight: .black))
                         .foregroundStyle(MentoraTheme.accent)
-                        .frame(width: 150, height: 150)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+                        .frame(width: compact ? 112 : 150, height: compact ? 112 : 150)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: compact ? 30 : 40, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 40, style: .continuous)
+                            RoundedRectangle(cornerRadius: compact ? 30 : 40, style: .continuous)
                                 .strokeBorder(.white.opacity(0.18), lineWidth: 1)
                         }
-                        .shadow(color: MentoraTheme.accent.opacity(0.30), radius: 28, y: 14)
+                        .shadow(color: MentoraTheme.accent.opacity(0.30), radius: compact ? 18 : 28, y: 10)
 
                     VStack(spacing: 6) {
                         Text("app_name")
-                            .font(.system(size: 36, weight: .black, design: .rounded))
+                            .font(.system(size: compact ? 30 : 36, weight: .black, design: .rounded))
                         Text("parent_learning_companion")
-                            .font(.subheadline.weight(.medium))
+                            .font((compact ? Font.caption : Font.subheadline).weight(.medium))
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 28)
+                    .padding(.top, compact ? 16 : 28)
 
-                    GlassCard(padding: 28, cornerRadius: 32) {
+                    GlassCard(padding: compact ? 20 : 28, cornerRadius: compact ? 24 : 32) {
                         VStack(spacing: 0) {
                             Text(isRegistering ? "Create account" : "Login")
-                                .font(.title2.weight(.bold))
+                                .font((compact ? Font.title3 : Font.title2).weight(.bold))
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            VStack(spacing: 18) {
+                            VStack(spacing: compact ? 12 : 18) {
                                 authField(icon: "envelope.fill", isEmail: true) {
                                     TextField("email_address", text: $email)
                                 }
@@ -75,7 +77,7 @@ private struct AuthenticationView: View {
                                     SecureField("password", text: $password)
                                 }
                             }
-                            .padding(.top, 28)
+                            .padding(.top, compact ? 18 : 28)
 
                             Button(action: submit) {
                                 HStack(spacing: 10) {
@@ -85,13 +87,13 @@ private struct AuthenticationView: View {
                                     Text(buttonTitle).font(.headline.weight(.heavy))
                                 }
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 60)
+                                .frame(height: compact ? 52 : 60)
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.white)
                             .background(MentoraTheme.accent, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .shadow(color: MentoraTheme.accent.opacity(0.38), radius: 12, y: 7)
-                            .padding(.top, 34)
+                            .padding(.top, compact ? 22 : 34)
                             .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty || isSubmitting)
                             .opacity(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty ? 0.55 : 1)
 
@@ -101,13 +103,13 @@ private struct AuthenticationView: View {
                             }
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(MentoraTheme.accent)
-                            .padding(.top, 16)
+                            .padding(.top, compact ? 12 : 16)
                         }
                     }
-                    .padding(.top, 38)
+                    .padding(.top, compact ? 22 : 38)
 
                     connectionStatus
-                        .padding(.top, 22)
+                        .padding(.top, compact ? 12 : 22)
                     if let error = store.lastErrorMessage {
                         Text(error)
                             .font(.footnote)
@@ -115,9 +117,11 @@ private struct AuthenticationView: View {
                             .multilineTextAlignment(.center)
                             .padding(.top, 12)
                     }
-                    Spacer(minLength: 42)
+                    Spacer(minLength: compact ? 16 : 42)
                 }
-                .padding(.horizontal, 24)
+                .frame(minHeight: proxy.size.height)
+                .padding(.horizontal, compact ? 20 : 24)
+                }
             }
         }
         .animation(.easeInOut(duration: 1.2), value: glowOffset)
@@ -141,10 +145,6 @@ private struct AuthenticationView: View {
                 Text(store.connectionState == .reconnecting ? "Reconnecting securely…" : "Connecting securely…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
-                Label("Secure server connection ready", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(MentoraTheme.success)
             }
         }
     }
@@ -161,7 +161,7 @@ private struct AuthenticationView: View {
                 .textContentType(isEmail ? .emailAddress : .password)
         }
         .padding(.horizontal, 16)
-        .frame(height: 58)
+        .frame(height: 54)
         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
