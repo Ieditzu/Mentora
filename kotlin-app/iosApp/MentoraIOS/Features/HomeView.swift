@@ -4,6 +4,7 @@ import MentoraShared
 struct HomeView: View {
     @ObservedObject var store: MentoraLiveStore
     var onOpenGoals: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
     var onRequestGameLogin: ((Int64, String) -> Void)?
 
     var body: some View {
@@ -40,6 +41,9 @@ struct HomeView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            Button("Add a child") { onOpenSettings?() }
+                .buttonStyle(.borderedProminent)
+                .tint(MentoraTheme.accent)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 80)
@@ -52,7 +56,7 @@ struct HomeView: View {
         } label: {
             GlassCard(padding: 20) {
                 HStack(spacing: 16) {
-                    AvatarView(name: child.name, accent: MentoraTheme.accent, size: 60)
+                    AvatarView(name: child.name, base64Picture: child.profilePicture, accent: MentoraTheme.accent, size: 60)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 7) {
                             Text(child.name)

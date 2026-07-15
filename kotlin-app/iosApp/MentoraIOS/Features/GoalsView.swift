@@ -7,6 +7,7 @@ struct GoalsView: View {
     @ObservedObject var store: MentoraLiveStore
     @State private var challenge = ""
     @State private var showingNewGoal = false
+    @State private var selectedInsight: ServerInsight?
 
     private let accent = MentoraTheme.accent
 
@@ -70,6 +71,9 @@ struct GoalsView: View {
             if let child {
                 NewGoalSheet(childID: child.id, tasks: store.snapshot.tasks, store: store)
             }
+        }
+        .sheet(item: $selectedInsight) { insight in
+            InsightDetailSheet(insight: insight)
         }
         .task(id: store.selectedChildID) {
             if let childID = store.selectedChildID {
@@ -250,18 +254,7 @@ struct GoalsView: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             } else {
                 ForEach(insights) { insight in
-                    GlassCard(padding: 16, cornerRadius: 20) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text(insight.title).font(.headline.weight(.heavy)).foregroundStyle(insight.accent)
-                                Spacer()
-                                Text("\(insight.score)%").font(.headline.weight(.black)).foregroundStyle(insight.accent)
-                            }
-                            if !insight.strengths.isEmpty { insightRow("Strengths", insight.strengths, color: MentoraTheme.success) }
-                            if !insight.needsSupport.isEmpty { insightRow("Needs help", insight.needsSupport, color: MentoraTheme.danger) }
-                            if !insight.summary.isEmpty { Text(insight.summary).font(.caption).foregroundStyle(.secondary) }
-                        }
-                    }
+                    InsightCard(insight: insight) { selectedInsight = insight }
                 }
             }
         }
@@ -324,32 +317,73 @@ private struct NewGoalSheet: View {
     @State private var requiredTaskID: Int64 = -1
     @State private var usesPoints = true
 
+    private var isValid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !reward.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (usesPoints ? (Int(points) ?? 0) > 0 : requiredTaskID != -1)
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Goal") {
-                    TextField("Goal title", text: $title)
-                    TextField("Reward", text: $reward)
-                }
-                Section("How to complete") {
-                    Picker("Requirement", selection: $usesPoints) {
-                        Text("Points").tag(true)
-                        Text("A task").tag(false)
-                    }.pickerStyle(.segmented)
-                    if usesPoints {
-                        TextField("Points required", text: $points)
-                            .keyboardType(.numberPad)
-                    } else if tasks.isEmpty {
-                        Text("No tasks have been loaded yet.").foregroundStyle(.secondary)
-                    } else {
-                        Picker("Task", selection: $requiredTaskID) {
-                            Text("Choose a task").tag(Int64(-1))
-                            ForEach(tasks, id: \.id) { task in
-                                Text("\(task.name) (\(task.points) points)").tag(task.id)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Choose a reward, then decide whether it is unlocked by points or one specific task.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("GOAL").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        TextField("Goal title", text: $title)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Reward", text: $reward)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("HOW TO COMPLETE").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            requirementButton(title: "Points", icon: "star.fill", selected: usesPoints) {
+                                usesPoints = true
+                            }
+                            requirementButton(title: "A task", icon: "checklist", selected: !usesPoints) {
+                                usesPoints = false
+                            }
+                        }
+                        if usesPoints {
+                            TextField("Points required", text: $points)
+                                .textFieldStyle(.roundedBorder)
+                                .keyboardType(.numberPad)
+                            Text("The reward unlocks when the child reaches this total.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else if tasks.isEmpty {
+                            Label("No tasks have been loaded yet.", systemImage: "arrow.clockwise")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        } else {
+                            Text("SELECT A TASK").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                            LazyVStack(spacing: 8) {
+                                ForEach(tasks, id: \.id) { task in
+                                    Button { requiredTaskID = task.id } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: requiredTaskID == task.id ? "checkmark.circle.fill" : "circle")
+                                                .font(.title3)
+                                                .foregroundStyle(requiredTaskID == task.id ? MentoraTheme.accent : .secondary)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(task.name).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                                                Text("\(task.points) points").font(.caption).foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                        }
+                                        .padding(12)
+                                        .background(requiredTaskID == task.id ? MentoraTheme.accent.opacity(0.13) : .primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(requiredTaskID == task.id ? MentoraTheme.accent : .primary.opacity(0.08), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
                 }
+                .padding(20)
             }
             .navigationTitle("New goal")
             .toolbar {
@@ -360,10 +394,23 @@ private struct NewGoalSheet: View {
                         store.addGoal(childID: childID, title: title, reward: reward, requiredPoints: requiredPoints, requiredTaskID: usesPoints ? -1 : requiredTaskID)
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || reward.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (!usesPoints && requiredTaskID == -1) || !store.isConnected)
+                    .disabled(!isValid || !store.isConnected)
                 }
             }
         }
+    }
+
+    private func requirementButton(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .foregroundStyle(selected ? .white : .primary)
+                .background(selected ? MentoraTheme.accent : .primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -375,6 +422,176 @@ private struct ServerInsight: Identifiable {
     let needsSupport: [String]
     let score: Int
     let summary: String
+    let detailedSummary: String
+    let level: String
+    let totalInteractions: Int
+    let correctCount: Int
+    let incorrectCount: Int
+    let hintsUsed: Int
+    let chatTurns: Int
+    let struggles: [String]
+    let commonMistakes: [String]
+    let helpTopics: [String]
+    let recentMistakes: [String]
+}
+
+private struct InsightCard: View {
+    let insight: ServerInsight
+    let onShowDetails: () -> Void
+    @State private var isExpanded = false
+
+    var body: some View {
+        GlassCard(padding: 16, cornerRadius: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Button { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Text(insight.title)
+                                .font(.headline.weight(.heavy))
+                                .foregroundStyle(insight.accent)
+                            Text(insight.level)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(insight.score)%")
+                                .font(.headline.weight(.black))
+                                .foregroundStyle(insight.accent)
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(insight.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(isExpanded ? nil : 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(insight.title) learning insight")
+                .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
+
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(insight.detailedSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            MentoraMetric(label: "Correct", value: "\(insight.correctCount)", tint: MentoraTheme.success)
+                            MentoraMetric(label: "Wrong", value: "\(insight.incorrectCount)", tint: MentoraTheme.danger)
+                            MentoraMetric(label: "Hints", value: "\(insight.hintsUsed)", tint: MentoraTheme.warning)
+                        }
+                        if !insight.strengths.isEmpty { insightRow("Strengths", insight.strengths, color: MentoraTheme.success) }
+                        if !insight.needsSupport.isEmpty { insightRow("Needs help", insight.needsSupport, color: MentoraTheme.danger) }
+                        Button(action: onShowDetails) {
+                            Label("View full details", systemImage: "chart.bar.doc.horizontal")
+                                .font(.subheadline.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(insight.accent)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+        }
+    }
+
+    private func insightRow(_ title: String, _ items: [String], color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title).font(.caption.weight(.bold)).foregroundStyle(color).frame(width: 76, alignment: .leading)
+            Text(items.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct InsightDetailSheet: View {
+    let insight: ServerInsight
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(insight.title) profile")
+                            .font(.title2.weight(.black))
+                            .foregroundStyle(insight.accent)
+                        Text(insight.detailedSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 10) {
+                        detailMetric("Level", insight.level, tint: insight.accent)
+                        detailMetric("Accuracy", "\(insight.score)%", tint: insight.accent)
+                        detailMetric("Attempts", "\(insight.correctCount + insight.incorrectCount)", tint: .secondary)
+                    }
+
+                    detailSection("Performance") {
+                        detailRow("Total interactions", "\(insight.totalInteractions)")
+                        detailRow("Correct / incorrect", "\(insight.correctCount) / \(insight.incorrectCount)")
+                        detailRow("Hints used", "\(insight.hintsUsed)")
+                        detailRow("AI chat turns", "\(insight.chatTurns)")
+                    }
+
+                    detailList("Strengths", insight.strengths, tint: MentoraTheme.success)
+                    detailList("Needs help with", insight.needsSupport, tint: MentoraTheme.danger)
+                    detailList("Struggle concepts", insight.struggles, tint: MentoraTheme.warning)
+                    detailList("Common mistakes", insight.commonMistakes, tint: MentoraTheme.danger)
+                    detailList("Asked AI about", insight.helpTopics, tint: insight.accent)
+                    detailList("Recent mistakes", insight.recentMistakes, tint: MentoraTheme.warning)
+                }
+                .padding(20)
+            }
+            .navigationTitle("Learning details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func detailMetric(_ label: String, _ value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value).font(.headline.weight(.black)).foregroundStyle(tint)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func detailSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline.weight(.bold))
+            content()
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.subheadline).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.subheadline.weight(.semibold))
+        }
+    }
+
+    @ViewBuilder
+    private func detailList(_ title: String, _ values: [String], tint: Color) -> some View {
+        if !values.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title).font(.headline.weight(.bold)).foregroundStyle(tint)
+                ForEach(values, id: \.self) { value in
+                    Label(value, systemImage: "circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+        }
+    }
 }
 
 private struct ServerProfileData {
@@ -398,6 +615,11 @@ private struct ServerProfileData {
             let topicScores = Self.topicScores(profile["topics"] as? [String: Any])
             let strengths = topicScores.filter { $0.value > 0 }.sorted { $0.value > $1.value }.prefix(3).map(\.key)
             let needsHelp = topicScores.filter { $0.value < 0 }.sorted { $0.value < $1.value }.prefix(3).map(\.key)
+            let conceptScores = Self.topicScores(profile["concepts"] as? [String: Any])
+            let struggles = conceptScores.filter { $0.value < 0 }.sorted { $0.value < $1.value }.prefix(3).map(\.key)
+            let helpTopics = Self.helpTopics(profile["concepts"] as? [String: Any])
+            let commonMistakes = Self.countedKeys(profile["mistakes"] as? [String: Any])
+            let recentMistakes = Self.recentMistakes(profile["recentEvents"] as? [Any])
             for (topic, values) in Self.topicStats(profile["topics"] as? [String: Any]) {
                 Self.axes.forEach { axis in
                     guard Self.matches(topic, axis: axis) else { return }
@@ -413,8 +635,33 @@ private struct ServerProfileData {
                 }
             }
             let title = key.replacingOccurrences(of: "aiProfile", with: "")
-            let summary = (profile["summaryOneLine"] as? String) ?? (profile["summaryText"] as? String) ?? ""
-            return ServerInsight(id: key, title: title.isEmpty ? "General" : title, accent: color, strengths: strengths, needsSupport: needsHelp, score: total == 0 ? 0 : Int((Double(correct) / Double(total) * 100).rounded()), summary: summary)
+            let score = total == 0 ? 0 : Int((Double(correct) / Double(total) * 100).rounded())
+            let level = (profile["level"] as? String) ?? Self.level(forTotal: total, accuracy: score)
+            let summary = (profile["summaryOneLine"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? (total == 0 ? "No activity yet." : "\(level) level - \(score)% accuracy across \(total) attempts.")
+            let detailedSummary = (profile["summaryThreeLine"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? (profile["summaryText"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? Self.detailSummary(summary: summary, strengths: strengths, needsHelp: needsHelp)
+            return ServerInsight(
+                id: key,
+                title: title.isEmpty ? "General" : title,
+                accent: color,
+                strengths: strengths,
+                needsSupport: needsHelp,
+                score: score,
+                summary: summary,
+                detailedSummary: detailedSummary,
+                level: level,
+                totalInteractions: (profile["totalInteractions"] as? NSNumber)?.intValue ?? total,
+                correctCount: correct,
+                incorrectCount: incorrect,
+                hintsUsed: (profile["hintsUsed"] as? NSNumber)?.intValue ?? 0,
+                chatTurns: (profile["chatTurns"] as? NSNumber)?.intValue ?? 0,
+                struggles: struggles,
+                commonMistakes: commonMistakes,
+                helpTopics: helpTopics,
+                recentMistakes: recentMistakes
+            )
         }
         skillScores = Dictionary(uniqueKeysWithValues: Self.axes.map { axis in
             let values = aggregate[axis] ?? (0, 0)
@@ -432,6 +679,51 @@ private struct ServerProfileData {
 
     private static func topicScores(_ topics: [String: Any]?) -> [String: Int] {
         topicStats(topics).mapValues { $0.correct - $0.incorrect }
+    }
+
+    private static func level(forTotal total: Int, accuracy: Int) -> String {
+        guard total >= 4 else { return "Beginner" }
+        if accuracy >= 85 && total >= 8 { return "Advanced" }
+        return accuracy >= 65 ? "Intermediate" : "Beginner"
+    }
+
+    private static func detailSummary(summary: String, strengths: [String], needsHelp: [String]) -> String {
+        var parts = [summary]
+        if !strengths.isEmpty { parts.append("Strengths: \(strengths.joined(separator: ", ")).") }
+        if !needsHelp.isEmpty { parts.append("Needs work on: \(needsHelp.joined(separator: ", ")).") }
+        return parts.joined(separator: " ")
+    }
+
+    private static func countedKeys(_ values: [String: Any]?) -> [String] {
+        (values ?? [:])
+            .compactMap { key, value -> (String, Int)? in
+                guard let count = (value as? NSNumber)?.intValue, count > 0 else { return nil }
+                return (key, count)
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(3)
+            .map(\.0)
+    }
+
+    private static func helpTopics(_ concepts: [String: Any]?) -> [String] {
+        (concepts ?? [:])
+            .compactMap { key, value -> (String, Int)? in
+                guard let values = value as? [String: Any] else { return nil }
+                let count = (values["helpRequests"] as? NSNumber)?.intValue ?? 0
+                return count > 0 ? (key, count) : nil
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(3)
+            .map(\.0)
+    }
+
+    private static func recentMistakes(_ events: [Any]?) -> [String] {
+        (events ?? []).compactMap { item in
+            guard let event = item as? [String: Any], event["correctness"] as? String == "incorrect" else { return nil }
+            return event["topic"] as? String
+        }
+        .prefix(3)
+        .map { $0 }
     }
 
     private static func matches(_ topic: String, axis: String) -> Bool {

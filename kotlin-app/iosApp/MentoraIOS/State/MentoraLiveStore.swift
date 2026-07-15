@@ -2,6 +2,15 @@ import Foundation
 import Combine
 import MentoraShared
 
+enum MentoraAuthenticationState: Equatable {
+    case idle
+    case waitingForConnection
+    case signingIn
+    case creatingAccount
+
+    var isPending: Bool { self != .idle }
+}
+
 /// Converts Kotlin/Native byte arrays into the binary payloads expected by URLSession.
 ///
 /// The shared framework deliberately owns encryption and packet framing; Swift only
@@ -39,10 +48,12 @@ final class MentoraLiveStore: ObservableObject {
     @Published private(set) var serverURL: URL?
     @Published private(set) var lastEvent: IosMentoraEvent?
     @Published private(set) var lastErrorMessage: String?
+    @Published private(set) var authenticationState: MentoraAuthenticationState = .idle
     @Published var selectedChildID: Int64?
 
     private let client: IosMentoraClientBridge
     private let transport: MentoraWebSocketTransport
+    private var pendingAuthentication: PendingAuthentication?
 
     init(
         languageTag: String = Locale.preferredLanguages.first ?? "en",
@@ -84,11 +95,11 @@ final class MentoraLiveStore: ObservableObject {
     }
 
     func login(email: String, password: String) {
-        send(client.authenticate(email: email, password: password))
+        beginAuthentication(email: email, password: password, mode: .signIn)
     }
 
     func register(email: String, password: String) {
-        send(client.register(email: email, password: password))
+        beginAuthentication(email: email, password: password, mode: .register)
     }
 
     func setLanguage(_ languageTag: String) {
@@ -185,7 +196,12 @@ final class MentoraLiveStore: ObservableObject {
                 guard let self else { return }
                 self.connectionState = state
                 if state == .connected {
+                    self.lastErrorMessage = nil
                     self.send(self.client.handshake(clientFingerprint: "ios_client"))
+                    self.send(self.client.setLanguage(languageTag: self.snapshot.languageTag))
+                    self.flushPendingAuthentication()
+                } else if self.pendingAuthentication != nil {
+                    self.authenticationState = .waitingForConnection
                 }
             }
         }
@@ -217,12 +233,74 @@ final class MentoraLiveStore: ObservableObject {
         lastEvent = event
 
         if !event.success {
+            if event.type == "authentication" || event.requestPacketId == 3 {
+                clearPendingAuthentication()
+            }
             lastErrorMessage = event.message
             return
         }
 
+        // The Java server acknowledges registration with ActionResponsePacket rather than
+        // AuthResponsePacket. Authenticate once registration succeeds to obtain the parent
+        // session/profile and transition SwiftUI into the signed-in state.
+        if event.type == "action", event.requestPacketId == 3,
+           let pendingAuthentication, pendingAuthentication.mode == .register {
+            authenticationState = .signingIn
+            send(client.authenticate(email: pendingAuthentication.email, password: pendingAuthentication.password))
+            return
+        }
+
         if event.type == "authentication" {
+            lastErrorMessage = nil
+            clearPendingAuthentication()
             loadDashboard()
         }
     }
+
+    private func beginAuthentication(email: String, password: String, mode: PendingAuthentication.Mode) {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEmail.isEmpty, !password.isEmpty else {
+            lastErrorMessage = "Enter both an email address and password."
+            return
+        }
+
+        lastErrorMessage = nil
+        pendingAuthentication = PendingAuthentication(email: trimmedEmail, password: password, mode: mode)
+        guard isConnected else {
+            authenticationState = .waitingForConnection
+            if let serverURL {
+                transport.connect(to: serverURL)
+            }
+            return
+        }
+        flushPendingAuthentication()
+    }
+
+    private func flushPendingAuthentication() {
+        guard isConnected, let pendingAuthentication else { return }
+        switch pendingAuthentication.mode {
+        case .signIn:
+            authenticationState = .signingIn
+            send(client.authenticate(email: pendingAuthentication.email, password: pendingAuthentication.password))
+        case .register:
+            authenticationState = .creatingAccount
+            send(client.register(email: pendingAuthentication.email, password: pendingAuthentication.password))
+        }
+    }
+
+    private func clearPendingAuthentication() {
+        pendingAuthentication = nil
+        authenticationState = .idle
+    }
+}
+
+private struct PendingAuthentication {
+    enum Mode: Equatable {
+        case signIn
+        case register
+    }
+
+    let email: String
+    let password: String
+    let mode: Mode
 }

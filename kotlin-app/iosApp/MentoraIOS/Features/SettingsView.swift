@@ -10,9 +10,14 @@ struct SettingsView: View {
     @State private var developerToken = ""
     @State private var showLanguagePicker = false
     @AppStorage("mentora.darkMode") private var isDarkMode = false
+    @AppStorage(MentoraAccentPalette.storageKey) private var accentIdentifier = MentoraAccentPalette.defaultAccent.rawValue
+
+    private var accent: Color {
+        MentoraAccentPalette.color(for: accentIdentifier)
+    }
 
     var body: some View {
-        GlassBackground(accent: MentoraTheme.accent) {
+        GlassBackground(accent: accent) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     MentoraPageTitle(title: "Settings", subtitle: "Personalize Mentora for your family")
@@ -45,10 +50,15 @@ struct SettingsView: View {
                 MentoraProfilePicturePicker(onPictureReady: { picture in
                     store.updateProfilePicture(childID: -1, base64Picture: picture)
                 }) {
-                    AvatarView(name: accountName, accent: MentoraTheme.accent, size: 56)
+                    AvatarView(
+                        name: accountName,
+                        base64Picture: store.snapshot.parentProfilePicture,
+                        accent: accent,
+                        size: 56
+                    )
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Parent account").font(.caption.weight(.bold)).foregroundStyle(MentoraTheme.accent)
+                    Text("Parent account").font(.caption.weight(.bold)).foregroundStyle(accent)
                     Text(accountName).font(.headline.weight(.bold)).foregroundStyle(.primary)
                 }
                 Spacer()
@@ -82,8 +92,41 @@ struct SettingsView: View {
                 Label("Dark mode", systemImage: "moon.fill")
                     .font(.headline.weight(.bold))
             }
-            .tint(MentoraTheme.accent)
+            .tint(accent)
             Divider().overlay(.primary.opacity(0.10))
+            Text("Theme color")
+                .font(.subheadline.weight(.bold))
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+                spacing: 12
+            ) {
+                ForEach(MentoraAccentPalette.allCases) { option in
+                    Button {
+                        accentIdentifier = option.rawValue
+                    } label: {
+                        Circle()
+                            .fill(option.color)
+                            .frame(width: 44, height: 44)
+                            .overlay {
+                                Circle()
+                                    .strokeBorder(
+                                        accentIdentifier == option.rawValue ? Color.primary : Color.clear,
+                                        lineWidth: 3
+                                    )
+                            }
+                            .overlay {
+                                if accentIdentifier == option.rawValue {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.weight(.black))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Use \(option.rawValue) theme color")
+                    .accessibilityValue(accentIdentifier == option.rawValue ? "Selected" : "")
+                }
+            }
             Text("Choose whether Mentora uses its dark appearance.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -99,7 +142,12 @@ struct SettingsView: View {
                         MentoraProfilePicturePicker(onPictureReady: { picture in
                             store.updateProfilePicture(childID: child.id, base64Picture: picture)
                         }) {
-                            AvatarView(name: child.name, accent: MentoraTheme.accent, size: 46)
+                            AvatarView(
+                                name: child.name,
+                                base64Picture: child.profilePicture,
+                                accent: accent,
+                                size: 46
+                            )
                         }
                         Text(child.name).font(.headline.weight(.bold)).foregroundStyle(.primary)
                         Spacer()
@@ -122,7 +170,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(MentoraTheme.accent)
+                    .tint(accent)
                     .disabled(childName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -178,7 +226,7 @@ struct SettingsView: View {
                         Text("Use device language").foregroundStyle(.primary)
                         Spacer()
                         if appModel.selectedLanguagePreference == "system" {
-                            Image(systemName: "checkmark").foregroundStyle(MentoraTheme.accent)
+                            Image(systemName: "checkmark").foregroundStyle(accent)
                         }
                     }
                 }
@@ -192,7 +240,7 @@ struct SettingsView: View {
                         Text(language.nativeName).foregroundStyle(.primary)
                         Spacer()
                         if language.tag == appModel.selectedLanguagePreference {
-                            Image(systemName: "checkmark").foregroundStyle(MentoraTheme.accent)
+                            Image(systemName: "checkmark").foregroundStyle(accent)
                         }
                     }
                 }

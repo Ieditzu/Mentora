@@ -28,15 +28,43 @@ private enum DashboardTab: CaseIterable {
 struct DashboardView: View {
     @EnvironmentObject private var appModel: AppModel
     @AppStorage("mentora.darkMode") private var isDarkMode = false
+    @AppStorage(MentoraAccentPalette.storageKey) private var accentIdentifier = MentoraAccentPalette.defaultAccent.rawValue
     @State private var selectedTab: DashboardTab = .home
     @State private var qrChild: QRLoginTarget?
 
     private var store: MentoraLiveStore { appModel.liveStore }
+    private var accent: Color { MentoraAccentPalette.color(for: accentIdentifier) }
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            Circle()
+                .fill(accent.opacity(0.16))
+                .frame(width: 420, height: 420)
+                .blur(radius: 96)
+                .offset(x: -150, y: -340)
+            Circle()
+                .fill(accent.opacity(0.10))
+                .frame(width: 500, height: 500)
+                .blur(radius: 110)
+                .offset(x: 190, y: 360)
             NavigationStack {
                 selectedScreen
+                    .toolbar {
+                        ToolbarItem(placement: .principal) {
+                            Text("MENTORA")
+                                .font(.subheadline.weight(.black))
+                                .tracking(2)
+                        }
+                        if selectedTab == .home {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button { store.loadDashboard() } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .tint(accent)
+                                .accessibilityLabel("Refresh")
+                            }
+                        }
+                    }
             }
             .preferredColorScheme(isDarkMode ? .dark : nil)
 
@@ -63,6 +91,8 @@ struct DashboardView: View {
         case .home:
             HomeView(store: store, onOpenGoals: {
                 selectedTab = .goals
+            }, onOpenSettings: {
+                selectedTab = .settings
             }, onRequestGameLogin: { childID, childName in
                 qrChild = QRLoginTarget(id: childID, name: childName)
             })
@@ -83,16 +113,25 @@ struct DashboardView: View {
             ForEach(DashboardTab.allCases, id: \.title) { tab in
                 Button {
                     guard tab == .home || store.selectedChildID != nil else { return }
+                    if let childID = store.selectedChildID, tab == .history {
+                        store.loadChildDetails(for: childID)
+                    } else if let childID = store.selectedChildID, tab == .goals {
+                        store.loadChildDetails(for: childID)
+                    }
                     selectedTab = tab
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 18, weight: .bold))
-                        Text(tab.title)
-                            .font(.caption2.weight(.bold))
+                            .font(.system(size: 21, weight: .bold))
+                            .scaleEffect(selectedTab == tab ? 1.15 : 1)
+                        if selectedTab == tab {
+                            Circle()
+                                .fill(accent)
+                                .frame(width: 4, height: 4)
+                        }
                     }
                     .frame(maxWidth: .infinity)
-                    .foregroundStyle(selectedTab == tab ? MentoraTheme.accent : .secondary)
+                    .foregroundStyle(selectedTab == tab ? accent : .secondary)
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)

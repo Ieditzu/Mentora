@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     private let languagePreferenceKey = "mentora.languagePreference"
     private var cancellables = Set<AnyCancellable>()
     private var savedCredentials: MentoraSavedCredentials?
+    private var submittedCredentials: MentoraSavedCredentials?
 
     init() {
         selectedLanguagePreference = UserDefaults.standard.string(forKey: languagePreferenceKey) ?? "system"
@@ -29,6 +30,17 @@ final class AppModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] isLoggedIn in
                 self?.isAuthenticated = isLoggedIn
+            }
+            .store(in: &cancellables)
+        liveStore.$lastEvent
+            .compactMap { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] event in
+                guard let self, event.type == "authentication" else { return }
+                if event.success, let credentials = self.submittedCredentials {
+                    self.saveCredentials(email: credentials.email, password: credentials.password)
+                }
+                self.submittedCredentials = nil
             }
             .store(in: &cancellables)
         liveStore.$connectionState
@@ -57,13 +69,13 @@ final class AppModel: ObservableObject {
 
     func login(email: String, password: String) {
         self.email = email
-        saveCredentials(email: email, password: password)
+        submittedCredentials = MentoraSavedCredentials(email: email, password: password)
         liveStore.login(email: email, password: password)
     }
 
     func register(email: String, password: String) {
         self.email = email
-        saveCredentials(email: email, password: password)
+        submittedCredentials = MentoraSavedCredentials(email: email, password: password)
         liveStore.register(email: email, password: password)
     }
 
