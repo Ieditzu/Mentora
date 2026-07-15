@@ -73,10 +73,6 @@ public class ClientHandler {
 
             switch (packet) {
                 case HandShakePacket handShakePacket -> {
-                    final String clientFingerprint = handShakePacket.getClientFingerPrint();
-                    final int languageSeparator = clientFingerprint.indexOf(";lang=");
-                    if (languageSeparator >= 0)
-                        client.setLanguage(normalizeLanguageTag(clientFingerprint.substring(languageSeparator + 6)));
                     System.out.println("Got handshake from " + client.getHostID());
                 }
 

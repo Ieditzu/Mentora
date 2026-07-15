@@ -104,8 +104,10 @@ final class MentoraLiveStore: ObservableObject {
     }
 
     func setLanguage(_ languageTag: String) {
-        _ = client.setLanguage(languageTag: languageTag)
+        let frame = client.setLanguage(languageTag: languageTag)
         snapshot = client.snapshot()
+        guard isConnected else { return }
+        send(frame)
     }
 
     func loadDashboard() {
@@ -196,7 +198,8 @@ final class MentoraLiveStore: ObservableObject {
                 self.connectionState = state
                 if state == .connected {
                     self.lastErrorMessage = nil
-                    self.send(self.client.handshake(clientFingerprint: "ios_client;lang=\(self.snapshot.languageTag)"))
+                    self.send(self.client.handshake(clientFingerprint: "ios_client"))
+                    self.send(self.client.setLanguage(languageTag: self.snapshot.languageTag))
                     self.flushPendingAuthentication()
                 } else if self.pendingAuthentication != nil {
                     self.authenticationState = .waitingForConnection
