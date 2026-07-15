@@ -47,6 +47,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec iosApp/project.yml --project iosApp
 
+      - name: Test shared iOS protocol
+        run: ./gradlew :shared:iosSimulatorArm64Test
+
       - name: Archive app
         run: >-
           xcodebuild archive

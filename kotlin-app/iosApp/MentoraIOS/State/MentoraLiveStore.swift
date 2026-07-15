@@ -54,6 +54,7 @@ final class MentoraLiveStore: ObservableObject {
     private let client: IosMentoraClientBridge
     private let transport: MentoraWebSocketTransport
     private var pendingAuthentication: PendingAuthentication?
+    private var authenticationTimeout: DispatchWorkItem?
 
     init(
         languageTag: String = Locale.preferredLanguages.first ?? "en",
@@ -247,6 +248,7 @@ final class MentoraLiveStore: ObservableObject {
            let pendingAuthentication, pendingAuthentication.mode == .register {
             authenticationState = .signingIn
             send(client.authenticate(email: pendingAuthentication.email, password: pendingAuthentication.password))
+            scheduleAuthenticationTimeout()
             return
         }
 
@@ -286,11 +288,25 @@ final class MentoraLiveStore: ObservableObject {
             authenticationState = .creatingAccount
             send(client.register(email: pendingAuthentication.email, password: pendingAuthentication.password))
         }
+        scheduleAuthenticationTimeout()
     }
 
     private func clearPendingAuthentication() {
+        authenticationTimeout?.cancel()
+        authenticationTimeout = nil
         pendingAuthentication = nil
         authenticationState = .idle
+    }
+
+    private func scheduleAuthenticationTimeout() {
+        authenticationTimeout?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingAuthentication != nil else { return }
+            self.lastErrorMessage = "The server did not respond. Check the connection and try again."
+            self.clearPendingAuthentication()
+        }
+        authenticationTimeout = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: workItem)
     }
 }
 

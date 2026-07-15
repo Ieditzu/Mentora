@@ -29,6 +29,17 @@ class PureAes256CbcTest {
         assertContentEquals(plaintext, PureAes256Cbc.decrypt(encrypted, key, iv))
     }
 
+    @Test
+    fun `matches Java encryption for the deployed base key`() {
+        val key = hex("990a541de8656576eee8c8fc008a54dfcdea64682f2406bbfe2151b8f4e91e78")
+        val iv = ByteArray(16)
+        val seed = hex("0000000000000001")
+        val expected = hex("58be34e5765d99de39b15d440dda5762")
+
+        assertContentEquals(expected, PureAes256Cbc.encrypt(seed, key, iv))
+        assertContentEquals(seed, PureAes256Cbc.decrypt(expected, key, iv))
+    }
+
     private fun hex(value: String): ByteArray = ByteArray(value.length / 2) { index ->
         value.substring(index * 2, index * 2 + 2).toInt(16).toByte()
     }
