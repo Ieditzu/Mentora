@@ -7,6 +7,8 @@
   --mentora-ink: #080b13;
   --mentora-panel: rgba(18, 22, 35, 0.86);
   --mentora-border: rgba(255, 255, 255, 0.11);
+  --mentora-electric: #77fff1;
+  --mentora-deep-violet: #6d58ff;
 }
 
 .slidev-layout {
@@ -14,12 +16,14 @@
   padding: 2.35rem 3.15rem;
   color: #f7f8fb;
   background:
-    radial-gradient(circle at 88% 4%, rgba(139, 124, 255, 0.28), transparent 30%),
-    radial-gradient(circle at 3% 96%, rgba(50, 216, 199, 0.17), transparent 31%),
-    linear-gradient(145deg, #070910 0%, #121629 55%, #07080e 100%);
+    linear-gradient(115deg, transparent 0 68%, rgba(139,124,255,.045) 68% 69%, transparent 69%),
+    radial-gradient(circle at 88% 4%, rgba(139, 124, 255, 0.34), transparent 31%),
+    radial-gradient(circle at 3% 96%, rgba(50, 216, 199, 0.22), transparent 33%),
+    linear-gradient(145deg, #05070d 0%, #11162a 54%, #06070c 100%);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.08rem;
   line-height: 1.45;
+  overflow: hidden;
 }
 
 .slidev-layout::after {
@@ -27,8 +31,11 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: linear-gradient(rgba(255,255,255,.026) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.026) 1px, transparent 1px);
-  background-size: 36px 36px;
+  background-image:
+    linear-gradient(rgba(255,255,255,.032) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.032) 1px, transparent 1px),
+    linear-gradient(135deg, transparent 48%, rgba(50,216,199,.025) 49%, transparent 50%);
+  background-size: 36px 36px, 36px 36px, 150px 150px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.55), transparent 82%);
 }
 
@@ -38,21 +45,22 @@
 }
 
 .slidev-layout:not(.cover) {
-  border-top: 5px solid transparent;
+  border-top: 6px solid transparent;
   border-image: linear-gradient(90deg, var(--mentora-cyan), var(--mentora-violet), transparent 78%) 1;
+  box-shadow: inset 0 -2px 0 rgba(50,216,199,.2);
 }
 
 .slidev-layout:not(.cover)::before {
   content: "";
   position: absolute;
   z-index: 0;
-  right: -6.5rem;
-  bottom: -7.5rem;
-  width: 20rem;
-  height: 20rem;
-  border: 1px solid rgba(50,216,199,.15);
+  right: -5.5rem;
+  bottom: -6.5rem;
+  width: 22rem;
+  height: 22rem;
+  border: 1px solid rgba(50,216,199,.24);
   border-radius: 50%;
-  box-shadow: 0 0 0 2.2rem rgba(139,124,255,.035), 0 0 0 5rem rgba(50,216,199,.025);
+  box-shadow: 0 0 0 2.2rem rgba(139,124,255,.055), 0 0 0 5rem rgba(50,216,199,.035), 0 0 90px rgba(50,216,199,.08);
   pointer-events: none;
 }
 
@@ -66,23 +74,23 @@
 .slidev-layout h1 {
   max-width: 66rem;
   margin: 0 0 1.05rem;
-  font-size: 3rem;
+  font-size: 3.2rem;
   line-height: 1.01;
   font-weight: 900;
   color: #fff;
   text-wrap: balance;
-  text-shadow: 0 10px 38px rgba(0,0,0,.35);
+  text-shadow: 0 10px 38px rgba(0,0,0,.5), 0 0 42px rgba(139,124,255,.08);
 }
 
 .slidev-layout h1::after {
   content: "";
   display: block;
-  width: 5.2rem;
-  height: .28rem;
+  width: 6.2rem;
+  height: .34rem;
   margin-top: .65rem;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--mentora-cyan), var(--mentora-violet));
-  box-shadow: 0 0 18px rgba(50,216,199,.5);
+  box-shadow: 0 0 12px rgba(50,216,199,.75), 2.8rem 0 0 -.08rem rgba(139,124,255,.65);
 }
 
 .slidev-layout h2 {
@@ -138,13 +146,29 @@
 .kicker {
   display: inline-flex;
   align-items: center;
-  gap: .4rem;
+  gap: .55rem;
   margin-bottom: .7rem;
-  color: var(--mentora-cyan);
+  color: var(--mentora-electric);
   font-size: .81rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: .15em;
+  letter-spacing: .17em;
+  text-shadow: 0 0 18px rgba(50,216,199,.35);
+}
+
+.kicker::before {
+  content: "//";
+  color: var(--mentora-violet);
+  font-family: "Arial Black", sans-serif;
+  letter-spacing: -.12em;
+}
+
+.kicker::after {
+  content: "";
+  width: 3.4rem;
+  height: 1px;
+  margin-left: .25rem;
+  background: linear-gradient(90deg, rgba(50,216,199,.8), transparent);
 }
 
 .speaker-tag {
@@ -203,11 +227,23 @@
   min-height: 7.4rem;
   padding: 1.15rem 1.3rem;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 1.05rem;
-  background: linear-gradient(145deg, rgba(255,255,255,.105), rgba(255,255,255,.025));
-  box-shadow: 0 20px 50px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: .72rem 1.35rem .72rem .72rem;
+  background: linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.022));
+  box-shadow: 0 22px 55px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.09);
   backdrop-filter: blur(10px);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 1.25rem;
+  width: 3.2rem;
+  height: .25rem;
+  background: linear-gradient(90deg, var(--mentora-cyan), var(--mentora-violet));
+  box-shadow: 0 0 16px rgba(50,216,199,.6);
 }
 
 .card::after {
@@ -218,7 +254,8 @@
   right: -2.4rem;
   top: -2.4rem;
   border-radius: 50%;
-  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.055);
 }
 
 .grid-4 > .card { min-height: 10.6rem; }
@@ -254,15 +291,16 @@
 .metric {
   min-height: 5.5rem;
   padding: .9rem 1.1rem;
-  border-top: 4px solid var(--mentora-violet);
+  border-top: 5px solid var(--mentora-violet);
   border-radius: .25rem .25rem .8rem .8rem;
-  background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.035));
+  background: linear-gradient(145deg, rgba(255,255,255,.115), rgba(255,255,255,.025));
+  box-shadow: 0 16px 42px rgba(0,0,0,.25);
 }
 
 .metric .value {
   display: block;
-  color: #fff;
-  font-size: 1.9rem;
+  color: var(--mentora-electric);
+  font-size: 2.25rem;
   font-weight: 850;
   letter-spacing: -.04em;
 }
@@ -286,9 +324,9 @@
   align-items: center;
   gap: .3rem;
   padding: .43rem .75rem;
-  border: 1px solid rgba(255,255,255,.13);
+  border: 1px solid rgba(255,255,255,.19);
   border-radius: 999px;
-  background: rgba(255,255,255,.085);
+  background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.055));
   color: #e7e9ef;
   font-size: .8rem;
   font-weight: 750;
@@ -298,9 +336,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border: 2px solid rgba(255,255,255,.16);
-  border-radius: 1rem;
-  box-shadow: 0 22px 70px rgba(0,0,0,.38);
+  border: 2px solid rgba(50,216,199,.3);
+  border-radius: .55rem 1.25rem .55rem .55rem;
+  box-shadow: 0 22px 70px rgba(0,0,0,.45), 0 0 35px rgba(50,216,199,.07);
 }
 
 .shot.contain { object-fit: contain; background: #080a10; }
@@ -310,9 +348,9 @@
   width: auto;
   height: 26rem;
   object-fit: contain;
-  border: 2px solid rgba(255,255,255,.16);
+  border: 2px solid rgba(139,124,255,.34);
   border-radius: 1.15rem;
-  box-shadow: 0 22px 70px rgba(0,0,0,.42);
+  box-shadow: 0 25px 75px rgba(0,0,0,.52), 0 0 34px rgba(139,124,255,.11);
 }
 
 .mobile-feature-bar {
@@ -340,10 +378,10 @@
   width: 100%;
   max-height: 21rem;
   object-fit: contain;
-  border: 1px solid rgba(255,255,255,.12);
+  border: 2px solid rgba(50,216,199,.22);
   border-radius: .85rem;
   background: #06070b;
-  box-shadow: 0 18px 60px rgba(0,0,0,.35);
+  box-shadow: 0 22px 65px rgba(0,0,0,.45), 0 0 28px rgba(50,216,199,.06);
 }
 
 .image-caption {
@@ -368,11 +406,25 @@
   flex-direction: column;
   justify-content: center;
   padding: .85rem;
-  border: 1px solid rgba(255,255,255,.18);
-  border-radius: .9rem;
-  background: linear-gradient(150deg, rgba(50,216,199,.11), rgba(139,124,255,.07));
+  border: 1px solid rgba(50,216,199,.32);
+  border-radius: .55rem 1rem .55rem .55rem;
+  background: linear-gradient(150deg, rgba(50,216,199,.16), rgba(139,124,255,.10));
+  box-shadow: 0 18px 42px rgba(0,0,0,.28);
   text-align: center;
 }
+
+.flow-step:not(:last-child)::after {
+  content: "›";
+  position: absolute;
+  z-index: 3;
+  right: -.72rem;
+  color: var(--mentora-electric);
+  font-family: "Arial Black", sans-serif;
+  font-size: 1.5rem;
+  text-shadow: 0 0 15px rgba(50,216,199,.7);
+}
+
+.flow-step { position: relative; }
 
 .flow-step .num {
   color: var(--mentora-cyan);
@@ -470,6 +522,19 @@
   text-align: left;
 }
 
+.slidev-layout.cover .cover-content::after {
+  content: "MENTORA // BUILD TO LEARN";
+  position: absolute;
+  right: -14rem;
+  bottom: -2.2rem;
+  color: rgba(255,255,255,.17);
+  font-family: "Arial Black", sans-serif;
+  font-size: .78rem;
+  letter-spacing: .22em;
+  transform: rotate(-90deg);
+  transform-origin: left center;
+}
+
 .slidev-layout.cover .cover-title {
   margin: 0;
   color: #fff;
@@ -507,13 +572,13 @@
   position: absolute;
   right: -1rem;
   top: 50%;
-  width: 30rem;
-  height: 30rem;
+  width: 33rem;
+  height: 33rem;
   transform: translateY(-50%) rotate(18deg);
-  border: 2px solid rgba(50,216,199,.32);
+  border: 3px solid rgba(50,216,199,.38);
   border-radius: 29% 71% 62% 38% / 38% 28% 72% 62%;
   background: radial-gradient(circle at 35% 35%, rgba(139,124,255,.36), rgba(50,216,199,.09) 48%, transparent 70%);
-  box-shadow: inset 0 0 80px rgba(139,124,255,.15), 0 0 90px rgba(50,216,199,.11);
+  box-shadow: inset 0 0 90px rgba(139,124,255,.22), 0 0 100px rgba(50,216,199,.15), 0 0 0 1.5rem rgba(139,124,255,.025);
 }
 
 .section-slide::after {
@@ -521,15 +586,16 @@
   position: absolute;
   right: 1.5rem;
   bottom: 1.5rem;
-  color: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.11);
   font-family: "Arial Black", sans-serif;
-  font-size: 4.5rem;
+  font-size: 5.2rem;
   letter-spacing: -.06em;
 }
 
 .section-slide .chapter-number {
-  color: rgba(255,255,255,.14);
-  font-size: 9.5rem;
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(119,255,241,.24);
+  font-size: 10.5rem;
   line-height: .8;
   font-weight: 950;
   letter-spacing: -.08em;
@@ -538,7 +604,7 @@
 .section-slide h1 {
   width: 45rem;
   margin-top: -.5rem;
-  font-size: 4.4rem;
+  font-size: 4.7rem;
 }
 
 .section-slide p {
@@ -571,13 +637,14 @@
 .grid.grid-cols-2.w-full.h-full:has(.visual-split) > .visual-split {
   padding: 2rem 2.7rem;
   border-radius: 1.2rem 0 0 1.2rem;
+  background: linear-gradient(145deg, rgba(139,124,255,.08), transparent 55%);
 }
 
 .grid.grid-cols-2.w-full.h-full:has(.visual-split) > div:last-child {
   margin: .15rem;
-  border: 2px solid rgba(50,216,199,.25);
+  border: 3px solid rgba(50,216,199,.32);
   border-radius: 0 1.2rem 1.2rem 0;
-  box-shadow: inset 18px 0 45px rgba(7,9,16,.42), 0 0 55px rgba(50,216,199,.08);
+  box-shadow: inset 18px 0 45px rgba(7,9,16,.42), 0 0 65px rgba(50,216,199,.13);
 }
 
 .visual-split h1 { font-size: 2.65rem; }
