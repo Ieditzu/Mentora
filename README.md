@@ -6,21 +6,57 @@ This README is based on the current codebase, not only the older project notes. 
 
 ## Visual Overview
 
-### Game
+All images in [`images/`](images/) are included below.
 
-| World map | Python island | Python coding pad |
+### Unity Game
+
+| World map | Updated map | In-game scene |
 | --- | --- | --- |
-| ![Entire map in game](images/entire_map_in_game.png) | ![Python island](images/python_island.png) | ![Python coding](images/python_coding.png) |
+| ![World map](images/entire_map_in_game.png) | ![Updated world map](images/entire_map_v2.png) | ![Game scene](images/game_picture.png) |
 
-### Android App And Web Creator
+| Mobile gameplay | Code island | Python island |
+| --- | --- | --- |
+| ![Gameplay on phone](images/playing_game_on_phone.png) | ![Code island](images/codeIsland.png) | ![Python island](images/python_island.png) |
 
-| Children dashboard | AI child insight | Goals | Task history |
+| Python section | Python coding | C++ section |
+| --- | --- | --- |
+| ![Python section](images/python_section_in_game.png) | ![Python coding](images/python_coding.png) | ![C++ section](images/cpp.png) |
+
+| C++ AI interaction | Python AI challenge | Python AI mentor | Quiz |
 | --- | --- | --- | --- |
-| ![Android children screen](images/app_kids_screen.png) | ![Android AI insight](images/app_ai_insight_of_child.png) | ![Android goals](images/app_goals_screen.png) | ![Android task history](images/app_task_history.png) |
+| ![C++ AI interaction](images/cppAI.png) | ![Python AI challenge](images/pythonAiChallenge.png) | ![Python AI mentor](images/ai_python.png) | ![Quiz](images/quiz.png) |
 
-| Web creator dashboard | Course library/editor |
-| --- | --- |
-| ![Web creator](images/web_creator.png) | ![Web creator courses](images/web_creator_courses.png) |
+| Quiz question | Pause menu | Rudolf guide |
+| --- | --- | --- |
+| ![Quiz question](images/quiz2.png) | ![Pause menu quiz](images/pauseMenuQuiz.png) | ![Rudolf guide](images/rudolfGuide.png) |
+
+| Rudolf guide continuation | Rudolf answer | Rudolf on PC |
+| --- | --- | --- |
+| ![Rudolf guide continuation](images/RudolfGuide2.png) | ![Rudolf answer](images/rudolfAnswer.png) | ![Rudolf on PC](images/rudolf_pc.png) |
+
+| Community | Projectile | Box object |
+| --- | --- | --- |
+| ![Community](images/community.png) | ![Missile](images/missile.png) | ![Box](images/box.png) |
+
+### Parent App
+
+| Children dashboard | Children dashboard detail | Goals |
+| --- | --- | --- |
+| ![My kids dashboard](images/appMyKids.png) | ![My kids detail](images/appMyKids2.png) | ![Goals](images/appGoals.png) |
+
+| Parent profile | Settings | Settings theme |
+| --- | --- | --- |
+| ![Parent profile](images/appProfile.png) | ![Settings](images/appSettings.png) | ![Settings theme](images/appSettings2.png) |
+
+| Skill insight | Skill radar | Task history |
+| --- | --- | --- |
+| ![Skill insight](images/appSkill.png) | ![Skill radar](images/appSkillRadar.png) | ![Task history](images/appTaskHistory.png) |
+
+### Web Course Creator
+
+| Creator dashboard | Course library and editor | French creator interface |
+| --- | --- | --- |
+| ![Web creator dashboard](images/web_creator.png) | ![Web creator courses](images/web_creator_courses.png) | ![French web creator](images/web_creator-fr.png) |
 
 ## Table Of Contents
 
