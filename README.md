@@ -1,438 +1,438 @@
 # Mentora
 
-Mentora is an AI-powered educational ecosystem for learning programming through a Unity game, a parental Android app, a web course creator, and a Java/Spring backend. The project teaches Python and C++ by having children write and run real code, receive AI-guided feedback, and build a persistent learning profile that follows them across tasks, quizzes, sessions, and multiplayer activities.
+Mentora este un ecosistem educațional bazat pe IA pentru învățarea programării prin intermediul unui joc Unity, al unei aplicații Android pentru părinți, al unui creator web de cursuri și al unui backend Java/Spring. Proiectul îi învață pe copii Python și C++ punându-i să scrie și să ruleze cod real, să primească îndrumare oferită de IA și să își construiască un profil de învățare persistent, care îi însoțește pe parcursul sarcinilor, testelor, sesiunilor și activităților multiplayer.
 
-This README is based on the current codebase, not only the older project notes. The implementation currently includes backend packets up to `72`, a separate Unity LAN multiplayer layer with local packet IDs up to `73`, CodeWorld collaborative editing, AI-generated challenges, parent challenges, weekly reports, live session monitoring, a voice-enabled companion, and per-player programming profile merging.
+Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `72`, un nivel multiplayer Unity prin LAN separat, cu ID-uri de pachete locale până la `73`, editare colaborativă CodeWorld, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor, un companion cu interacțiune vocală și îmbinarea profilurilor de programare pentru fiecare jucător.
 
-## Visual Overview
+## Prezentare vizuală
 
-All images in [`images/`](images/) are included below.
+Toate imaginile din [`images/`](images/) sunt incluse mai jos.
 
-### Unity Game
+### Jocul Unity
 
-| World map | Updated map | In-game scene |
+| Harta lumii | Harta actualizată | Scenă din joc |
 | --- | --- | --- |
-| ![World map](images/entire_map_in_game.png) | ![Updated world map](images/entire_map_v2.png) | ![Game scene](images/game_picture.png) |
+| ![Harta lumii](images/entire_map_in_game.png) | ![Harta actualizată a lumii](images/entire_map_v2.png) | ![Scenă din joc](images/game_picture.png) |
 
-| Mobile gameplay | Code island | Python island |
+| Joc pe mobil | Insula codului | Insula Python |
 | --- | --- | --- |
-| ![Gameplay on phone](images/playing_game_on_phone.png) | ![Code island](images/codeIsland.png) | ![Python island](images/python_island.png) |
+| ![Joc pe telefon](images/playing_game_on_phone.png) | ![Insula codului](images/codeIsland.png) | ![Insula Python](images/python_island.png) |
 
-| Python section | Python coding | C++ section |
+| Secțiunea Python | Programare în Python | Secțiunea C++ |
 | --- | --- | --- |
-| ![Python section](images/python_section_in_game.png) | ![Python coding](images/python_coding.png) | ![C++ section](images/cpp.png) |
+| ![Secțiunea Python](images/python_section_in_game.png) | ![Programare în Python](images/python_coding.png) | ![Secțiunea C++](images/cpp.png) |
 
-| C++ AI interaction | Python AI challenge | Python AI mentor | Quiz |
+| Interacțiune cu IA în C++ | Provocare Python generată de IA | Mentor IA pentru Python | Test |
 | --- | --- | --- | --- |
-| ![C++ AI interaction](images/cppAI.png) | ![Python AI challenge](images/pythonAiChallenge.png) | ![Python AI mentor](images/ai_python.png) | ![Quiz](images/quiz.png) |
+| ![Interacțiune cu IA în C++](images/cppAI.png) | ![Provocare Python generată de IA](images/pythonAiChallenge.png) | ![Mentor IA pentru Python](images/ai_python.png) | ![Test](images/quiz.png) |
 
-| Quiz question | Pause menu | Rudolf guide |
+| Întrebare de test | Meniul de pauză | Ghidul lui Rudolf |
 | --- | --- | --- |
-| ![Quiz question](images/quiz2.png) | ![Pause menu quiz](images/pauseMenuQuiz.png) | ![Rudolf guide](images/rudolfGuide.png) |
+| ![Întrebare de test](images/quiz2.png) | ![Test în meniul de pauză](images/pauseMenuQuiz.png) | ![Ghidul lui Rudolf](images/rudolfGuide.png) |
 
-| Rudolf guide continuation | Rudolf answer | Rudolf on PC |
+| Continuarea ghidului lui Rudolf | Răspunsul lui Rudolf | Rudolf pe PC |
 | --- | --- | --- |
-| ![Rudolf guide continuation](images/RudolfGuide2.png) | ![Rudolf answer](images/rudolfAnswer.png) | ![Rudolf on PC](images/rudolf_pc.png) |
+| ![Continuarea ghidului lui Rudolf](images/RudolfGuide2.png) | ![Răspunsul lui Rudolf](images/rudolfAnswer.png) | ![Rudolf pe PC](images/rudolf_pc.png) |
 
-| Community | Projectile | Box object |
+| Comunitate | Proiectil | Obiect de tip cutie |
 | --- | --- | --- |
-| ![Community](images/community.png) | ![Missile](images/missile.png) | ![Box](images/box.png) |
+| ![Comunitate](images/community.png) | ![Rachetă](images/missile.png) | ![Cutie](images/box.png) |
 
-### Parent App
+### Aplicația pentru părinți
 
-| Children dashboard | Children dashboard detail | Goals |
+| Panoul copiilor | Detalii din panoul copiilor | Obiective |
 | --- | --- | --- |
-| ![My kids dashboard](images/appMyKids.png) | ![My kids detail](images/appMyKids2.png) | ![Goals](images/appGoals.png) |
+| ![Panoul Copiii mei](images/appMyKids.png) | ![Detalii despre Copiii mei](images/appMyKids2.png) | ![Obiective](images/appGoals.png) |
 
-| Parent profile | Settings | Settings theme |
+| Profilul părintelui | Setări | Tema setărilor |
 | --- | --- | --- |
-| ![Parent profile](images/appProfile.png) | ![Settings](images/appSettings.png) | ![Settings theme](images/appSettings2.png) |
+| ![Profilul părintelui](images/appProfile.png) | ![Setări](images/appSettings.png) | ![Tema setărilor](images/appSettings2.png) |
 
-| Skill insight | Skill radar | Task history |
+| Analiza competențelor | Radarul competențelor | Istoricul sarcinilor |
 | --- | --- | --- |
-| ![Skill insight](images/appSkill.png) | ![Skill radar](images/appSkillRadar.png) | ![Task history](images/appTaskHistory.png) |
+| ![Analiza competențelor](images/appSkill.png) | ![Radarul competențelor](images/appSkillRadar.png) | ![Istoricul sarcinilor](images/appTaskHistory.png) |
 
-### Web Course Creator
+### Creatorul web de cursuri
 
-| Creator dashboard | Course library and editor | French creator interface |
+| Panoul creatorului | Biblioteca de cursuri și editorul | Interfața creatorului în franceză |
 | --- | --- | --- |
-| ![Web creator dashboard](images/web_creator.png) | ![Web creator courses](images/web_creator_courses.png) | ![French web creator](images/web_creator-fr.png) |
+| ![Panoul creatorului web](images/web_creator.png) | ![Cursurile creatorului web](images/web_creator_courses.png) | ![Creatorul web în franceză](images/web_creator-fr.png) |
 
-## Table Of Contents
+## Cuprins
 
-- [System Architecture](#system-architecture)
-- [Repository Structure](#repository-structure)
-- [Technology Stack](#technology-stack)
+- [Arhitectura sistemului](#arhitectura-sistemului)
+- [Structura repository-ului](#structura-repository-ului)
+- [Stiva tehnologică](#stiva-tehnologică)
 - [Backend](#backend)
-- [Binary Packet Encryption](#binary-packet-encryption)
-- [Packet Reference](#packet-reference)
-- [Authentication](#authentication)
-- [Per-Student Learning Profile](#per-student-learning-profile)
-- [AI System](#ai-system)
-- [Secure Code Execution](#secure-code-execution)
-- [Unity Game](#unity-game)
-- [Android Parent App](#android-parent-app)
-- [Web Course Creator](#web-course-creator)
-- [Courses, Tasks, Goals, And Reports](#courses-tasks-goals-and-reports)
-- [Database Model](#database-model)
-- [Security Notes](#security-notes)
-- [Running The Project](#running-the-project)
-- [Current Testing State](#current-testing-state)
+- [Criptarea pachetelor binare](#criptarea-pachetelor-binare)
+- [Referință pentru pachete](#referință-pentru-pachete)
+- [Autentificare](#autentificare)
+- [Profil de învățare pentru fiecare elev](#profil-de-învățare-pentru-fiecare-elev)
+- [Sistemul de IA](#sistemul-de-ia)
+- [Executarea securizată a codului](#executarea-securizată-a-codului)
+- [Jocul Unity](#jocul-unity-1)
+- [Aplicația Android pentru părinți](#aplicația-android-pentru-părinți)
+- [Creatorul web de cursuri](#creatorul-web-de-cursuri-1)
+- [Cursuri, sarcini, obiective și rapoarte](#cursuri-sarcini-obiective-și-rapoarte)
+- [Modelul bazei de date](#modelul-bazei-de-date)
+- [Note despre securitate](#note-despre-securitate)
+- [Rularea proiectului](#rularea-proiectului)
+- [Starea actuală a testării](#starea-actuală-a-testării)
 
-## System Architecture
+## Arhitectura sistemului
 
-Mentora uses a multi-client, single-backend architecture. The Java backend is the source of truth for identity, progress, AI profile data, course content, task completion, goals, and code execution. Unity and Android communicate with it through an encrypted binary WebSocket protocol. The web creator uses REST.
+Mentora folosește o arhitectură cu mai mulți clienți și un singur backend. Backendul Java este sursa de adevăr pentru identitate, progres, datele profilului IA, conținutul cursurilor, finalizarea sarcinilor, obiective și executarea codului. Unity și Android comunică cu acesta printr-un protocol WebSocket binar criptat. Creatorul web folosește REST.
 
 ```mermaid
 flowchart LR
-    Web[Web Course Creator<br/>React + Vite] -->|HTTP REST :8085| Backend[Java/Spring Backend]
-    Android[Android Parent App<br/>Kotlin + Compose] -->|Encrypted Binary WebSocket :49154| Backend
-    Unity[Unity Game Client<br/>C# + HDRP] -->|Encrypted Binary WebSocket :49154| Backend
+    Web[Creator web de cursuri<br/>React + Vite] -->|HTTP REST :8085| Backend[Backend Java/Spring]
+    Android[Aplicație Android pentru părinți<br/>Kotlin + Compose] -->|WebSocket binar criptat :49154| Backend
+    Unity[Client de joc Unity<br/>C# + HDRP] -->|WebSocket binar criptat :49154| Backend
 
     Backend --> DB[(PostgreSQL)]
     Backend --> Groq[Groq API<br/>LLaMA 3.3 70B]
-    Backend --> Python[Python Sandbox]
-    Backend --> Cpp[C++ Sandbox]
+    Backend --> Python[Mediu izolat Python]
+    Backend --> Cpp[Mediu izolat C++]
 
-    Unity <--> LAN[Unity LAN Multiplayer<br/>TCP 7777 + UDP Discovery 7776]
+    Unity <--> LAN[Multiplayer Unity prin LAN<br/>TCP 7777 + descoperire UDP 7776]
 ```
 
-The Unity client also contains a second networking layer that is separate from the Java backend. `MultiplayerSessionManager.cs` handles LAN discovery, host/join sessions, remote avatars, quiz packets, voice chat, CodeWorld synchronization, and multiplayer profile sharing.
+Clientul Unity conține și un al doilea nivel de rețea, separat de backendul Java. `MultiplayerSessionManager.cs` gestionează descoperirea în LAN, găzduirea sesiunilor și conectarea la acestea, avatarurile jucătorilor la distanță, pachetele de test, chatul vocal, sincronizarea CodeWorld și partajarea profilurilor în modul multiplayer.
 
 ```mermaid
 flowchart TD
-    Host[Unity Host] <-->|TCP game/session packets| PeerA[Unity Client A]
-    Host <-->|TCP game/session packets| PeerB[Unity Client B]
-    Host -.->|UDP discovery beacon<br/>MENTORA_MP_DISCOVERY_V1| LAN[Local Network]
-    PeerA -->|CodeWorld editor sync<br/>quiz answers<br/>voice frames| Host
-    PeerB -->|profile summary<br/>cursor positions<br/>player state| Host
+    Host[Gazdă Unity] <-->|Pachete TCP de joc/sesiune| PeerA[Client Unity A]
+    Host <-->|Pachete TCP de joc/sesiune| PeerB[Client Unity B]
+    Host -.->|Semnal UDP de descoperire<br/>MENTORA_MP_DISCOVERY_V1| LAN[Rețea locală]
+    PeerA -->|Sincronizarea editorului CodeWorld<br/>răspunsuri la teste<br/>cadre audio| Host
+    PeerB -->|rezumatul profilului<br/>pozițiile cursorului<br/>starea jucătorului| Host
 ```
 
-## Repository Structure
+## Structura repository-ului
 
-| Path | Purpose |
+| Cale | Scop |
 | --- | --- |
-| `java-server/Java-Server/` | Spring Boot backend, WebSocket server, REST API, AI integration, code execution, persistence |
-| `unity/` | Unity 2022.3.62f3 HDRP game client |
-| `kotlin-app/` | Android parent dashboard built with Kotlin and Jetpack Compose |
-| `web-creator/` | React/Vite course authoring platform |
-| `images/` | Project screenshots used by this README and presentation material |
-| `mentora-presentation-slidev/` | Slidev presentation assets |
+| `java-server/Java-Server/` | Backend Spring Boot, server WebSocket, API REST, integrare IA, executarea codului, persistență |
+| `unity/` | Client de joc Unity 2022.3.62f3 HDRP |
+| `kotlin-app/` | Panou Android pentru părinți, construit cu Kotlin și Jetpack Compose |
+| `web-creator/` | Platformă React/Vite pentru crearea cursurilor |
+| `images/` | Capturi de ecran ale proiectului, folosite în acest README și în materialele de prezentare |
+| `mentora-presentation-slidev/` | Resurse pentru prezentarea Slidev |
 
-## Technology Stack
+## Stiva tehnologică
 
-| Layer | Technologies |
+| Strat | Tehnologii |
 | --- | --- |
 | Backend | Java 21, Spring Boot 3.2.4, Spring Data JPA, Hibernate, PostgreSQL |
-| Realtime backend protocol | Java-WebSocket, custom encrypted binary packets |
-| AI | Groq API, `llama-3.3-70b-versatile`, response cache, API key rotation |
-| Code execution | Server-side Python and C++ runners with Linux sandboxing |
-| Game | Unity 2022.3.62f3, C#, HDRP |
-| Android | Kotlin, Jetpack Compose, CameraX, ZXing/QR scanning, Coil |
+| Protocol backend în timp real | Java-WebSocket, pachete binare criptate personalizate |
+| IA | Groq API, `llama-3.3-70b-versatile`, memorie cache pentru răspunsuri, rotația cheilor API |
+| Executarea codului | Procese de execuție Python și C++ pe server, izolate în Linux |
+| Joc | Unity 2022.3.62f3, C#, HDRP |
+| Android | Kotlin, Jetpack Compose, CameraX, ZXing pentru scanarea codurilor QR, Coil |
 | Web | React 19, Vite 7, Tailwind CSS v4, Framer Motion, lucide-react |
 
 ## Backend
 
-The backend is the central authority for the platform. It owns account data, child profiles, learning history, published courses, tasks, goals, live session state, parent challenges, weekly reports, AI calls, and code execution.
+Backendul este autoritatea centrală a platformei. Acesta gestionează datele conturilor, profilurile copiilor, istoricul învățării, cursurile publicate, sarcinile, obiectivele, starea sesiunilor în timp real, provocările trimise de părinți, rapoartele săptămânale, apelurile către IA și executarea codului.
 
-Important files:
+Fișiere importante:
 
-| File | Role |
+| Fișier | Rol |
 | --- | --- |
-| `client/ClientHandler.java` | Main WebSocket packet dispatcher and authorization gate |
-| `packet/Packet.java` | Base packet class, encryption/decryption, string serialization |
-| `packet/PacketManager.java` | Packet factory for backend packet IDs |
-| `database/services/LearningProfileService.java` | Per-child AI profile updates, summaries, weekly reports |
-| `database/services/CourseService.java` | Course CRUD, publishing, completion, reward logic |
-| `database/services/TaskService.java` | Global task seeding and task completion |
-| `utility/GroqAI.java` | Groq chat API wrapper, response cache, key rotation |
-| `python/PythonExecutor.java` | Sandboxed Python execution |
-| `cpp/CppExecutor.java` | Sandboxed C++ compilation and execution |
-| `web/WebAuthController.java` | Web auth endpoints |
-| `web/WebCourseController.java` | Web course REST API |
+| `client/ClientHandler.java` | Dispecerul principal pentru pachetele WebSocket și punctul de control al autorizării |
+| `packet/Packet.java` | Clasa de bază a pachetelor, criptare/decriptare, serializarea șirurilor de caractere |
+| `packet/PacketManager.java` | Fabrica de pachete pentru ID-urile pachetelor backend |
+| `database/services/LearningProfileService.java` | Actualizări ale profilului IA pentru fiecare copil, rezumate, rapoarte săptămânale |
+| `database/services/CourseService.java` | Operații CRUD pentru cursuri, publicare, finalizare, logica recompenselor |
+| `database/services/TaskService.java` | Popularea inițială a sarcinilor globale și finalizarea sarcinilor |
+| `utility/GroqAI.java` | Componentă de integrare pentru API-ul de chat Groq, memorie cache pentru răspunsuri, rotația cheilor |
+| `python/PythonExecutor.java` | Executarea Python într-un mediu izolat |
+| `cpp/CppExecutor.java` | Compilarea și executarea C++ într-un mediu izolat |
+| `web/WebAuthController.java` | Endpointuri web pentru autentificare |
+| `web/WebCourseController.java` | API REST web pentru cursuri |
 
-`Server.java` keeps live runtime state:
+`Server.java` păstrează starea activă din timpul rulării:
 
-- `activeConnections` for connected clients.
-- `pendingQRLogins` for QR login pairing.
-- `latestLiveSessionStates` for parent live monitoring.
-- `liveSessionSpectators` for subscribed parent clients.
-- `activeParentChallenges` for parent-sent challenges.
+- `activeConnections` pentru clienții conectați.
+- `pendingQRLogins` pentru asocierea autentificărilor prin QR.
+- `latestLiveSessionStates` pentru monitorizarea în timp real de către părinți.
+- `liveSessionSpectators` pentru clienții abonați de tip părinte.
+- `activeParentChallenges` pentru provocările trimise de părinți.
 
-## Binary Packet Encryption
+## Criptarea pachetelor binare
 
-Unity and Android do not send plain JSON to the backend WebSocket. They use a custom binary packet format implemented in Java, C#, and Kotlin.
+Unity și Android nu trimit JSON în clar către WebSocket-ul backendului. Acestea folosesc un format binar personalizat pentru pachete, implementat în Java, C# și Kotlin.
 
 ```mermaid
 sequenceDiagram
-    participant Client as Unity/Android Client
+    participant Client as Client Unity/Android
     participant Packet as Packet.encode()
-    participant Server as Java ClientHandler
+    participant Server as ClientHandler Java
     participant Manager as PacketManager
 
-    Client->>Packet: Build packet payload
-    Packet->>Packet: Generate dynamicSeed from nanoTime/ticks
-    Packet->>Packet: Encrypt dynamicSeed with shared base key
-    Packet->>Packet: Encrypt payload with SHA-256(dynamicSeed)
+    Client->>Packet: Construiește conținutul pachetului
+    Packet->>Packet: Generează dynamicSeed din nanoTime/ticks
+    Packet->>Packet: Criptează dynamicSeed cu cheia de bază partajată
+    Packet->>Packet: Criptează conținutul cu SHA-256(dynamicSeed)
     Packet->>Server: [seedLength][encryptedSeed][encryptedPayload]
-    Server->>Server: Validate seedLength
-    Server->>Server: Decrypt seed with base key
-    Server->>Server: Decrypt payload with dynamic seed
-    Server->>Manager: Instantiate packet by ID
-    Manager-->>Server: Concrete packet
-    Server->>Server: Authorize and dispatch
+    Server->>Server: Validează seedLength
+    Server->>Server: Decriptează seed cu cheia de bază
+    Server->>Server: Decriptează conținutul cu seed-ul dinamic
+    Server->>Manager: Instanțiază pachetul după ID
+    Manager-->>Server: Pachet concret
+    Server->>Server: Autorizează și distribuie
 ```
 
-Frame layout:
+Structura cadrului:
 
 ```text
-[4-byte seed length][encrypted seed][encrypted payload]
+[lungimea seed-ului pe 4 octeți][seed criptat][conținut criptat]
 ```
 
-Encryption details confirmed in code:
+Detalii despre criptare confirmate în cod:
 
-- Algorithm: `AES/CBC/PKCS5Padding` on Java, `Aes` with `CBC` and `PKCS7` on C#.
-- Key derivation: SHA-256 hash of the provided password/seed string.
-- IV: random 16-byte IV prepended to ciphertext.
-- Dynamic seed: generated per packet, encrypted with `Data.baseKey`, then used as the payload key.
-- Defensive validation: seed length must be positive and no greater than `1024`.
+- Algoritm: `AES/CBC/PKCS5Padding` în Java, `Aes` cu `CBC` și `PKCS7` în C#.
+- Derivarea cheii: hashul SHA-256 al șirului furnizat pentru parolă/seed.
+- IV: un IV aleatoriu de 16 octeți, adăugat înaintea textului cifrat.
+- Seed dinamic: generat pentru fiecare pachet, criptat cu `Data.baseKey`, apoi folosit drept cheie pentru conținut.
+- Validare defensivă: lungimea seed-ului trebuie să fie pozitivă și să nu depășească `1024`.
 
-String serialization inside packets uses:
+Serializarea șirurilor în interiorul pachetelor folosește:
 
 ```text
-[int length][UTF-8 bytes]
+[lungime int][octeți UTF-8]
 ```
 
-## Packet Reference
+## Referință pentru pachete
 
-There are two packet systems:
+Există două sisteme de pachete:
 
-- Backend WebSocket packets, handled by `java-server/Java-Server/.../PacketManager.java`.
-- Unity local multiplayer packets, handled by `unity/Assets/Scripts/Runtime/Network/PacketManager.cs`.
+- Pachetele WebSocket ale backendului, gestionate de `java-server/Java-Server/.../PacketManager.java`.
+- Pachetele multiplayer locale din Unity, gestionate de `unity/Assets/Scripts/Runtime/Network/PacketManager.cs`.
 
-### Backend WebSocket Packets
+### Pachete WebSocket ale backendului
 
-| ID | Packet | Purpose |
+| ID | Pachet | Scop |
 | --- | --- | --- |
-| `1` | `HandShakePacket` | Client identifies itself after WebSocket connection |
-| `2` | `AuthPacket` | Parent login over WebSocket |
-| `3` | `RegisterParentPacket` | Parent registration over WebSocket |
-| `4` | `AddChildPacket` | Add child to authenticated parent |
-| `5` | `AddGoalPacket` | Create child goal |
-| `8` | `CompleteTaskPacket` | Mark task complete and award task points |
-| `9` | `ActionResponsePacket` | Generic success/error response |
-| `10` | `AuthResponsePacket` | Parent auth response |
-| `11/12` | `FetchTasksPacket` / response | Global task catalog |
-| `13/14` | `FetchGoalsPacket` / response | Goals for a child |
-| `15/16` | `FetchChildrenPacket` / response | Parent children list and online flags |
-| `17/18` | `FetchCompletedTasksPacket` / response | Completed task history |
-| `19/20` | `GenerateQRLoginPacket` / response | QR login token creation |
-| `21` | `ClaimQRLoginPacket` | Parent app claims QR token for child |
-| `22` | `ChildAuthResponsePacket` | Game child login response |
-| `23/24` | `FetchChildStatsPacket` / response | Child stats and game profile JSON |
-| `25` | `VerifySessionPacket` | Resume game session |
-| `26` | `UpdatePfpPacket` | Update parent or child profile picture |
-| `27` | `RemoveChildPacket` | Delete child profile |
-| `28/29` | `ExecuteCPPCodePacket` / response | Compile and run C++ |
-| `30/31` | `AskAiPacket` / `AiResponsePacket` | AI mentor chat and evaluation |
-| `32` | `FetchChildStatsByParentPacket` | Parent fetches child stats without updating streak |
-| `33` | `RecordLearningEventPacket` | Write learning event into child profile |
-| `34/35` | `ExecutePythonCodePacket` / response | Run Python |
-| `36/37` | `FetchPublishedCoursesPacket` / response | Published course catalog |
-| `38/39` | `FetchCourseDetailPacket` / response | Published course details |
-| `40` | `SubmitCourseCompletionPacket` | Save course attempt and possible reward |
-| `41/42` | `FetchAllChildrenPacket` / response | Dev/admin child listing |
-| `43` | `DevLoginAsChildPacket` | Dev shortcut child login |
-| `44` | `DevCreateChildProfilePacket` | Dev shortcut child creation |
-| `45/46` | `GenerateAiTaskPacket` / response | AI-generated challenge |
-| `47/48` | `CompanionSpeakPacket` / response | Companion text response |
-| `58/59` | `CompanionVoiceTextPacket` / `CompanionVoiceAudioPacket` | Companion voice/text input |
-| `64/65` | `SubscribeLiveSessionPacket` / `LiveSessionUpdatePacket` | Parent live session monitoring |
-| `66/67/68` | Parent challenge packets | Parent sends challenge and receives completion |
-| `69/70` | Weekly report packets | AI weekly parent report |
-| `71/72` | Programming profile summary packets | Child profile summary for game/multiplayer context |
+| `1` | `HandShakePacket` | Clientul se identifică după conexiunea WebSocket |
+| `2` | `AuthPacket` | Autentificarea părintelui prin WebSocket |
+| `3` | `RegisterParentPacket` | Înregistrarea părintelui prin WebSocket |
+| `4` | `AddChildPacket` | Adăugarea unui copil părintelui autentificat |
+| `5` | `AddGoalPacket` | Crearea unui obiectiv pentru copil |
+| `8` | `CompleteTaskPacket` | Marcarea sarcinii drept finalizată și acordarea punctelor aferente |
+| `9` | `ActionResponsePacket` | Răspuns generic de succes/eroare |
+| `10` | `AuthResponsePacket` | Răspunsul la autentificarea părintelui |
+| `11/12` | `FetchTasksPacket` / răspuns | Catalogul global de sarcini |
+| `13/14` | `FetchGoalsPacket` / răspuns | Obiectivele unui copil |
+| `15/16` | `FetchChildrenPacket` / răspuns | Lista copiilor părintelui și indicatorii stării online |
+| `17/18` | `FetchCompletedTasksPacket` / răspuns | Istoricul sarcinilor finalizate |
+| `19/20` | `GenerateQRLoginPacket` / răspuns | Crearea tokenului pentru autentificare prin QR |
+| `21` | `ClaimQRLoginPacket` | Aplicația părintelui revendică tokenul QR pentru copil |
+| `22` | `ChildAuthResponsePacket` | Răspunsul la autentificarea copilului în joc |
+| `23/24` | `FetchChildStatsPacket` / răspuns | Statisticile copilului și profilul de joc în format JSON |
+| `25` | `VerifySessionPacket` | Reluarea sesiunii de joc |
+| `26` | `UpdatePfpPacket` | Actualizarea imaginii de profil a părintelui sau a copilului |
+| `27` | `RemoveChildPacket` | Ștergerea profilului copilului |
+| `28/29` | `ExecuteCPPCodePacket` / răspuns | Compilarea și rularea codului C++ |
+| `30/31` | `AskAiPacket` / `AiResponsePacket` | Conversația cu mentorul IA și evaluarea |
+| `32` | `FetchChildStatsByParentPacket` | Părintele preia statisticile copilului fără a-i actualiza seria |
+| `33` | `RecordLearningEventPacket` | Scrierea unui eveniment de învățare în profilul copilului |
+| `34/35` | `ExecutePythonCodePacket` / răspuns | Rularea codului Python |
+| `36/37` | `FetchPublishedCoursesPacket` / răspuns | Catalogul cursurilor publicate |
+| `38/39` | `FetchCourseDetailPacket` / răspuns | Detaliile cursului publicat |
+| `40` | `SubmitCourseCompletionPacket` | Salvarea încercării la curs și a eventualei recompense |
+| `41/42` | `FetchAllChildrenPacket` / răspuns | Listarea copiilor pentru dezvoltare/administrare |
+| `43` | `DevLoginAsChildPacket` | Scurtătură pentru dezvoltatori pentru autentificarea drept copil |
+| `44` | `DevCreateChildProfilePacket` | Scurtătură pentru dezvoltatori pentru crearea unui profil de copil |
+| `45/46` | `GenerateAiTaskPacket` / răspuns | Provocare generată de IA |
+| `47/48` | `CompanionSpeakPacket` / răspuns | Răspunsul text al companionului |
+| `58/59` | `CompanionVoiceTextPacket` / `CompanionVoiceAudioPacket` | Intrare vocală/text pentru companion |
+| `64/65` | `SubscribeLiveSessionPacket` / `LiveSessionUpdatePacket` | Monitorizarea în direct de către părinte a sesiunii |
+| `66/67/68` | Pachete pentru provocări trimise de părinte | Părintele trimite provocarea și primește confirmarea finalizării |
+| `69/70` | Pachete pentru raportul săptămânal | Raportul IA săptămânal pentru părinte |
+| `71/72` | Pachete cu rezumatul profilului de programare | Rezumatul profilului copilului pentru contextul jocului/modului multiplayer |
 
-`ClientHandler.java` enforces an unauthenticated whitelist. Packets outside the allowed set return an unauthorized `ActionResponsePacket` unless the client has a valid parent or child session.
+`ClientHandler.java` aplică o listă de permisiuni pentru clienții neautentificați. Pachetele din afara setului permis returnează un `ActionResponsePacket` de neautorizare, cu excepția cazului în care clientul are o sesiune validă de părinte sau copil.
 
-### Unity Local Multiplayer Packets
+### Pachete multiplayer locale Unity
 
-These packets are defined in the Unity client and belong to LAN multiplayer, not the Java backend:
+Aceste pachete sunt definite în clientul Unity și aparțin modului multiplayer prin LAN, nu backendului Java:
 
-| ID | Packet | Purpose |
+| ID | Pachet | Scop |
 | --- | --- | --- |
-| `49/50` | `MultiplayerJoinPacket` / `MultiplayerWelcomePacket` | Join host session |
-| `51/52` | `MultiplayerPlayerStatePacket` / `MultiplayerPlayerLeftPacket` | Remote player state |
-| `53/54/55` | `QuizStartPacket` / `QuizAnswerPacket` / `QuizResultPacket` | Multiplayer quiz flow |
-| `56/57` | `MultiplayerVoicePacket` / `MultiplayerUdpHelloPacket` | Voice and UDP discovery |
-| `60/61` | `CodeWorldCommandPacket` / `CodeWorldStatePacket` | CodeWorld command and state sync |
-| `62/63` | `CodeWorldEditorSyncPacket` / `CodeWorldCursorPacket` | Shared editor text and named cursors |
-| `73` | `MultiplayerProfileSummaryPacket` | Per-player programming profile sharing |
+| `49/50` | `MultiplayerJoinPacket` / `MultiplayerWelcomePacket` | Alăturarea la sesiunea gazdă |
+| `51/52` | `MultiplayerPlayerStatePacket` / `MultiplayerPlayerLeftPacket` | Starea jucătorului la distanță |
+| `53/54/55` | `QuizStartPacket` / `QuizAnswerPacket` / `QuizResultPacket` | Fluxul testului multiplayer |
+| `56/57` | `MultiplayerVoicePacket` / `MultiplayerUdpHelloPacket` | Voce și descoperire UDP |
+| `60/61` | `CodeWorldCommandPacket` / `CodeWorldStatePacket` | Sincronizarea comenzilor și stării CodeWorld |
+| `62/63` | `CodeWorldEditorSyncPacket` / `CodeWorldCursorPacket` | Textul partajat al editorului și cursoarele cu nume |
+| `73` | `MultiplayerProfileSummaryPacket` | Partajarea profilului de programare al fiecărui jucător |
 
-## Authentication
+## Autentificare
 
-Mentora has separate parent and child flows.
+Mentora are fluxuri separate pentru părinți și copii.
 
-### Parent Auth
+### Autentificarea părinților
 
-Parents can authenticate through Android WebSocket packets or through the web REST API. The web API exposes:
+Părinții se pot autentifica prin pachete WebSocket Android sau prin API-ul REST web. API-ul web expune:
 
-| Method | Endpoint | Purpose |
+| Metodă | Endpoint | Scop |
 | --- | --- | --- |
-| `POST` | `/api/web/auth/lookup` | Check whether an email exists |
-| `POST` | `/api/web/auth/register` | Create parent and return token |
-| `POST` | `/api/web/auth/login` | Login and return token |
+| `POST` | `/api/web/auth/lookup` | Verifică dacă există o adresă de e-mail |
+| `POST` | `/api/web/auth/register` | Creează părintele și returnează tokenul |
+| `POST` | `/api/web/auth/login` | Autentifică și returnează tokenul |
 
-Credentials are hashed with `SHA-256` in `HashUtility`. Web sessions are UUID tokens stored in memory by `WebSessionService` with a 7-day TTL.
+Datele de autentificare sunt transformate în hash cu `SHA-256` în `HashUtility`. Sesiunile web sunt tokenuri UUID stocate în memorie de `WebSessionService`, cu un TTL de 7 zile.
 
-### Child Auth Through QR
+### Autentificarea copiilor prin QR
 
-Children do not type credentials in the game. The game uses QR pairing:
+Copiii nu introduc acreditări în joc. Jocul folosește asocierea prin QR:
 
-1. Unity sends `GenerateQRLoginPacket`.
-2. Backend returns a short token through `QRLoginResponsePacket`.
-3. Parent scans the QR code from Android.
-4. Android sends `ClaimQRLoginPacket` with token and child ID.
-5. Backend sends `ChildAuthResponsePacket` to the waiting game client.
-6. Unity stores child ID/session token and later resumes through `VerifySessionPacket`.
+1. Unity trimite `GenerateQRLoginPacket`.
+2. Backendul returnează un token scurt prin `QRLoginResponsePacket`.
+3. Părintele scanează codul QR din Android.
+4. Android trimite `ClaimQRLoginPacket` împreună cu tokenul și ID-ul copilului.
+5. Backendul trimite `ChildAuthResponsePacket` clientului de joc aflat în așteptare.
+6. Unity stochează ID-ul copilului/tokenul de sesiune, iar ulterior reia sesiunea prin `VerifySessionPacket`.
 
-## Per-Student Learning Profile
+## Profil de învățare pentru fiecare elev
 
-Every child has a `game_stats` JSONB column in the `children` table. The profile is intentionally flexible and is maintained by `LearningProfileService`.
+Fiecare copil are o coloană JSONB `game_stats` în tabelul `children`. Profilul este flexibil în mod intenționat și este gestionat de `LearningProfileService`.
 
 ```mermaid
 flowchart LR
-    CodeRun[Code run result] --> Profile[game_stats JSONB]
-    Quiz[Quiz or course attempt] --> Profile
-    Hint[AI hint/chat] --> Profile
-    Task[Task completion] --> Profile
+    CodeRun[Rezultatul rulării codului] --> Profile[game_stats JSONB]
+    Quiz[Încercare la test sau curs] --> Profile
+    Hint[Indiciu/chat IA] --> Profile
+    Task[Finalizarea sarcinii] --> Profile
 
     Profile --> Cpp[aiProfileCpp]
     Profile --> Python[aiProfilePython]
     Profile --> General[aiProfileGeneral]
 
-    Cpp --> AI[AI prompt context]
+    Cpp --> AI[Context pentru promptul IA]
     Python --> AI
-    General --> Parent[Parent summaries and reports]
-    General --> Multiplayer[Multiplayer merged profile context]
+    General --> Parent[Rezumate și rapoarte pentru părinți]
+    General --> Multiplayer[Contextul profilului combinat pentru multiplayer]
 ```
 
-Tracked fields include:
+Câmpurile urmărite includ:
 
 - `correctCount`
 - `incorrectCount`
 - `hintsUsed`
 - `chatTurns`
 - `totalInteractions`
-- topic statistics
-- concept strengths and struggles
-- common mistakes
-- recent learning events
+- statistici pe subiecte
+- concepte bine stăpânite și concepte dificile
+- greșeli frecvente
+- evenimente recente de învățare
 - `summaryText`
 - `summaryOneLine`
 - `summaryThreeLine`
-- summary update timestamp
+- marca temporală a actualizării rezumatului
 
-`recordLearningEvent()` updates language-specific and general profiles. `recordAiInteraction()` skips contexts containing `eval`, so AI grading does not inflate hint/chat usage.
+`recordLearningEvent()` actualizează profilurile specifice limbajului și pe cele generale. `recordAiInteraction()` omite contextele care conțin `eval`, astfel încât evaluarea IA să nu mărească artificial numărul utilizărilor de indicii/chat.
 
-`buildProfileSummary()` classifies the child as `beginner`, `intermediate`, or `advanced` based on interaction count and accuracy. `buildAiHelpProfileContext()` serializes the child profile into text for AI prompts. `buildMultiplayerProgrammingProfileSummary()` produces a compact profile string used by Unity multiplayer profile merging.
+`buildProfileSummary()` clasifică elevul drept `beginner`, `intermediate` sau `advanced` pe baza numărului de interacțiuni și a acurateței. `buildAiHelpProfileContext()` serializează profilul copilului ca text pentru prompturile IA. `buildMultiplayerProgrammingProfileSummary()` produce un șir compact al profilului, folosit de Unity la combinarea profilurilor multiplayer.
 
-## AI System
+## Sistemul de IA
 
-The AI layer is centered around Groq and `llama-3.3-70b-versatile`.
+Stratul de IA are în centru Groq și `llama-3.3-70b-versatile`.
 
-Capabilities in the current codebase:
+Capabilitățile din baza de cod actuală:
 
-- AI mentor chat through `AskAiPacket`.
-- AI-backed code evaluation contexts.
-- AI-generated task/challenge flow through `GenerateAiTaskPacket`.
-- AI companion lines through `CompanionSpeakPacket`.
-- Companion voice input through transcript or PCM audio packets.
-- Parent-facing summaries and weekly reports.
-- Multiplayer quiz/profile context generation from merged player profiles.
+- Conversații cu mentorul IA prin `AskAiPacket`.
+- Contexte de evaluare a codului asistate de IA.
+- Flux de sarcini/provocări generate de IA prin `GenerateAiTaskPacket`.
+- Replici ale companionului IA prin `CompanionSpeakPacket`.
+- Intrare vocală pentru companion prin transcriere sau pachete audio PCM.
+- Rezumate și rapoarte săptămânale destinate părinților.
+- Generarea contextului pentru teste/profiluri multiplayer din profilurile combinate ale jucătorilor.
 
-`GroqAI.java` includes:
+`GroqAI.java` include:
 
-- 200-entry LRU response cache.
-- 5-minute cache TTL.
-- 35-second request timeout.
-- API key rotation when keys timeout or hit retryable status codes.
-- fallback error strings when no key is configured or Groq is unavailable.
+- Un cache LRU de răspunsuri cu 200 de intrări.
+- Un TTL al cache-ului de 5 minute.
+- O limită de timp de 35 de secunde pentru solicitări.
+- Rotirea cheilor API atunci când acestea expiră sau întâlnesc coduri de stare pentru care solicitarea poate fi reîncercată.
+- Șiruri de eroare de rezervă atunci când nu este configurată nicio cheie sau Groq nu este disponibil.
 
-## Secure Code Execution
+## Executarea securizată a codului
 
-Student code is executed server-side, but not directly in the backend process.
+Codul elevului este executat pe server, dar nu direct în procesul backendului.
 
 ### Python
 
 `PythonExecutor.java`:
 
-- creates a temporary directory.
-- writes code to `main.py`.
-- runs `python3 -I -B -S`.
-- isolates network/user namespace with `unshare --net --user --map-root-user`.
-- applies strict `ulimit` constraints.
-- deletes the temporary directory afterward.
+- creează un director temporar.
+- scrie codul în `main.py`.
+- rulează `python3 -I -B -S`.
+- izolează spațiile de nume ale rețelei/utilizatorului cu `unshare --net --user --map-root-user`.
+- aplică limite stricte cu `ulimit`.
+- șterge apoi directorul temporar.
 
 ### C++
 
 `CppExecutor.java`:
 
-- creates a temporary directory.
-- writes code to `main.cpp`.
-- compiles with `g++ -O2`.
-- applies a compile timeout.
-- runs the compiled binary through the same `unshare` and `ulimit` wrapper.
-- deletes the temporary directory afterward.
+- creează un director temporar.
+- scrie codul în `main.cpp`.
+- compilează cu `g++ -O2`.
+- aplică o limită de timp pentru compilare.
+- rulează binarul compilat prin același mecanism bazat pe `unshare` și `ulimit`.
+- șterge apoi directorul temporar.
 
-Sandbox limits:
+Limitele sandboxului:
 
-| Limit | Value |
+| Limită | Valoare |
 | --- | --- |
-| Virtual memory | `ulimit -v 262144` |
-| CPU time | `ulimit -t <timeoutSeconds>` |
-| Created file size | `ulimit -f 2048` |
-| Process count | `ulimit -u 64` |
-| Network | disabled through `unshare --net` |
-| Java fallback timeout | `timeoutSeconds + 2` |
+| Memorie virtuală | `ulimit -v 262144` |
+| Timp CPU | `ulimit -t <timeoutSeconds>` |
+| Dimensiunea fișierelor create | `ulimit -f 2048` |
+| Număr de procese | `ulimit -u 64` |
+| Rețea | dezactivată prin `unshare --net` |
+| Timp-limită de rezervă Java | `timeoutSeconds + 2` |
 
-## Unity Game
+## Jocul Unity
 
-The Unity game is the main student experience. It contains coding pads, quiz islands, community course browsing, AI challenges, a companion character, LAN multiplayer, and CodeWorld.
+Jocul Unity reprezintă experiența principală a elevului. Acesta include panouri de programare, insule cu teste, explorarea cursurilor comunității, provocări generate de IA, un personaj companion, mod multiplayer în rețeaua LAN și CodeWorld.
 
-Important scripts:
+Scripturi importante:
 
-| Script | Responsibility |
+| Script | Responsabilitate |
 | --- | --- |
-| `GameClient.cs` | WebSocket connection to backend and encrypted packet send/receive |
-| `PauseMenuManager.cs` | UI hub, auth flow, multiplayer menus, CodeWorld and Quiz Island entry points |
-| `MultiplayerSessionManager.cs` | LAN host/join, discovery, remote avatars, voice, quiz packets, profile sync |
-| `CodeWorldRuntime.cs` | "Your Code Controls The World" editor and runtime scene modification |
-| `MultiplayerQuizManager.cs` | Multiplayer quiz state, scoring, answer timing |
-| `CommunityIslandMenu.cs` | Published course browsing and course quiz play |
-| `AiChallengePad.cs` | AI-generated personalized challenge flow |
-| `RobotCompanion.cs` | In-game companion behavior, text/voice triggers |
-| `PythonDebugPadCinematic.cs` | Python challenges and AI evaluation flow |
-| `CodeChallengePadCinematic.cs` | C++ coding/debugging pads |
-| `CppQuestionPadCinematic.cs` | C++ multiple-choice quiz pad |
+| `GameClient.cs` | Conectarea prin WebSocket la backend și trimiterea și primirea pachetelor criptate |
+| `PauseMenuManager.cs` | Centrul interfeței, fluxul de autentificare, meniurile multiplayer și punctele de acces către CodeWorld și Quiz Island |
+| `MultiplayerSessionManager.cs` | Găzduirea sesiunilor în LAN și conectarea la acestea, descoperirea sesiunilor, avatarurile la distanță, comunicarea vocală, pachetele pentru teste și sincronizarea profilurilor |
+| `CodeWorldRuntime.cs` | Editorul „Your Code Controls The World” și modificarea scenei în timpul rulării |
+| `MultiplayerQuizManager.cs` | Starea testului multiplayer, punctajul și cronometrarea răspunsurilor |
+| `CommunityIslandMenu.cs` | Explorarea cursurilor publicate și parcurgerea testelor acestora |
+| `AiChallengePad.cs` | Fluxul provocărilor personalizate generate de IA |
+| `RobotCompanion.cs` | Comportamentul companionului în joc și declanșatoarele text/vocale |
+| `PythonDebugPadCinematic.cs` | Provocările Python și fluxul de evaluare cu IA |
+| `CodeChallengePadCinematic.cs` | Panourile de programare/depanare C++ |
+| `CppQuestionPadCinematic.cs` | Panoul cu întrebări C++ cu variante multiple de răspuns |
 
 ### CodeWorld
 
-CodeWorld is accessible from `PauseMenuManager -> Multiplayer -> Host Game -> Your Code Controls The World`. It teleports the player to `CodeWorldRuntime.SpawnPosition` and activates a code editor that can show/hide in game.
+CodeWorld este accesibil din `PauseMenuManager -> Multiplayer -> Host Game -> Your Code Controls The World`. Jucătorul este teleportat la `CodeWorldRuntime.SpawnPosition`, iar un editor de cod care poate fi afișat sau ascuns în joc este activat.
 
-Implemented behavior includes:
+Funcționalitățile implementate includ:
 
-- code editor overlay/window.
-- keyboard-driven command editing.
-- object creation and manipulation through code-like commands.
-- cubes, spheres, rectangles/circles style primitives depending on command support in `CodeWorldRuntime`.
-- loops and command parsing support in the CodeWorld interpreter.
-- local history and state serialization.
-- live multiplayer editor sync.
-- named remote cursors.
-- snapshot resync for clients joining after the host.
-- hiding the normal companion where appropriate for CodeWorld mode.
+- editor de cod afișat ca suprapunere/fereastră.
+- editarea comenzilor cu ajutorul tastaturii.
+- crearea și manipularea obiectelor prin comenzi asemănătoare codului.
+- primitive de tip cub, sferă, dreptunghi/cerc, în funcție de comenzile acceptate de `CodeWorldRuntime`.
+- suport pentru bucle și interpretarea comenzilor în interpretorul CodeWorld.
+- istoric local și serializarea stării.
+- sincronizarea în timp real a editorului în modul multiplayer.
+- cursoare denumite pentru utilizatorii la distanță.
+- resincronizarea instantaneului pentru clienții care se alătură după gazdă.
+- ascunderea companionului obișnuit atunci când acest lucru este potrivit pentru modul CodeWorld.
 
-CodeWorld multiplayer packets are local Unity session packets:
+Pachetele multiplayer CodeWorld sunt pachete locale ale sesiunii Unity:
 
 - `CodeWorldCommandPacket`
 - `CodeWorldStatePacket`
@@ -441,19 +441,19 @@ CodeWorld multiplayer packets are local Unity session packets:
 
 ### Quiz Island
 
-Quiz Island is hosted through the multiplayer menu. It supports:
+Quiz Island este găzduită prin meniul multiplayer. Aceasta oferă:
 
-- host-controlled quiz options.
-- fetching quiz/course content.
-- AI profile quiz generation.
-- multiplayer answer collection.
-- response-time-aware scoring in `MultiplayerQuizManager`.
-- ending the question once all players answer, with a short delay before moving on.
-- merged programming profile context when multiple players are in the lobby.
+- opțiuni de test controlate de gazdă.
+- preluarea conținutului testelor/cursurilor.
+- generarea testelor pe baza profilului IA.
+- colectarea răspunsurilor în modul multiplayer.
+- calcularea punctajului în funcție de timpul de răspuns în `MultiplayerQuizManager`.
+- încheierea întrebării după ce toți jucătorii au răspuns, urmată de o scurtă întârziere înainte de continuare.
+- un context combinat al profilurilor de programare atunci când în lobby se află mai mulți jucători.
 
-### Multiplayer Profile Merging
+### Combinarea profilurilor multiplayer
 
-`MultiplayerSessionManager` stores `ProgrammingProfileSnapshot` entries for local and remote players:
+`MultiplayerSessionManager` stochează intrări `ProgrammingProfileSnapshot` pentru jucătorii locali și cei la distanță:
 
 - `ClientId`
 - `PlayerName`
@@ -465,169 +465,169 @@ Quiz Island is hosted through the multiplayer menu. It supports:
 - `TotalTaskCount`
 - `ProfileSummary`
 
-`BuildMergedProgrammingProfileContext()` combines available player profiles so AI-generated multiplayer quizzes can consider all participants, not only the host.
+`BuildMergedProgrammingProfileContext()` combină profilurile disponibile ale jucătorilor, astfel încât testele multiplayer generate de IA să poată ține cont de toți participanții, nu doar de gazdă.
 
-### Voice And Companion
+### Voce și companion
 
-The Unity game supports:
+Jocul Unity oferă suport pentru:
 
-- companion text responses.
-- voice transcript packets.
-- raw PCM voice audio packets.
-- local voice chat in multiplayer.
-- voice modes: `AlwaysOn`, `PushToTalk`, `Muted`.
-- contextual companion triggers like challenge success/failure and entering coding pads.
+- răspunsuri text din partea companionului.
+- pachete cu transcrierea vocii.
+- pachete audio vocale PCM neprelucrate.
+- chat vocal local în modul multiplayer.
+- modurile vocale `AlwaysOn`, `PushToTalk`, `Muted`.
+- declanșatoare contextuale pentru companion, precum reușita/eșecul unei provocări și accesarea panourilor de programare.
 
-## Android Parent App
+## Aplicația Android pentru părinți
 
-The Android app is a parental monitoring suite, not just a login client.
+Aplicația Android este o suită de monitorizare parentală, nu doar un client de autentificare.
 
-Key files:
+Fișiere principale:
 
-| File | Responsibility |
+| Fișier | Responsabilitate |
 | --- | --- |
-| `MainActivity.kt` | Android entry point |
-| `ui/AuthScreen.kt` | Parent login/register UI |
-| `ui/MainDashboard.kt` | Compose dashboard, children, goals, history, settings |
-| `ui/SocketViewModel.kt` | WebSocket state, packets, data models, notifications |
-| `socket/ClientSocket.java` | WebSocket client |
-| `socket/packet/Packet.java` | Packet serialization/encryption counterpart |
+| `MainActivity.kt` | Punctul de intrare al aplicației Android |
+| `ui/AuthScreen.kt` | Interfața de autentificare/înregistrare pentru părinți |
+| `ui/MainDashboard.kt` | Tabloul de bord Compose, copiii, obiectivele, istoricul și setările |
+| `ui/SocketViewModel.kt` | Starea WebSocket, pachetele, modelele de date și notificările |
+| `socket/ClientSocket.java` | Clientul WebSocket |
+| `socket/packet/Packet.java` | Componenta corespondentă pentru serializarea/criptarea pachetelor |
 
-Implemented app features:
+Funcționalitățile implementate ale aplicației includ:
 
-- parent login/register.
-- reconnect loop.
-- children dashboard with points and online state.
-- QR scan flow for linking game sessions.
-- child profile pictures.
-- parent profile picture support.
-- task history.
-- goals.
-- live session subscription state.
-- AI profiles by language and general profile.
-- weekly reports.
-- system notifications when child activity arrives.
-- theme customization and dark mode.
+- autentificarea/înregistrarea părinților.
+- o buclă de reconectare.
+- un tablou de bord pentru copii, cu punctaj și stare online.
+- un flux de scanare a codurilor QR pentru asocierea sesiunilor de joc.
+- fotografii de profil pentru copii.
+- suport pentru fotografia de profil a părintelui.
+- istoricul sarcinilor.
+- obiective.
+- starea abonării la sesiunea în timp real.
+- profiluri IA pentru fiecare limbaj și un profil general.
+- rapoarte săptămânale.
+- notificări de sistem la primirea activității copilului.
+- personalizarea temei și modul întunecat.
 
-## Web Course Creator
+## Creatorul web de cursuri
 
-The web creator lets parents or educators manage course content that appears in the Unity game.
+Creatorul web le permite părinților sau educatorilor să gestioneze conținutul cursurilor care apare în jocul Unity.
 
-Important files:
+Fișiere importante:
 
-| File | Responsibility |
+| Fișier | Responsabilitate |
 | --- | --- |
-| `src/App.jsx` | Main SPA, auth state, dashboard, course editor |
-| `src/lib/api.js` | REST API helper |
-| `src/main.jsx` | React entry point |
-| `src/styles.css` | Tailwind/CSS styling |
+| `src/App.jsx` | Aplicația SPA principală, starea autentificării, tabloul de bord și editorul de cursuri |
+| `src/lib/api.js` | Funcții auxiliare pentru API-ul REST |
+| `src/main.jsx` | Punctul de intrare React |
+| `src/styles.css` | Stilizarea Tailwind/CSS |
 
-REST API:
+API REST:
 
-| Method | Endpoint | Purpose |
+| Metodă | Endpoint | Scop |
 | --- | --- | --- |
-| `POST` | `/api/web/auth/lookup` | Determine login/register path |
-| `POST` | `/api/web/auth/register` | Register parent |
-| `POST` | `/api/web/auth/login` | Login parent |
-| `GET` | `/api/web/courses/mine` | List owned courses |
-| `GET` | `/api/web/courses/{courseId}` | Get owned course detail |
-| `POST` | `/api/web/courses` | Create course |
-| `PUT` | `/api/web/courses/{courseId}` | Update course and questions |
-| `DELETE` | `/api/web/courses/{courseId}` | Delete course |
+| `POST` | `/api/web/auth/lookup` | Determină fluxul de autentificare/înregistrare |
+| `POST` | `/api/web/auth/register` | Înregistrează părintele |
+| `POST` | `/api/web/auth/login` | Autentifică părintele |
+| `GET` | `/api/web/courses/mine` | Listează cursurile deținute |
+| `GET` | `/api/web/courses/{courseId}` | Preia detaliile unui curs deținut |
+| `POST` | `/api/web/courses` | Creează un curs |
+| `PUT` | `/api/web/courses/{courseId}` | Actualizează cursul și întrebările |
+| `DELETE` | `/api/web/courses/{courseId}` | Șterge cursul |
 
-Course validation in `CourseService`:
+Validarea cursurilor în `CourseService`:
 
-- title is required.
-- at least one quiz question is required.
-- each question needs a prompt.
-- each question has four options.
-- `correctIndex` must be `0..3`.
-- acronym is sanitized from acronym/title.
-- summary is trimmed to 280 characters.
-- course ownership is checked for read/update/delete.
+- titlul este obligatoriu.
+- este necesară cel puțin o întrebare de test.
+- fiecare întrebare trebuie să aibă un enunț.
+- fiecare întrebare are patru variante de răspuns.
+- `correctIndex` trebuie să fie în intervalul `0..3`.
+- acronimul este curățat pe baza acronimului/titlului.
+- rezumatul este limitat la 280 de caractere.
+- dreptul de proprietate asupra cursului este verificat la citire/actualizare/ștergere.
 
-## Courses, Tasks, Goals, And Reports
+## Cursuri, sarcini, obiective și rapoarte
 
-### Courses
+### Cursuri
 
-Courses are authored in the web creator and played in Unity through Community Island.
+Cursurile sunt create în creatorul web și parcurse în Unity prin Community Island.
 
-Course fields:
+Câmpurile unui curs:
 
-- title.
-- acronym.
-- language.
-- difficulty.
-- summary.
-- description.
-- point reward.
-- published flag.
-- ordered quiz questions.
+- titlu.
+- acronim.
+- limbaj.
+- dificultate.
+- rezumat.
+- descriere.
+- recompensă în puncte.
+- indicator de publicare.
+- întrebări de test ordonate.
 
-`recordCourseCompletion()` tracks attempts, last score, best score, total questions, last attempt time, completion, and reward state. Course points are granted only once because `rewardGranted` is checked before awarding points.
+`recordCourseCompletion()` urmărește încercările, ultimul punctaj, cel mai bun punctaj, numărul total de întrebări, momentul ultimei încercări, finalizarea și starea recompensei. Punctele pentru curs sunt acordate o singură dată, deoarece `rewardGranted` este verificat înainte de acordarea lor.
 
-### Global Tasks
+### Sarcini globale
 
-Global tasks are initialized from `DefaultTaskType`:
+Sarcinile globale sunt inițializate din `DefaultTaskType`:
 
-| Category | Examples |
+| Categorie | Exemple |
 | --- | --- |
-| C++ starter | `C++ Starter Quiz: Complete All Questions` |
-| C++ debug medium | multiply, sum, even check, pass-by-reference |
-| C++ hard | `IsEven`, `MaxOfTwo`, `Square`, `Sum3`, `Factorial3` |
-| Python medium | multiply, add, even check, loop sum |
-| Python hard visual | bar line, progress bar, square grid, staircase, alternating pattern |
-| Logic puzzles | jump power/physics, reveal island, reveal bridge |
+| C++ introductiv | `C++ Starter Quiz: Complete All Questions` |
+| C++ depanare, nivel mediu | înmulțire, sumă, verificarea parității, transmitere prin referință |
+| C++ nivel avansat | `IsEven`, `MaxOfTwo`, `Square`, `Sum3`, `Factorial3` |
+| Python nivel mediu | înmulțire, adunare, verificarea parității, suma dintr-o buclă |
+| Python vizual, nivel avansat | linie cu bare, bară de progres, grilă pătrată, scară, model alternant |
+| Puzzle-uri logice | puterea/fizica saltului, dezvăluirea insulei, dezvăluirea podului |
 
-`TaskService.completeTask()` creates a `CompletedTask`, adds the task point value to the child, increments `game_stats["tasks_completed"]`, saves the child, and triggers goal checks. The method currently does not enforce duplicate prevention in the shown code path, so callers should avoid submitting the same completion repeatedly unless repeat rewards are intended.
+`TaskService.completeTask()` creează un `CompletedTask`, adaugă la punctajul copilului valoarea în puncte a sarcinii, incrementează `game_stats["tasks_completed"]`, salvează copilul și declanșează verificarea obiectivelor. În prezent, metoda nu împiedică finalizările duplicate în fluxul de cod prezentat, așadar apelanții trebuie să evite trimiterea repetată a aceleiași finalizări, cu excepția cazului în care se doresc recompense repetate.
 
-### Goals
+### Obiective
 
-Goals are parent-created child objectives. A goal can be based on:
+Obiectivele sunt create de părinți pentru copii. Un obiectiv se poate baza pe:
 
-- required points.
-- required task.
+- punctajul necesar.
+- sarcina necesară.
 
-`GoalService` checks goals after task completion and can push updates to connected clients.
+`GoalService` verifică obiectivele după finalizarea unei sarcini și poate trimite actualizări clienților conectați.
 
-### Parent Challenges
+### Provocări de la părinți
 
-Parent challenges are live prompts sent from the Android app to a child session:
+Provocările de la părinți sunt solicitări în timp real trimise din aplicația Android către sesiunea unui copil:
 
 - `SendParentChallengePacket`
 - `ParentChallengePacket`
 - `ParentChallengeCompletedPacket`
 
-Active challenges are held in `Server.activeParentChallenges`.
+Provocările active sunt păstrate în `Server.activeParentChallenges`.
 
-### Weekly Reports
+### Rapoarte săptămânale
 
 `LearningProfileService.generateWeeklyParentReport()`:
 
-- computes the current Monday-Sunday week.
-- collects completed tasks from the week.
-- reads C++, Python, and general profile data.
-- collects recent learning events.
-- builds an AI prompt for a parent-facing report.
-- falls back to a deterministic report if the AI call fails.
+- calculează săptămâna curentă, de luni până duminică.
+- colectează sarcinile finalizate în timpul săptămânii.
+- citește datele profilurilor pentru C++ și Python, precum și datele profilului general.
+- colectează evenimentele de învățare recente.
+- construiește un prompt pentru IA destinat unui raport pentru părinți.
+- folosește un raport determinist de rezervă dacă apelul către IA eșuează.
 
-## Database Model
+## Modelul bazei de date
 
-The entity model is implemented under `java-server/Java-Server/src/main/java/io/github/kawase/database/entity/`.
+Modelul entităților este implementat în `java-server/Java-Server/src/main/java/io/github/kawase/database/entity/`.
 
 ```mermaid
 erDiagram
-    PARENT ||--o{ CHILD : owns
-    CHILD ||--o| GAME_SESSION : has
-    CHILD ||--o{ COMPLETED_TASK : completes
-    TASK ||--o{ COMPLETED_TASK : appears_in
-    PARENT ||--o{ GOAL : creates
-    CHILD ||--o{ GOAL : receives
-    TASK ||--o{ GOAL : may_require
-    PARENT ||--o{ COURSE : authors
-    COURSE ||--o{ COURSE_QUIZ_QUESTION : contains
-    CHILD ||--o{ CHILD_COURSE_PROGRESS : tracks
-    COURSE ||--o{ CHILD_COURSE_PROGRESS : tracks
+    PARENT ||--o{ CHILD : deține
+    CHILD ||--o| GAME_SESSION : are
+    CHILD ||--o{ COMPLETED_TASK : finalizează
+    TASK ||--o{ COMPLETED_TASK : apare_în
+    PARENT ||--o{ GOAL : creează
+    CHILD ||--o{ GOAL : primește
+    TASK ||--o{ GOAL : poate_impune
+    PARENT ||--o{ COURSE : creează
+    COURSE ||--o{ COURSE_QUIZ_QUESTION : conține
+    CHILD ||--o{ CHILD_COURSE_PROGRESS : urmărește
+    COURSE ||--o{ CHILD_COURSE_PROGRESS : urmărește
 
     PARENT {
         long id
@@ -658,35 +658,35 @@ erDiagram
     }
 ```
 
-Important persistent concepts:
+Concepte persistente importante:
 
-- `children.game_stats` stores the evolving AI profile as JSONB.
-- `game_sessions` stores persistent child session tokens.
-- `completed_tasks` stores task completion records.
-- `goals` stores parent-created reward objectives.
-- `child_course_progress` stores course attempts, scores, and reward state.
+- `children.game_stats` stochează profilul de IA aflat în continuă evoluție, în format JSONB.
+- `game_sessions` stochează tokenurile persistente ale sesiunilor copiilor.
+- `completed_tasks` stochează înregistrările sarcinilor finalizate.
+- `goals` stochează obiectivele cu recompense create de părinți.
+- `child_course_progress` stochează încercările la cursuri, punctajele și starea recompenselor.
 
-## Security Notes
+## Note despre securitate
 
-Implemented protections:
+Protecții implementate:
 
-- encrypted binary WebSocket packets between backend and Unity/Android.
-- per-packet dynamic encryption seed.
-- seed length validation.
-- SHA-256 credential hashing.
-- web bearer tokens with TTL.
-- course owner validation.
-- child ownership checks in parent operations.
-- code execution sandboxing with process, memory, file, CPU, and network restrictions.
+- pachete WebSocket binare criptate între backend și Unity/Android.
+- seed de criptare dinamic pentru fiecare pachet.
+- validarea lungimii seed-ului.
+- hashing-ul datelor de autentificare cu SHA-256.
+- tokenuri Bearer web cu TTL.
+- validarea proprietarului cursului.
+- verificarea apartenenței copilului în operațiunile efectuate de părinți.
+- executarea codului într-un sandbox cu restricții pentru procese, memorie, fișiere, CPU și rețea.
 
-Known limitations visible in the code:
+Limitări cunoscute, vizibile în cod:
 
-- web sessions are in-memory, so they reset when the backend restarts.
-- password hashing uses plain SHA-256 rather than a slow password hashing algorithm such as BCrypt/Argon2.
-- some dev/admin packets exist in the packet map and whitelist; deployments should review exposure before public release.
-- task completion duplicate prevention is not enforced in `TaskService.completeTask()`.
+- sesiunile web sunt păstrate în memorie, așadar se resetează la repornirea backendului.
+- hashing-ul parolelor folosește SHA-256 simplu, în locul unui algoritm lent pentru parole, precum BCrypt/Argon2.
+- unele pachete pentru dezvoltare/administrare există în registrul de pachete și în lista de permisiuni; înaintea unei lansări publice, configurația de producție trebuie verificată pentru a limita expunerea lor.
+- prevenirea înregistrărilor duplicate la finalizarea sarcinilor nu este impusă în `TaskService.completeTask()`.
 
-## Running The Project
+## Rularea proiectului
 
 ### Backend
 
@@ -695,19 +695,19 @@ cd java-server/Java-Server
 ./gradlew bootRun
 ```
 
-Expected services:
+Servicii disponibile:
 
 - HTTP REST: `:8085`
 - WebSocket: `:49154`
 
-Backend prerequisites:
+Condiții preliminare pentru backend:
 
 - Java 21.
 - PostgreSQL.
-- configured `application.properties`.
-- `api-keys.json` with Groq API key configuration.
+- un fișier `application.properties` configurat.
+- un fișier `api-keys.json` care conține configurația cheilor API Groq.
 
-Example Groq key file:
+Exemplu de fișier cu chei Groq:
 
 ```json
 {
@@ -715,7 +715,7 @@ Example Groq key file:
 }
 ```
 
-### Web Creator
+### Creatorul web de cursuri
 
 ```bash
 cd web-creator
@@ -723,41 +723,41 @@ npm install
 npm run dev
 ```
 
-Set `VITE_API_BASE` if the backend is not running at the default configured endpoint.
+Setați `VITE_API_BASE` dacă backendul nu rulează la endpointul implicit configurat.
 
-### Android App
+### Aplicația Android
 
-Open `kotlin-app/` in Android Studio. The app targets modern Android SDKs and uses WebSocket packets matching the backend protocol.
+Deschideți `kotlin-app/` în Android Studio. Aplicația vizează versiuni moderne ale SDK-ului Android și folosește pachete WebSocket compatibile cu protocolul backendului.
 
-### Unity Game
+### Jocul Unity
 
-Open `unity/` in Unity Hub using Unity `2022.3.62f3`. Update the server URL in `GameClient.cs` if using a local backend instead of the deployed endpoint.
+Deschideți `unity/` în Unity Hub folosind Unity `2022.3.62f3`. Actualizați adresa URL a serverului în `GameClient.cs` dacă folosiți un backend local în locul endpointului din mediul de producție.
 
-The default Unity backend URL in code is:
+Adresa URL implicită a backendului din codul Unity este:
 
 ```text
 wss://neuro.serenityutils.club
 ```
 
-## Current Testing State
+## Starea actuală a testării
 
-The repository currently does not contain a full automated test suite for all components. Verification is mainly manual/integration-based:
+Repository-ul nu conține în prezent o suită completă de teste automate pentru toate componentele. Verificarea este realizată în principal manual și prin teste de integrare:
 
-- backend starts and accepts WebSocket/REST traffic.
-- Unity connects and exchanges encrypted packets.
-- Android connects and displays child/progress state.
-- web creator can authenticate and manage courses.
-- curated screenshots from `images/` are used to document the current game, app, and web surfaces.
+- backendul pornește și acceptă trafic WebSocket/REST.
+- Unity se conectează și schimbă pachete criptate.
+- Android se conectează și afișează starea copilului și progresul acestuia.
+- creatorul web se poate autentifica și poate gestiona cursuri.
+- capturile de ecran selectate din `images/` documentează interfețele actuale ale jocului, aplicației și platformei web.
 
-This is an important improvement area. The highest-value future tests would cover packet encoding/decoding compatibility, course completion reward rules, task duplicate behavior, learning profile updates, and code executor sandbox behavior.
+Aceasta este o direcție importantă de îmbunătățire. Cele mai valoroase teste viitoare ar acoperi compatibilitatea codificării și decodificării pachetelor, regulile de recompensare la finalizarea cursurilor, comportamentul în cazul sarcinilor duplicate, actualizările profilului de învățare și comportamentul sandboxului de executare a codului.
 
-## Competition/Project Criteria Mapping
+## Corelarea cu criteriile competiției/proiectului
 
-Mentora matches common educational software evaluation criteria:
+Mentora îndeplinește criterii uzuale de evaluare a software-ului educațional:
 
-- Architecture: multi-client system with backend, game, mobile app, and web creator.
-- Implementation: custom packet protocol, sandboxed code execution, AI profile service, multiplayer systems.
-- Interface: game UI, Android dashboard, web authoring tool.
-- Content: editable courses, coding tasks, quizzes, AI-generated challenges, live feedback.
-- Evaluation and feedback: task completion, AI explanations, parent summaries, weekly reports.
-- Originality: persistent per-student AI profile, collaborative CodeWorld, merged multiplayer programming context, live parent-child educational loop.
+- Arhitectură: sistem cu mai mulți clienți, alcătuit din backend, joc, aplicație mobilă și creator web.
+- Implementare: protocol de pachete personalizat, executarea codului într-un sandbox, serviciu pentru profilul de IA și sisteme multiplayer.
+- Interfață: interfața jocului, panoul de control Android și instrumentul web de creare a conținutului.
+- Conținut: cursuri editabile, sarcini de programare, chestionare, provocări generate de IA și feedback în timp real.
+- Evaluare și feedback: finalizarea sarcinilor, explicații oferite de IA, rezumate pentru părinți și rapoarte săptămânale.
+- Originalitate: profil de IA persistent pentru fiecare elev, CodeWorld colaborativ, context de programare combinat pentru multiplayer și o buclă educațională părinte-copil în timp real.
