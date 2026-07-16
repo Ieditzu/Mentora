@@ -25,6 +25,9 @@ public sealed class MachineLearningIsland : MonoBehaviour
     private const float RequestTimeoutSeconds = 20f;
     private const int MaximumSourceBytes = 64 * 1024;
     private const int MaximumVisibleOutputCharacters = 5000;
+    private const int MaximumAiChatLines = 18;
+    private const int MaximumAiChatLineCharacters = 2400;
+    private const int MaximumAiContextCharacters = 16000;
 
     [Header("Scene references")]
     [SerializeField] private Transform spawnPoint;
@@ -32,6 +35,9 @@ public sealed class MachineLearningIsland : MonoBehaviour
 
     private readonly List<MachineLearningProblem> visibleProblems = new List<MachineLearningProblem>(3);
     private readonly Dictionary<string, string> sourceDrafts = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> aiChatLinesByProblem = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> gradingFeedbackByProblem = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly HashSet<string> revealedHintProblems = new HashSet<string>(StringComparer.Ordinal);
 
     private MachineLearningProblemCatalog catalog;
     private Difficulty selectedDifficulty = Difficulty.Easy;
@@ -40,6 +46,9 @@ public sealed class MachineLearningIsland : MonoBehaviour
     private string pendingSubmissionRequestId = string.Empty;
     private float catalogRequestStartedAt;
     private float submissionRequestStartedAt;
+    private float aiRequestStartedAt;
+    private bool awaitingAiResponse;
+    private string pendingAiProblemSlug = string.Empty;
     private GameClient subscribedClient;
 
     private GameObject canvasRoot;
@@ -56,6 +65,16 @@ public sealed class MachineLearningIsland : MonoBehaviour
     private Button hintButton;
     private Button runButton;
     private Button closeButton;
+    private GameObject aiChatPanel;
+    private Text aiChatTitleText;
+    private Text aiChatHistoryText;
+    private Text aiChatStatusText;
+    private InputField aiChatInput;
+    private Button aiChatSendButton;
+    private Button aiChatBackButton;
+    private ScrollRect aiChatScrollRect;
+    private RectTransform aiChatContentRect;
+    private RectTransform aiChatViewportRect;
     private bool touchHudSuppressed;
     private GameObject hiddenTouchHudObject;
     private Canvas hiddenTouchCanvas;
@@ -119,6 +138,18 @@ public sealed class MachineLearningIsland : MonoBehaviour
                 "Evaluarea a expirat. Încercarea nu a fost confirmată; o poți rula din nou."), ErrorColor);
             SetRunInteractable(visibleProblems.Count > 0);
         }
+
+        if (awaitingAiResponse && now - aiRequestStartedAt >= RequestTimeoutSeconds)
+        {
+            string timedOutProblemSlug = pendingAiProblemSlug;
+            awaitingAiResponse = false;
+            pendingAiProblemSlug = string.Empty;
+            SetAiChatInteractable(true);
+            SetAiChatStatus(Localize("The AI tutor did not answer in time. Try again.",
+                "Tutorele AI nu a răspuns la timp. Încearcă din nou."), ErrorColor);
+            AppendAiChatLine(timedOutProblemSlug,
+                Localize("AI: I did not answer in time.", "AI: Nu am răspuns la timp."));
+        }
     }
 
     private void OnDestroy()
@@ -138,6 +169,8 @@ public sealed class MachineLearningIsland : MonoBehaviour
         selectedDifficulty = difficulty;
         selectedProblemIndex = 0;
         pendingSubmissionRequestId = string.Empty;
+        awaitingAiResponse = false;
+        pendingAiProblemSlug = string.Empty;
 
         if (canvasRoot == null)
         {
@@ -145,6 +178,7 @@ public sealed class MachineLearningIsland : MonoBehaviour
         }
 
         canvasRoot.SetActive(true);
+        SetAiChatVisible(false);
         HideTouchHud();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -160,6 +194,9 @@ public sealed class MachineLearningIsland : MonoBehaviour
         SaveCurrentDraft();
         pendingCatalogRequestId = string.Empty;
         pendingSubmissionRequestId = string.Empty;
+        awaitingAiResponse = false;
+        pendingAiProblemSlug = string.Empty;
+        SetAiChatVisible(false);
         if (canvasRoot != null)
         {
             canvasRoot.SetActive(false);
@@ -338,6 +375,28 @@ public sealed class MachineLearningIsland : MonoBehaviour
             string json = submission.ResultJson;
             UnityMainThreadDispatcher.Instance().Enqueue(() => HandleSubmissionResponse(requestId, json));
         }
+        else if (packet is AiResponsePacket aiResponse && awaitingAiResponse)
+        {
+            string response = aiResponse.Response;
+            UnityMainThreadDispatcher.Instance().Enqueue(() => HandleAiResponse(response));
+        }
+    }
+
+    private void HandleAiResponse(string response)
+    {
+        if (!awaitingAiResponse)
+        {
+            return;
+        }
+
+        string responseProblemSlug = pendingAiProblemSlug;
+        awaitingAiResponse = false;
+        pendingAiProblemSlug = string.Empty;
+        SetAiChatInteractable(true);
+        SetAiChatStatus(string.Empty, InfoColor);
+        AppendAiChatLine(responseProblemSlug, Localize("AI: ", "AI: ") + (string.IsNullOrWhiteSpace(response)
+            ? Localize("No answer came back.", "Nu a venit niciun răspuns.")
+            : response.Trim()));
     }
 
     private void HandleCatalogResponse(string requestId, string json)
@@ -393,6 +452,7 @@ public sealed class MachineLearningIsland : MonoBehaviour
             {
                 message += "\n\n" + result.error;
             }
+            RememberGradingFeedback(result.problemSlug, message);
             SetResult(message, InfrastructureColor);
             return;
         }
@@ -429,7 +489,9 @@ public sealed class MachineLearningIsland : MonoBehaviour
             builder.Append("\n\nerror:\n").Append(LimitVisibleOutput(result.error));
         }
 
-        SetResult(builder.ToString(), result.passed ? SuccessColor : ErrorColor);
+        string gradingFeedback = builder.ToString();
+        RememberGradingFeedback(result.problemSlug, gradingFeedback);
+        SetResult(gradingFeedback, result.passed ? SuccessColor : ErrorColor);
         ShowCurrentProblem(false);
     }
 
@@ -504,9 +566,11 @@ public sealed class MachineLearningIsland : MonoBehaviour
         resetButton.interactable = hasProblem;
         hintButton.interactable = hasProblem;
         SetRunInteractable(hasProblem && string.IsNullOrEmpty(pendingSubmissionRequestId));
+        UpdateAiTutorButtonLabel();
 
         if (!hasProblem)
         {
+            SetAiChatVisible(false);
             problemTitleText.text = Localize("No challenges loaded yet", "Nu există încă provocări încărcate");
             problemBodyText.text = Localize("The catalog comes from the Java learning server.",
                 "Catalogul provine de pe serverul Java de învățare.");
@@ -536,6 +600,11 @@ public sealed class MachineLearningIsland : MonoBehaviour
                 : problem.starterCode ?? string.Empty;
             sourceEditor.SetTextWithoutNotify(source);
         }
+
+        if (aiChatPanel != null && aiChatPanel.activeSelf)
+        {
+            RefreshAiChatUi();
+        }
     }
 
     private void SelectRelativeProblem(int offset)
@@ -546,6 +615,7 @@ public sealed class MachineLearningIsland : MonoBehaviour
         }
 
         SaveCurrentDraft();
+        SetAiChatVisible(false);
         selectedProblemIndex = Mathf.Clamp(selectedProblemIndex + offset, 0, visibleProblems.Count - 1);
         SetResult(string.Empty, InfoColor);
         ShowCurrentProblem(true);
@@ -573,11 +643,379 @@ public sealed class MachineLearningIsland : MonoBehaviour
             return;
         }
 
-        string hint = problem.LocalizedHint;
-        SetResult(string.IsNullOrWhiteSpace(hint)
-            ? Localize("No hint is available for this challenge yet.", "Nu există încă un indiciu pentru această provocare.")
-            : Localize("AI tutor hint (not grading):\n", "Indiciu de la tutorele AI (nu e evaluare):\n") + hint,
-            HintColor);
+        if (revealedHintProblems.Add(problem.slug))
+        {
+            string hint = problem.LocalizedHint;
+            string message = string.IsNullOrWhiteSpace(hint)
+                ? Localize("No curated hint is available for this challenge yet.",
+                    "Nu există încă un indiciu pregătit pentru această provocare.")
+                : Localize("AI tutor hint (not grading):\n", "Indiciu de la tutorele AI (nu e evaluare):\n") + hint;
+            message += Localize(
+                "\n\nPress AI Tutor again to chat and ask a specific question.",
+                "\n\nApasă din nou Tutore AI pentru a discuta și a pune o întrebare specifică.");
+            SetResult(message, HintColor);
+            UpdateAiTutorButtonLabel();
+            return;
+        }
+
+        SetAiChatVisible(true);
+    }
+
+    private void RememberGradingFeedback(string problemSlug, string feedback)
+    {
+        if (!string.IsNullOrWhiteSpace(problemSlug) && !string.IsNullOrWhiteSpace(feedback))
+        {
+            gradingFeedbackByProblem[problemSlug] = LimitVisibleOutput(feedback.Trim());
+        }
+    }
+
+    private void UpdateAiTutorButtonLabel()
+    {
+        MachineLearningProblem problem = CurrentProblem;
+        bool hintRevealed = problem != null && revealedHintProblems.Contains(problem.slug);
+        SetButtonLabel(hintButton, hintRevealed
+            ? Localize("CHAT WITH AI", "DISCUTĂ CU AI")
+            : Localize("HINT / AI TUTOR", "INDICIU / TUTORE AI"));
+    }
+
+    private void SetAiChatVisible(bool visible)
+    {
+        if (aiChatPanel == null)
+        {
+            return;
+        }
+
+        MachineLearningProblem problem = CurrentProblem;
+        if (visible && problem == null)
+        {
+            return;
+        }
+
+        aiChatPanel.SetActive(visible);
+        if (!visible)
+        {
+            if (EventSystem.current != null && aiChatInput != null &&
+                EventSystem.current.currentSelectedGameObject == aiChatInput.gameObject)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
+            return;
+        }
+
+        SaveCurrentDraft();
+        List<string> chatLines = GetAiChatLines(problem.slug);
+        if (chatLines.Count == 0)
+        {
+            AppendAiChatLine(problem.slug, Localize(
+                "AI: Ask me a specific question about the dataset, model, metric, or your Python code.",
+                "AI: Pune-mi o întrebare specifică despre date, model, metrică sau codul tău Python."));
+        }
+
+        RefreshAiChatUi();
+        SetAiChatInteractable(!awaitingAiResponse);
+        SetAiChatStatus(awaitingAiResponse
+                ? Localize("The AI tutor is thinking…", "Tutorele AI se gândește…")
+                : string.Empty,
+            InfoColor);
+        aiChatInput.SetTextWithoutNotify(string.Empty);
+        aiChatInput.ActivateInputField();
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(aiChatInput.gameObject);
+        }
+    }
+
+    private void SetAiChatInteractable(bool interactable)
+    {
+        if (aiChatInput != null)
+        {
+            aiChatInput.interactable = interactable;
+        }
+        if (aiChatSendButton != null)
+        {
+            aiChatSendButton.interactable = interactable;
+        }
+    }
+
+    private void SetAiChatStatus(string message, Color color)
+    {
+        if (aiChatStatusText == null)
+        {
+            return;
+        }
+
+        aiChatStatusText.text = message ?? string.Empty;
+        aiChatStatusText.color = color;
+    }
+
+    private List<string> GetAiChatLines(string problemSlug)
+    {
+        if (string.IsNullOrWhiteSpace(problemSlug))
+        {
+            return new List<string>();
+        }
+
+        if (!aiChatLinesByProblem.TryGetValue(problemSlug, out List<string> lines))
+        {
+            lines = new List<string>();
+            aiChatLinesByProblem[problemSlug] = lines;
+        }
+
+        return lines;
+    }
+
+    private void AppendAiChatLine(string line)
+    {
+        MachineLearningProblem problem = CurrentProblem;
+        AppendAiChatLine(problem != null ? problem.slug : string.Empty, line);
+    }
+
+    private void AppendAiChatLine(string problemSlug, string line)
+    {
+        if (string.IsNullOrWhiteSpace(problemSlug) || string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        string normalized = line.Trim();
+        if (normalized.Length > MaximumAiChatLineCharacters)
+        {
+            normalized = normalized.Substring(0, MaximumAiChatLineCharacters) + "\n…";
+        }
+
+        List<string> lines = GetAiChatLines(problemSlug);
+        lines.Add(normalized);
+        while (lines.Count > MaximumAiChatLines)
+        {
+            lines.RemoveAt(0);
+        }
+
+        MachineLearningProblem current = CurrentProblem;
+        if (current != null && string.Equals(current.slug, problemSlug, StringComparison.Ordinal))
+        {
+            RefreshAiChatUi();
+        }
+    }
+
+    private void RefreshAiChatUi()
+    {
+        MachineLearningProblem problem = CurrentProblem;
+        if (problem == null)
+        {
+            if (aiChatTitleText != null)
+            {
+                aiChatTitleText.text = Localize("AI TUTOR", "TUTORE AI");
+            }
+            if (aiChatHistoryText != null)
+            {
+                aiChatHistoryText.text = string.Empty;
+            }
+            return;
+        }
+
+        if (aiChatTitleText != null)
+        {
+            aiChatTitleText.text = Localize("AI TUTOR • ", "TUTORE AI • ") + problem.LocalizedTitle;
+        }
+
+        if (aiChatHistoryText == null)
+        {
+            return;
+        }
+
+        List<string> lines = GetAiChatLines(problem.slug);
+        var builder = new StringBuilder();
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append("\n\n");
+            }
+            builder.Append(lines[i]);
+        }
+        aiChatHistoryText.text = builder.ToString();
+
+        Canvas.ForceUpdateCanvases();
+        if (aiChatContentRect != null)
+        {
+            float viewportHeight = aiChatViewportRect != null ? aiChatViewportRect.rect.height : 0f;
+            float preferredHeight = Mathf.Max(viewportHeight, aiChatHistoryText.preferredHeight + 28f);
+            aiChatContentRect.sizeDelta = new Vector2(0f, preferredHeight);
+        }
+        Canvas.ForceUpdateCanvases();
+        if (aiChatScrollRect != null)
+        {
+            aiChatScrollRect.verticalNormalizedPosition = 0f;
+        }
+    }
+
+    private void HandleAiChatInputEndEdit(string _)
+    {
+        if (aiChatPanel == null || !aiChatPanel.activeSelf || aiChatInput == null)
+        {
+            return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || (!keyboard.enterKey.wasPressedThisFrame && !keyboard.numpadEnterKey.wasPressedThisFrame))
+        {
+            return;
+        }
+
+        OnAiChatSendClicked();
+    }
+
+    private void OnAiChatSendClicked()
+    {
+        if (aiChatInput == null || CurrentProblem == null)
+        {
+            return;
+        }
+        if (awaitingAiResponse)
+        {
+            SetAiChatStatus(Localize("Wait for the current answer first.",
+                "Așteaptă mai întâi răspunsul curent."), HintColor);
+            return;
+        }
+
+        string message = (aiChatInput.text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            SetAiChatStatus(Localize("Type a specific question first.",
+                "Scrie mai întâi o întrebare specifică."), HintColor);
+            aiChatInput.ActivateInputField();
+            return;
+        }
+
+        aiChatInput.SetTextWithoutNotify(string.Empty);
+        _ = SendAiQuestionAsync(message);
+    }
+
+    private async Task SendAiQuestionAsync(string message)
+    {
+        MachineLearningProblem problem = CurrentProblem;
+        if (problem == null || awaitingAiResponse)
+        {
+            return;
+        }
+        if (PauseMenuManager.GetLoggedInChildId() <= 0)
+        {
+            SetAiChatStatus(Localize("Log in with QR before using the AI tutor.",
+                "Autentifică-te prin QR înainte de a folosi tutorele AI."), ErrorColor);
+            SetAiChatInteractable(true);
+            return;
+        }
+
+        SaveCurrentDraft();
+        string problemSlug = problem.slug;
+        string source = sourceDrafts.TryGetValue(problemSlug, out string savedSource)
+            ? savedSource
+            : sourceEditor != null ? sourceEditor.text ?? string.Empty : string.Empty;
+        AppendAiChatLine(problemSlug, Localize("You: ", "Tu: ") + message);
+        SetAiChatInteractable(false);
+        SetAiChatStatus(Localize("Connecting to the AI tutor…", "Conectare la tutorele AI…"), InfoColor);
+
+        try
+        {
+            TrySubscribeToNetwork();
+            GameClient client = GameClient.Instance;
+            if (client == null)
+            {
+                throw new InvalidOperationException(Localize("The game client is unavailable.",
+                    "Clientul jocului nu este disponibil."));
+            }
+
+            if (!client.IsConnected)
+            {
+                await client.Connect();
+            }
+            if (!client.IsConnected)
+            {
+                throw new InvalidOperationException(Localize("The AI server is offline.",
+                    "Serverul AI este offline."));
+            }
+            if (!IsOpen)
+            {
+                SetAiChatInteractable(true);
+                return;
+            }
+
+            pendingAiProblemSlug = problemSlug;
+            awaitingAiResponse = true;
+            aiRequestStartedAt = Time.unscaledTime;
+            SetAiChatStatus(Localize("The AI tutor is thinking…", "Tutorele AI se gândește…"), InfoColor);
+            await client.SendPacket(new AskAiPacket(BuildAiQuestion(message), BuildAiContext(problem, source)));
+        }
+        catch (Exception exception)
+        {
+            if (string.Equals(pendingAiProblemSlug, problemSlug, StringComparison.Ordinal))
+            {
+                awaitingAiResponse = false;
+                pendingAiProblemSlug = string.Empty;
+            }
+            SetAiChatInteractable(true);
+            SetAiChatStatus(Localize("Could not contact the AI tutor.",
+                "Tutorele AI nu a putut fi contactat."), ErrorColor);
+            AppendAiChatLine(problemSlug, Localize("AI: Connection failed: ", "AI: Conexiunea a eșuat: ") + exception.Message);
+        }
+    }
+
+    private static string BuildAiQuestion(string message)
+    {
+        string language = MentoraLocalization.IsRomanian ? "Romanian" : "English";
+        return "You are Mentora's machine-learning tutor for the active exercise only. " +
+               "Answer the player's exact question in " + language + ". Give short, concrete, code-aware guidance and a useful next step. " +
+               "Prefer explanation, debugging, and small snippets; do not provide a complete final submission. " +
+               "Never claim that hidden tests pass or replace the authoritative server grader. " +
+               "Player question: " + LimitAiContextPart(message, 2200);
+    }
+
+    private string BuildAiContext(MachineLearningProblem problem, string source)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("machine_learning_tutor_chat");
+        builder.AppendLine("The player is solving one Python machine-learning exercise on Mentora's AI/ML island.");
+        builder.AppendLine("Server grading and hidden datasets are authoritative; the tutor must not invent a grade or passing result.");
+        builder.Append("Language: ").AppendLine(MentoraLocalization.IsRomanian ? "Romanian" : "English");
+        builder.Append("Slug: ").AppendLine(problem.slug ?? string.Empty);
+        builder.Append("Difficulty: ").AppendLine(problem.difficulty ?? selectedDifficulty.ToString());
+        builder.Append("Title: ").AppendLine(problem.LocalizedTitle);
+        builder.AppendLine("Problem:");
+        builder.AppendLine(LimitAiContextPart(problem.LocalizedDescription, 2200));
+        builder.Append("Concepts: ").AppendLine(problem.concepts != null && problem.concepts.Length > 0
+            ? string.Join(", ", problem.concepts)
+            : "none listed");
+        builder.Append("Dataset columns: ").AppendLine(problem.datasetColumns != null && problem.datasetColumns.Length > 0
+            ? string.Join(", ", problem.datasetColumns)
+            : "none listed");
+        builder.AppendLine("Most recent authoritative grading feedback:");
+        builder.AppendLine(gradingFeedbackByProblem.TryGetValue(problem.slug, out string gradingFeedback)
+            ? LimitAiContextPart(gradingFeedback, 2200)
+            : "No submission has been graded for this problem in the current session.");
+        builder.AppendLine("Recent conversation:");
+        List<string> lines = GetAiChatLines(problem.slug);
+        int firstLine = Mathf.Max(0, lines.Count - 6);
+        for (int i = firstLine; i < lines.Count; i++)
+        {
+            builder.AppendLine(LimitAiContextPart(lines[i], 700));
+        }
+        builder.AppendLine("Dataset preview:");
+        builder.AppendLine(LimitAiContextPart(problem.datasetPreview, 1800));
+        builder.AppendLine("Current Python source:");
+        builder.AppendLine(LimitAiContextPart(source, 4200));
+
+        string context = builder.ToString();
+        return context.Length <= MaximumAiContextCharacters
+            ? context
+            : context.Substring(0, MaximumAiContextCharacters) + "\n… context truncated …";
+    }
+
+    private static string LimitAiContextPart(string value, int maximumCharacters)
+    {
+        string normalized = value ?? string.Empty;
+        return normalized.Length <= maximumCharacters
+            ? normalized
+            : normalized.Substring(0, maximumCharacters) + "\n… truncated …";
     }
 
     private void SaveCurrentDraft()
@@ -655,14 +1093,63 @@ public sealed class MachineLearningIsland : MonoBehaviour
         runButton = CreateButton(backdrop.transform, "RunButton", string.Empty,
             new Vector2(0.745f, 0.035f), new Vector2(0.985f, 0.135f), new Color(0.14f, 0.58f, 0.38f));
 
+        aiChatPanel = CreatePanel(backdrop.transform, "AiTutorChat", new Vector2(0.14f, 0.11f), new Vector2(0.86f, 0.89f),
+            new Color(0.025f, 0.035f, 0.085f, 0.995f));
+        aiChatTitleText = CreateText(aiChatPanel.transform, "Title", string.Empty, 27, new Color(0.76f, 0.91f, 1f),
+            new Vector2(0.04f, 0.86f), new Vector2(0.75f, 0.97f), TextAnchor.MiddleLeft, FontStyle.Bold);
+        aiChatBackButton = CreateButton(aiChatPanel.transform, "BackButton", string.Empty,
+            new Vector2(0.78f, 0.875f), new Vector2(0.96f, 0.96f), new Color(0.24f, 0.27f, 0.42f));
+
+        GameObject chatViewport = new GameObject("HistoryViewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        chatViewport.transform.SetParent(aiChatPanel.transform, false);
+        aiChatViewportRect = chatViewport.GetComponent<RectTransform>();
+        aiChatViewportRect.anchorMin = new Vector2(0.04f, 0.23f);
+        aiChatViewportRect.anchorMax = new Vector2(0.96f, 0.84f);
+        aiChatViewportRect.offsetMin = Vector2.zero;
+        aiChatViewportRect.offsetMax = Vector2.zero;
+        chatViewport.GetComponent<Image>().color = new Color(0.008f, 0.014f, 0.038f, 0.96f);
+        chatViewport.GetComponent<Mask>().showMaskGraphic = true;
+
+        GameObject chatContent = new GameObject("HistoryContent", typeof(RectTransform));
+        chatContent.transform.SetParent(chatViewport.transform, false);
+        aiChatContentRect = chatContent.GetComponent<RectTransform>();
+        aiChatContentRect.anchorMin = new Vector2(0f, 1f);
+        aiChatContentRect.anchorMax = new Vector2(1f, 1f);
+        aiChatContentRect.pivot = new Vector2(0.5f, 1f);
+        aiChatContentRect.anchoredPosition = Vector2.zero;
+        aiChatContentRect.sizeDelta = new Vector2(0f, 100f);
+        aiChatHistoryText = CreateText(chatContent.transform, "History", string.Empty, 17, new Color(0.89f, 0.93f, 1f),
+            Vector2.zero, Vector2.one, TextAnchor.UpperLeft, FontStyle.Normal);
+        aiChatHistoryText.rectTransform.offsetMin = new Vector2(16f, 12f);
+        aiChatHistoryText.rectTransform.offsetMax = new Vector2(-16f, -12f);
+        aiChatHistoryText.supportRichText = false;
+
+        aiChatScrollRect = aiChatPanel.AddComponent<ScrollRect>();
+        aiChatScrollRect.content = aiChatContentRect;
+        aiChatScrollRect.viewport = aiChatViewportRect;
+        aiChatScrollRect.horizontal = false;
+        aiChatScrollRect.vertical = true;
+        aiChatScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        aiChatScrollRect.scrollSensitivity = 35f;
+
+        aiChatStatusText = CreateText(aiChatPanel.transform, "Status", string.Empty, 14, InfoColor,
+            new Vector2(0.04f, 0.17f), new Vector2(0.96f, 0.225f), TextAnchor.MiddleLeft, FontStyle.Italic);
+        aiChatInput = CreateSingleLineInput(aiChatPanel.transform, new Vector2(0.04f, 0.055f), new Vector2(0.76f, 0.16f));
+        aiChatSendButton = CreateButton(aiChatPanel.transform, "SendButton", string.Empty,
+            new Vector2(0.78f, 0.055f), new Vector2(0.96f, 0.16f), new Color(0.18f, 0.48f, 0.68f));
+
         closeButton.onClick.AddListener(Close);
         previousButton.onClick.AddListener(() => SelectRelativeProblem(-1));
         nextButton.onClick.AddListener(() => SelectRelativeProblem(1));
         resetButton.onClick.AddListener(ResetCurrentSource);
         hintButton.onClick.AddListener(ShowHint);
         runButton.onClick.AddListener(SubmitCurrentSolution);
+        aiChatBackButton.onClick.AddListener(() => SetAiChatVisible(false));
+        aiChatSendButton.onClick.AddListener(OnAiChatSendClicked);
+        aiChatInput.onEndEdit.AddListener(HandleAiChatInputEndEdit);
 
         ApplyStaticLocalization();
+        aiChatPanel.SetActive(false);
         canvasRoot.SetActive(false);
     }
 
@@ -678,8 +1165,16 @@ public sealed class MachineLearningIsland : MonoBehaviour
         SetButtonLabel(previousButton, Localize("◀ PREVIOUS", "◀ ANTERIOR"));
         SetButtonLabel(nextButton, Localize("NEXT ▶", "URMĂTOR ▶"));
         SetButtonLabel(resetButton, Localize("RESET", "RESETEAZĂ"));
-        SetButtonLabel(hintButton, Localize("HINT / AI TUTOR", "INDICIU / TUTORE AI"));
+        UpdateAiTutorButtonLabel();
         SetButtonLabel(runButton, Localize("▶ RUN ON SERVER", "▶ RULEAZĂ PE SERVER"));
+        SetButtonLabel(aiChatBackButton, Localize("BACK", "ÎNAPOI"));
+        SetButtonLabel(aiChatSendButton, Localize("SEND", "TRIMITE"));
+        if (aiChatInput != null && aiChatInput.placeholder is Text chatPlaceholder)
+        {
+            chatPlaceholder.text = Localize("Ask about the model, data, metric, or your code…",
+                "Întreabă despre model, date, metrică sau codul tău…");
+        }
+        RefreshAiChatUi();
         if (IsOpen)
         {
             ShowCurrentProblem(false);
@@ -958,6 +1453,39 @@ public sealed class MachineLearningIsland : MonoBehaviour
         input.lineType = InputField.LineType.MultiLineNewline;
         input.contentType = InputField.ContentType.Standard;
         input.characterLimit = 65536;
+        return input;
+    }
+
+    private static InputField CreateSingleLineInput(Transform parent, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        GameObject inputObject = new GameObject("QuestionInput", typeof(RectTransform), typeof(Image), typeof(InputField));
+        inputObject.transform.SetParent(parent, false);
+        RectTransform rect = inputObject.GetComponent<RectTransform>();
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        Image background = inputObject.GetComponent<Image>();
+        background.color = new Color(0.012f, 0.018f, 0.045f, 1f);
+
+        Text inputText = CreateText(inputObject.transform, "Text", string.Empty, 17, new Color(0.88f, 0.96f, 1f),
+            Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, FontStyle.Normal);
+        inputText.rectTransform.offsetMin = new Vector2(14f, 4f);
+        inputText.rectTransform.offsetMax = new Vector2(-14f, -4f);
+        inputText.supportRichText = false;
+
+        Text placeholder = CreateText(inputObject.transform, "Placeholder", string.Empty, 16,
+            new Color(0.42f, 0.5f, 0.62f), Vector2.zero, Vector2.one, TextAnchor.MiddleLeft, FontStyle.Italic);
+        placeholder.rectTransform.offsetMin = new Vector2(14f, 4f);
+        placeholder.rectTransform.offsetMax = new Vector2(-14f, -4f);
+
+        InputField input = inputObject.GetComponent<InputField>();
+        input.targetGraphic = background;
+        input.textComponent = inputText;
+        input.placeholder = placeholder;
+        input.lineType = InputField.LineType.SingleLine;
+        input.contentType = InputField.ContentType.Standard;
+        input.characterLimit = 2000;
         return input;
     }
 
