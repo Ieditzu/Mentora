@@ -3,28 +3,35 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+/// <summary>
+/// Low-cost portal visual for the three machine-learning stations. Geometry is generated once;
+/// animation only changes transforms, so LineRenderer meshes are never rebuilt every frame.
+/// </summary>
 [DisallowMultipleComponent]
 public sealed class MachineLearningPortalEffect : MonoBehaviour
 {
     private const string GeneratedRootName = "__MachineLearningPortalEffect";
-    private const int SurfaceAngularSegments = 48;
-    private const int SurfaceRadialSegments = 5;
+    private const int SurfaceSegments = 28;
 
     [Header("Portal appearance")]
     [SerializeField] private Color difficultyColor = new Color(0.16f, 0.95f, 0.56f, 1f);
     [SerializeField] private Vector3 localCenter = new Vector3(0f, 3.05f, 0.06f);
     [SerializeField] private Vector2 portalSize = new Vector2(4.8f, 5.05f);
-    [SerializeField, Range(2, 3)] private int energyRingCount = 3;
-    [SerializeField, Range(24, 64)] private int ringSegments = 48;
-    [SerializeField, Range(0.25f, 0.9f)] private float voidOpacity = 0.62f;
-    [SerializeField, Range(0.03f, 0.35f)] private float surfaceOpacity = 0.18f;
+    [SerializeField, Range(1, 2)] private int energyRingCount = 1;
+    [SerializeField, Range(16, 32)] private int ringSegments = 24;
+    [SerializeField, Range(0.35f, 0.85f)] private float voidOpacity = 0.68f;
+    [SerializeField, Range(0.03f, 0.22f)] private float surfaceOpacity = 0.12f;
 
-    [Header("Motion")]
-    [SerializeField, Range(12f, 30f)] private float animationFramesPerSecond = 24f;
-    [SerializeField, Range(0f, 0.08f)] private float pulseAmount = 0.025f;
-    [SerializeField, Min(0.1f)] private float pulseSpeed = 1.65f;
-    [SerializeField, Range(0f, 0.12f)] private float ringWobble = 0.035f;
-    [SerializeField, Range(0f, 0.3f)] private float swirlDepth = 0.09f;
+    [Header("Cheap transform animation")]
+    [SerializeField, Range(8f, 15f)] private float animationFramesPerSecond = 12f;
+    [SerializeField, Range(0f, 0.04f)] private float pulseAmount = 0.018f;
+    [SerializeField, Min(0.1f)] private float pulseSpeed = 0.8f;
+    [SerializeField, Range(0f, 0.08f)] private float ringWobble = 0.025f;
+    [SerializeField, Range(0f, 0.12f)] private float swirlDepth = 0.035f;
+
+    [Header("Performance culling")]
+    [SerializeField, Min(10f)] private float activationDistance = 55f;
+    [SerializeField, Range(0.15f, 0.75f)] private float cullingCheckInterval = 0.3f;
 
     [Header("Legacy focal point")]
     [SerializeField] private bool hideLegacyFocalPoint = true;
@@ -38,32 +45,27 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         "spinning"
     };
 
-    private readonly List<EnergyRing> energyRings = new List<EnergyRing>(3);
-    private readonly List<Material> runtimeMaterials = new List<Material>(4);
+    private readonly List<RingVisual> rings = new List<RingVisual>(2);
+    private readonly List<Material> runtimeMaterials = new List<Material>(2);
     private readonly List<Renderer> hiddenLegacyRenderers = new List<Renderer>();
 
     private Transform generatedRoot;
-    private Transform voidTransform;
     private Transform surfaceTransform;
-    private Material voidMaterial;
     private Material surfaceMaterial;
     private Material ringMaterial;
-    private Material sparkMaterial;
     private Mesh surfaceMesh;
-    private ParticleSystem sparkParticles;
+    private Camera cachedCamera;
     private float animationPhase;
     private float nextAnimationTime;
+    private float nextCullingCheckTime;
     private bool visualsBuilt;
+    private bool visibleForCamera = true;
 
-    private sealed class EnergyRing
+    private sealed class RingVisual
     {
-        public LineRenderer lineRenderer;
-        public Vector3[] positions;
-        public float radiusScale;
-        public float speed;
+        public Transform transform;
+        public float rotationSpeed;
         public float phase;
-        public float width;
-        public int waveCount;
     }
 
     private void Reset()
@@ -86,35 +88,30 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
     private void Awake()
     {
         animationPhase = Mathf.Abs(gameObject.GetInstanceID() % 997) * 0.013f;
-        if (isActiveAndEnabled)
-        {
-            EnsureVisualsBuilt();
-        }
+        EnsureVisualsBuilt();
     }
 
     private void OnEnable()
     {
-        EnsureVisualsBuilt();
-        if (generatedRoot != null)
+        // Do not create runtime renderers while merely editing the scene.
+        if (!Application.isPlaying)
         {
-            generatedRoot.gameObject.SetActive(true);
+            return;
         }
 
+        EnsureVisualsBuilt();
         HideLegacyRenderers();
-        if (sparkParticles != null && !sparkParticles.isPlaying)
-        {
-            sparkParticles.Play(true);
-        }
         nextAnimationTime = 0f;
+        nextCullingCheckTime = Time.unscaledTime + cullingCheckInterval;
+        visibleForCamera = ShouldRenderForCamera();
+        if (generatedRoot != null)
+        {
+            generatedRoot.gameObject.SetActive(visibleForCamera);
+        }
     }
 
     private void OnDisable()
     {
-        if (sparkParticles != null)
-        {
-            sparkParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        }
-
         if (generatedRoot != null)
         {
             generatedRoot.gameObject.SetActive(false);
@@ -148,13 +145,10 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         }
 
         runtimeMaterials.Clear();
-        voidTransform = null;
+        rings.Clear();
         surfaceTransform = null;
-        voidMaterial = null;
         surfaceMaterial = null;
         ringMaterial = null;
-        sparkMaterial = null;
-        energyRings.Clear();
         visualsBuilt = false;
     }
 
@@ -162,15 +156,17 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
     {
         portalSize.x = Mathf.Max(0.5f, portalSize.x);
         portalSize.y = Mathf.Max(0.5f, portalSize.y);
-        energyRingCount = Mathf.Clamp(energyRingCount, 2, 3);
-        ringSegments = Mathf.Clamp(ringSegments, 24, 64);
-        voidOpacity = Mathf.Clamp(voidOpacity, 0.25f, 0.9f);
-        surfaceOpacity = Mathf.Clamp(surfaceOpacity, 0.03f, 0.35f);
-        animationFramesPerSecond = Mathf.Clamp(animationFramesPerSecond, 12f, 30f);
-        pulseAmount = Mathf.Clamp(pulseAmount, 0f, 0.08f);
+        energyRingCount = 1;
+        ringSegments = Mathf.Clamp(ringSegments, 16, 32);
+        voidOpacity = Mathf.Clamp(voidOpacity, 0.35f, 0.85f);
+        surfaceOpacity = Mathf.Clamp(surfaceOpacity, 0.03f, 0.22f);
+        animationFramesPerSecond = Mathf.Clamp(animationFramesPerSecond, 8f, 15f);
+        pulseAmount = Mathf.Clamp(pulseAmount, 0f, 0.04f);
         pulseSpeed = Mathf.Max(0.1f, pulseSpeed);
-        ringWobble = Mathf.Clamp(ringWobble, 0f, 0.12f);
-        swirlDepth = Mathf.Clamp(swirlDepth, 0f, 0.3f);
+        ringWobble = Mathf.Clamp(ringWobble, 0f, 0.08f);
+        swirlDepth = Mathf.Clamp(swirlDepth, 0f, 0.12f);
+        activationDistance = Mathf.Max(10f, activationDistance);
+        cullingCheckInterval = Mathf.Clamp(cullingCheckInterval, 0.15f, 0.75f);
     }
 
     private void Update()
@@ -181,43 +177,24 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         }
 
         float now = Time.unscaledTime;
-        if (now < nextAnimationTime)
+        if (now >= nextCullingCheckTime)
+        {
+            nextCullingCheckTime = now + cullingCheckInterval;
+            visibleForCamera = ShouldRenderForCamera();
+            if (generatedRoot != null && generatedRoot.gameObject.activeSelf != visibleForCamera)
+            {
+                generatedRoot.gameObject.SetActive(visibleForCamera);
+            }
+        }
+
+        if (!visibleForCamera || now < nextAnimationTime)
         {
             return;
         }
 
-        nextAnimationTime = now + 1f / Mathf.Max(12f, animationFramesPerSecond);
-        float time = now + animationPhase;
-        float pulse = 1f + Mathf.Sin(time * pulseSpeed * Mathf.PI * 2f) * pulseAmount;
-
-        if (voidTransform != null)
-        {
-            float inversePulse = 1f - (pulse - 1f) * 0.35f;
-            float voidScale = inversePulse * 0.985f;
-            voidTransform.localScale = new Vector3(voidScale, voidScale, 1f);
-        }
-
-        if (surfaceTransform != null)
-        {
-            surfaceTransform.localScale = new Vector3(pulse, pulse, 1f);
-        }
-
-        if (voidMaterial != null)
-        {
-            float voidPulse = 0.96f + Mathf.Sin(time * pulseSpeed * 2.1f + 2.2f) * 0.04f;
-            SetMaterialColor(voidMaterial, CreateVoidColor(voidOpacity * voidPulse), 0.16f);
-        }
-
-        if (surfaceMaterial != null)
-        {
-            float alphaPulse = 0.9f + Mathf.Sin(time * pulseSpeed * Mathf.PI * 2f + 0.7f) * 0.1f;
-            SetMaterialColor(surfaceMaterial, WithAlpha(difficultyColor, surfaceOpacity * alphaPulse), 1.4f);
-        }
-
-        for (int i = 0; i < energyRings.Count; i++)
-        {
-            AnimateRing(energyRings[i], time, i);
-        }
+        float cappedFrameRate = Mathf.Clamp(animationFramesPerSecond, 8f, 15f);
+        nextAnimationTime = now + 1f / cappedFrameRate;
+        AnimateTransforms(now + animationPhase);
     }
 
     public void ConfigureColor(Color color)
@@ -225,45 +202,13 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         difficultyColor = color;
         difficultyColor.a = 1f;
 
-        if (!visualsBuilt)
-        {
-            return;
-        }
-
-        if (voidMaterial != null)
-        {
-            SetMaterialColor(voidMaterial, CreateVoidColor(voidOpacity), 0.16f);
-        }
-
         if (surfaceMaterial != null)
         {
-            SetMaterialColor(surfaceMaterial, WithAlpha(difficultyColor, surfaceOpacity), 1.4f);
+            SetMaterialColor(surfaceMaterial, CreateSurfaceColor(), 0.45f);
         }
-
         if (ringMaterial != null)
         {
-            SetMaterialColor(ringMaterial, WithAlpha(difficultyColor, 0.88f), 1.7f);
-        }
-
-        if (sparkMaterial != null)
-        {
-            SetMaterialColor(sparkMaterial, WithAlpha(difficultyColor, 0.9f), 1.7f);
-        }
-
-        for (int i = 0; i < energyRings.Count; i++)
-        {
-            LineRenderer line = energyRings[i].lineRenderer;
-            if (line != null)
-            {
-                line.colorGradient = CreateRingGradient(i);
-            }
-        }
-
-        if (sparkParticles != null)
-        {
-            ParticleSystem.MainModule main = sparkParticles.main;
-            Color bright = Color.Lerp(difficultyColor, Color.white, 0.65f);
-            main.startColor = new ParticleSystem.MinMaxGradient(difficultyColor, bright);
+            SetMaterialColor(ringMaterial, WithAlpha(difficultyColor, 0.92f), 1.45f);
         }
     }
 
@@ -293,62 +238,191 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         generatedRoot = rootObject.transform;
         generatedRoot.SetParent(transform, false);
 
-        voidMaterial = CreateRuntimeMaterial(
-            transparentShader,
-            "ML Portal Void (Runtime)",
-            CreateVoidColor(voidOpacity),
-            false);
-
         surfaceMaterial = CreateRuntimeMaterial(
             transparentShader,
             "ML Portal Surface (Runtime)",
-            WithAlpha(difficultyColor, surfaceOpacity),
+            CreateSurfaceColor(),
             false);
-
         ringMaterial = CreateRuntimeMaterial(
             transparentShader,
-            "ML Portal Rings (Runtime)",
-            WithAlpha(difficultyColor, 0.88f),
+            "ML Portal Ring (Runtime)",
+            WithAlpha(difficultyColor, 0.92f),
             true);
 
-        sparkMaterial = CreateRuntimeMaterial(
-            transparentShader,
-            "ML Portal Sparks (Runtime)",
-            WithAlpha(difficultyColor, 0.9f),
-            true);
-
-        BuildEnergySurface();
-        BuildEnergyRings(ringMaterial);
-        BuildSparks(sparkMaterial);
+        BuildSurface();
+        BuildRings();
         visualsBuilt = true;
     }
 
-    private void BuildEnergySurface()
+    private void BuildSurface()
     {
-        surfaceMesh = CreateEnergySurfaceMesh();
+        surfaceMesh = CreateEllipseMesh();
 
-        GameObject voidObject = new GameObject("PortalVoid");
-        voidObject.layer = gameObject.layer;
-        voidObject.transform.SetParent(generatedRoot, false);
-        voidObject.transform.localPosition = localCenter + Vector3.back * 0.018f;
-        voidObject.transform.localScale = new Vector3(0.985f, 0.985f, 1f);
-        voidTransform = voidObject.transform;
-
-        MeshFilter voidFilter = voidObject.AddComponent<MeshFilter>();
-        MeshRenderer voidRenderer = voidObject.AddComponent<MeshRenderer>();
-        voidFilter.sharedMesh = surfaceMesh;
-        ConfigureRenderer(voidRenderer, voidMaterial, -3);
-
-        GameObject surfaceObject = new GameObject("EnergySurface");
+        GameObject surfaceObject = new GameObject("PortalSurface");
         surfaceObject.layer = gameObject.layer;
         surfaceObject.transform.SetParent(generatedRoot, false);
-        surfaceObject.transform.localPosition = localCenter;
+        // The station fronts face local -Z, so keep the opaque aperture behind the glowing rim.
+        surfaceObject.transform.localPosition = localCenter + Vector3.forward * 0.02f;
         surfaceTransform = surfaceObject.transform;
 
         MeshFilter filter = surfaceObject.AddComponent<MeshFilter>();
         MeshRenderer renderer = surfaceObject.AddComponent<MeshRenderer>();
         filter.sharedMesh = surfaceMesh;
-        ConfigureRenderer(renderer, surfaceMaterial, -2);
+        ConfigureRenderer(renderer, surfaceMaterial, -1);
+    }
+
+    private void BuildRings()
+    {
+        int count = 1;
+        int segmentCount = Mathf.Clamp(ringSegments, 16, 32);
+        for (int ringIndex = 0; ringIndex < count; ringIndex++)
+        {
+            GameObject ringObject = new GameObject("EnergyRing_" + (ringIndex + 1));
+            ringObject.layer = gameObject.layer;
+            ringObject.transform.SetParent(generatedRoot, false);
+            ringObject.transform.localPosition = localCenter + Vector3.back * (0.012f + ringIndex * 0.01f);
+
+            LineRenderer line = ringObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.loop = true;
+            line.positionCount = segmentCount;
+            line.alignment = LineAlignment.TransformZ;
+            line.textureMode = LineTextureMode.Stretch;
+            line.numCornerVertices = 0;
+            line.numCapVertices = 0;
+            line.generateLightingData = false;
+            line.shadowCastingMode = ShadowCastingMode.Off;
+            line.receiveShadows = false;
+            line.lightProbeUsage = LightProbeUsage.Off;
+            line.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            line.sortingOrder = ringIndex;
+            line.sharedMaterial = ringMaterial;
+            line.startWidth = ringIndex == 0 ? 0.075f : 0.045f;
+            line.endWidth = line.startWidth;
+            line.colorGradient = CreateRingGradient(ringIndex);
+
+            Vector3[] positions = new Vector3[segmentCount];
+            float radiusScale = 1f - ringIndex * 0.12f;
+            float halfWidth = portalSize.x * 0.5f * radiusScale;
+            float halfHeight = portalSize.y * 0.5f * radiusScale;
+            for (int i = 0; i < segmentCount; i++)
+            {
+                float angle = i * Mathf.PI * 2f / segmentCount;
+                float staticWave = 1f + Mathf.Sin(angle * (3 + ringIndex * 2) + ringIndex * 1.7f) * ringWobble;
+                positions[i] = new Vector3(
+                    Mathf.Cos(angle) * halfWidth * staticWave,
+                    Mathf.Sin(angle) * halfHeight * staticWave,
+                    Mathf.Sin(angle * (4 + ringIndex)) * swirlDepth);
+            }
+            line.SetPositions(positions);
+
+            rings.Add(new RingVisual
+            {
+                transform = ringObject.transform,
+                rotationSpeed = ringIndex == 0 ? 9f : -6f,
+                phase = ringIndex * 2.1f
+            });
+        }
+    }
+
+    private void AnimateTransforms(float time)
+    {
+        float pulse = 1f + Mathf.Sin(time * pulseSpeed * Mathf.PI * 2f) * pulseAmount;
+        if (surfaceTransform != null)
+        {
+            surfaceTransform.localScale = new Vector3(pulse, pulse, 1f);
+        }
+
+        for (int i = 0; i < rings.Count; i++)
+        {
+            RingVisual ring = rings[i];
+            if (ring.transform == null)
+            {
+                continue;
+            }
+
+            float rotation = Mathf.Repeat(time * ring.rotationSpeed + ring.phase * Mathf.Rad2Deg, 360f);
+            float ringPulse = 1f + Mathf.Sin(time * (0.72f + i * 0.08f) + ring.phase) * pulseAmount * 0.65f;
+            ring.transform.localRotation = Quaternion.Euler(0f, 0f, rotation);
+            ring.transform.localScale = new Vector3(ringPulse, ringPulse, 1f);
+        }
+    }
+
+    private bool ShouldRenderForCamera()
+    {
+        if (cachedCamera == null || !cachedCamera.isActiveAndEnabled)
+        {
+            cachedCamera = Camera.main;
+        }
+        if (cachedCamera == null)
+        {
+            return true;
+        }
+
+        Vector3 worldCenter = transform.TransformPoint(localCenter);
+        float maximumDistance = Mathf.Max(10f, activationDistance);
+        if ((cachedCamera.transform.position - worldCenter).sqrMagnitude > maximumDistance * maximumDistance)
+        {
+            return false;
+        }
+
+        Vector3 viewport = cachedCamera.WorldToViewportPoint(worldCenter);
+        return viewport.z > 0f && viewport.x > -0.2f && viewport.x < 1.2f && viewport.y > -0.2f && viewport.y < 1.2f;
+    }
+
+    private Mesh CreateEllipseMesh()
+    {
+        Vector3[] vertices = new Vector3[SurfaceSegments + 1];
+        Vector2[] uv = new Vector2[SurfaceSegments + 1];
+        int[] triangles = new int[SurfaceSegments * 3];
+        float halfWidth = portalSize.x * 0.5f;
+        float halfHeight = portalSize.y * 0.5f;
+
+        vertices[0] = Vector3.zero;
+        uv[0] = new Vector2(0.5f, 0.5f);
+        for (int i = 0; i < SurfaceSegments; i++)
+        {
+            float angle = i * Mathf.PI * 2f / SurfaceSegments;
+            vertices[i + 1] = new Vector3(Mathf.Cos(angle) * halfWidth, Mathf.Sin(angle) * halfHeight, 0f);
+            uv[i + 1] = new Vector2(0.5f + Mathf.Cos(angle) * 0.5f, 0.5f + Mathf.Sin(angle) * 0.5f);
+
+            int triangle = i * 3;
+            triangles[triangle] = 0;
+            triangles[triangle + 1] = i + 1;
+            triangles[triangle + 2] = (i + 1) % SurfaceSegments + 1;
+        }
+
+        Mesh mesh = new Mesh
+        {
+            name = "ML Portal Surface (Runtime)",
+            hideFlags = HideFlags.HideAndDontSave,
+            vertices = vertices,
+            uv = uv,
+            triangles = triangles
+        };
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
+    private Gradient CreateRingGradient(int ringIndex)
+    {
+        Color bright = Color.Lerp(difficultyColor, Color.white, ringIndex == 0 ? 0.62f : 0.42f);
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(difficultyColor, 0f),
+                new GradientColorKey(bright, 0.48f),
+                new GradientColorKey(difficultyColor, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.48f, 0f),
+                new GradientAlphaKey(0.95f, 0.48f),
+                new GradientAlphaKey(0.48f, 1f)
+            });
+        return gradient;
     }
 
     private static void ConfigureRenderer(Renderer renderer, Material material, int sortingOrder)
@@ -361,278 +435,35 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         renderer.sortingOrder = sortingOrder;
     }
 
-    private Mesh CreateEnergySurfaceMesh()
-    {
-        int ringVertexCount = SurfaceAngularSegments;
-        int vertexCount = 1 + SurfaceRadialSegments * ringVertexCount;
-        Vector3[] vertices = new Vector3[vertexCount];
-        Vector2[] uv = new Vector2[vertexCount];
-        Color[] colors = new Color[vertexCount];
-        int[] triangles = new int[SurfaceAngularSegments * 3 +
-                                  (SurfaceRadialSegments - 1) * SurfaceAngularSegments * 6];
-
-        float halfWidth = portalSize.x * 0.5f;
-        float halfHeight = portalSize.y * 0.5f;
-        vertices[0] = Vector3.zero;
-        uv[0] = new Vector2(0.5f, 0.5f);
-        colors[0] = new Color(1f, 1f, 1f, 0.72f);
-
-        for (int radialIndex = 1; radialIndex <= SurfaceRadialSegments; radialIndex++)
-        {
-            float radius = radialIndex / (float)SurfaceRadialSegments;
-            float edgeFade = Mathf.Pow(1f - radius, 0.72f);
-            float band = 0.78f + Mathf.Sin(radius * Mathf.PI * 4f) * 0.12f;
-            Color vertexColor = new Color(1f, 1f, 1f, Mathf.Clamp01(edgeFade * band));
-
-            for (int angularIndex = 0; angularIndex < SurfaceAngularSegments; angularIndex++)
-            {
-                float angle = angularIndex * Mathf.PI * 2f / SurfaceAngularSegments;
-                int vertexIndex = 1 + (radialIndex - 1) * ringVertexCount + angularIndex;
-                float x = Mathf.Cos(angle) * halfWidth * radius;
-                float y = Mathf.Sin(angle) * halfHeight * radius;
-                vertices[vertexIndex] = new Vector3(x, y, 0f);
-                uv[vertexIndex] = new Vector2(
-                    0.5f + Mathf.Cos(angle) * radius * 0.5f,
-                    0.5f + Mathf.Sin(angle) * radius * 0.5f);
-                colors[vertexIndex] = vertexColor;
-            }
-        }
-
-        int triangleIndex = 0;
-        for (int angularIndex = 0; angularIndex < SurfaceAngularSegments; angularIndex++)
-        {
-            int next = (angularIndex + 1) % SurfaceAngularSegments;
-            triangles[triangleIndex++] = 0;
-            triangles[triangleIndex++] = 1 + angularIndex;
-            triangles[triangleIndex++] = 1 + next;
-        }
-
-        for (int radialIndex = 1; radialIndex < SurfaceRadialSegments; radialIndex++)
-        {
-            int innerStart = 1 + (radialIndex - 1) * ringVertexCount;
-            int outerStart = innerStart + ringVertexCount;
-            for (int angularIndex = 0; angularIndex < SurfaceAngularSegments; angularIndex++)
-            {
-                int next = (angularIndex + 1) % SurfaceAngularSegments;
-                triangles[triangleIndex++] = innerStart + angularIndex;
-                triangles[triangleIndex++] = outerStart + angularIndex;
-                triangles[triangleIndex++] = outerStart + next;
-                triangles[triangleIndex++] = innerStart + angularIndex;
-                triangles[triangleIndex++] = outerStart + next;
-                triangles[triangleIndex++] = innerStart + next;
-            }
-        }
-
-        Mesh mesh = new Mesh
-        {
-            name = "ML Portal Energy Surface (Runtime)",
-            hideFlags = HideFlags.HideAndDontSave,
-            vertices = vertices,
-            uv = uv,
-            colors = colors,
-            triangles = triangles
-        };
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
-    }
-
-    private void BuildEnergyRings(Material ringMaterial)
-    {
-        for (int i = 0; i < energyRingCount; i++)
-        {
-            GameObject ringObject = new GameObject("EnergyRing_" + (i + 1));
-            ringObject.layer = gameObject.layer;
-            ringObject.transform.SetParent(generatedRoot, false);
-            ringObject.transform.localPosition = localCenter + Vector3.forward * (0.012f + i * 0.012f);
-
-            LineRenderer line = ringObject.AddComponent<LineRenderer>();
-            line.useWorldSpace = false;
-            line.loop = true;
-            line.positionCount = ringSegments;
-            line.alignment = LineAlignment.TransformZ;
-            line.textureMode = LineTextureMode.Stretch;
-            line.numCornerVertices = 2;
-            line.numCapVertices = 0;
-            line.generateLightingData = false;
-            line.shadowCastingMode = ShadowCastingMode.Off;
-            line.receiveShadows = false;
-            line.lightProbeUsage = LightProbeUsage.Off;
-            line.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            line.sortingOrder = i;
-            line.sharedMaterial = ringMaterial;
-            line.colorGradient = CreateRingGradient(i);
-
-            EnergyRing ring = new EnergyRing
-            {
-                lineRenderer = line,
-                positions = new Vector3[ringSegments],
-                radiusScale = 1f - i * 0.105f,
-                speed = (i % 2 == 0 ? 1f : -1f) * (1.05f + i * 0.31f),
-                phase = i * 1.73f,
-                width = Mathf.Max(0.035f, 0.09f - i * 0.022f),
-                waveCount = 3 + i * 2
-            };
-            energyRings.Add(ring);
-            AnimateRing(ring, animationPhase, i);
-        }
-    }
-
-    private void AnimateRing(EnergyRing ring, float time, int ringIndex)
-    {
-        if (ring.lineRenderer == null)
-        {
-            return;
-        }
-
-        float halfWidth = portalSize.x * 0.5f * ring.radiusScale;
-        float halfHeight = portalSize.y * 0.5f * ring.radiusScale;
-        float travellingPhase = time * ring.speed + ring.phase;
-        float gradientTravel = travellingPhase * (0.2f + ringIndex * 0.035f);
-        int count = ring.positions.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            // Offset the ellipse parameter rather than rotating its transform. This keeps the
-            // opening upright while the LineRenderer gradient's bright arc travels around it.
-            float angle = i * Mathf.PI * 2f / count + gradientTravel;
-            float wave = 1f + Mathf.Sin(angle * ring.waveCount + travellingPhase * 2.1f) * ringWobble;
-            float secondaryWave = Mathf.Sin(angle * (ring.waveCount + 2) - travellingPhase * 1.4f);
-            float z = secondaryWave * swirlDepth * (0.55f + ringIndex * 0.18f);
-            ring.positions[i] = new Vector3(
-                Mathf.Cos(angle) * halfWidth * wave,
-                Mathf.Sin(angle) * halfHeight * wave,
-                z);
-        }
-
-        ring.lineRenderer.SetPositions(ring.positions);
-        float widthPulse = 0.9f + Mathf.Sin(time * 2.4f + ring.phase) * 0.1f;
-        ring.lineRenderer.startWidth = ring.width * widthPulse;
-        ring.lineRenderer.endWidth = ring.width * widthPulse;
-    }
-
-    private Gradient CreateRingGradient(int ringIndex)
-    {
-        Color softWhite = Color.Lerp(Color.white, difficultyColor, 0.22f + ringIndex * 0.08f);
-        Color coolEdge = Color.Lerp(Color.white, difficultyColor, 0.48f);
-        Gradient gradient = new Gradient();
-        gradient.SetKeys(
-            new[]
-            {
-                new GradientColorKey(coolEdge, 0f),
-                new GradientColorKey(Color.white, 0.38f),
-                new GradientColorKey(softWhite, 0.72f),
-                new GradientColorKey(coolEdge, 1f)
-            },
-            new[]
-            {
-                new GradientAlphaKey(0.24f, 0f),
-                new GradientAlphaKey(0.95f, 0.3f),
-                new GradientAlphaKey(0.42f, 0.68f),
-                new GradientAlphaKey(0.24f, 1f)
-            });
-        return gradient;
-    }
-
-    private void BuildSparks(Material sparkMaterial)
-    {
-        GameObject sparksObject = new GameObject("PortalSparks");
-        sparksObject.layer = gameObject.layer;
-        sparksObject.transform.SetParent(generatedRoot, false);
-        sparksObject.transform.localPosition = localCenter + Vector3.back * 0.025f;
-
-        sparkParticles = sparksObject.AddComponent<ParticleSystem>();
-        ParticleSystem.MainModule main = sparkParticles.main;
-        main.loop = true;
-        main.playOnAwake = true;
-        main.duration = 2f;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.65f, 1.3f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(0.02f, 0.11f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.025f, 0.075f);
-        Color bright = Color.Lerp(difficultyColor, Color.white, 0.65f);
-        main.startColor = new ParticleSystem.MinMaxGradient(difficultyColor, bright);
-        main.maxParticles = 28;
-        main.simulationSpace = ParticleSystemSimulationSpace.Local;
-        main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-
-        ParticleSystem.EmissionModule emission = sparkParticles.emission;
-        emission.rateOverTime = 7f;
-
-        ParticleSystem.ShapeModule shape = sparkParticles.shape;
-        shape.enabled = true;
-        shape.shapeType = ParticleSystemShapeType.Circle;
-        shape.radius = 0.5f;
-        shape.radiusThickness = 0.08f;
-        shape.scale = new Vector3(portalSize.x, portalSize.y, 0.12f);
-
-        ParticleSystem.VelocityOverLifetimeModule velocity = sparkParticles.velocityOverLifetime;
-        velocity.enabled = true;
-        velocity.space = ParticleSystemSimulationSpace.Local;
-        velocity.orbitalZ = new ParticleSystem.MinMaxCurve(0.32f, 0.7f);
-        velocity.radial = new ParticleSystem.MinMaxCurve(-0.025f, 0.035f);
-
-        ParticleSystem.ColorOverLifetimeModule colorOverLifetime = sparkParticles.colorOverLifetime;
-        colorOverLifetime.enabled = true;
-        Gradient lifetimeGradient = new Gradient();
-        lifetimeGradient.SetKeys(
-            new[]
-            {
-                new GradientColorKey(Color.white, 0f),
-                new GradientColorKey(Color.white, 1f)
-            },
-            new[]
-            {
-                new GradientAlphaKey(0f, 0f),
-                new GradientAlphaKey(0.78f, 0.2f),
-                new GradientAlphaKey(0.55f, 0.72f),
-                new GradientAlphaKey(0f, 1f)
-            });
-        colorOverLifetime.color = lifetimeGradient;
-
-        ParticleSystemRenderer particleRenderer = sparksObject.GetComponent<ParticleSystemRenderer>();
-        particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
-        particleRenderer.sharedMaterial = sparkMaterial;
-        particleRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        particleRenderer.receiveShadows = false;
-        particleRenderer.lightProbeUsage = LightProbeUsage.Off;
-        particleRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
-        particleRenderer.sortMode = ParticleSystemSortMode.Distance;
-        particleRenderer.sortingOrder = 3;
-        particleRenderer.maxParticleSize = 0.08f;
-
-        sparkParticles.Play(true);
-    }
-
-    private Material CreateRuntimeMaterial(
-        Shader shader,
-        string materialName,
-        Color color,
-        bool additive)
+    private Material CreateRuntimeMaterial(Shader shader, string materialName, Color color, bool additive)
     {
         Material material = new Material(shader)
         {
             name = materialName,
             hideFlags = HideFlags.HideAndDontSave,
-            renderQueue = (int)RenderQueue.Transparent,
+            renderQueue = additive ? (int)RenderQueue.Transparent : (int)RenderQueue.Geometry,
             enableInstancing = true
         };
 
-        material.SetOverrideTag("RenderType", "Transparent");
-        SetFloatIfPresent(material, "_Surface", 1f);
+        material.SetOverrideTag("RenderType", additive ? "Transparent" : "Opaque");
+        SetFloatIfPresent(material, "_Surface", additive ? 1f : 0f);
         SetFloatIfPresent(material, "_Blend", additive ? 2f : 0f);
         SetFloatIfPresent(material, "_AlphaClip", 0f);
-        SetFloatIfPresent(material, "_ZWrite", 0f);
+        SetFloatIfPresent(material, "_ZWrite", additive ? 0f : 1f);
         SetFloatIfPresent(material, "_Cull", (float)CullMode.Off);
-        SetFloatIfPresent(material, "_SrcBlend", (float)BlendMode.SrcAlpha);
-        SetFloatIfPresent(material, "_DstBlend", additive
-            ? (float)BlendMode.One
-            : (float)BlendMode.OneMinusSrcAlpha);
-        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        SetFloatIfPresent(material, "_SrcBlend", additive ? (float)BlendMode.SrcAlpha : (float)BlendMode.One);
+        SetFloatIfPresent(material, "_DstBlend", additive ? (float)BlendMode.One : (float)BlendMode.Zero);
+        if (additive)
+        {
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        }
+        else
+        {
+            material.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        }
         material.DisableKeyword("_ALPHATEST_ON");
         material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        SetMaterialColor(material, color, additive ? 1.7f : 1.4f);
-
+        SetMaterialColor(material, color, additive ? 1.45f : 0.45f);
         runtimeMaterials.Add(material);
         return material;
     }
@@ -641,13 +472,11 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
     {
         string[] candidates =
         {
-            "Universal Render Pipeline/Particles/Unlit",
-            "Sprites/Default",
             "Universal Render Pipeline/Unlit",
-            "Particles/Standard Unlit",
-            "Legacy Shaders/Particles/Additive",
+            "Sprites/Default",
             "Unlit/Transparent",
-            "Universal Render Pipeline/Lit",
+            "Universal Render Pipeline/Particles/Unlit",
+            "Particles/Standard Unlit",
             "Standard"
         };
 
@@ -659,35 +488,26 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
                 return shader;
             }
         }
-
         return null;
     }
 
     private static void SetMaterialColor(Material material, Color color, float emissionIntensity)
     {
-        if (material == null)
-        {
-            return;
-        }
-
         if (material.HasProperty("_BaseColor"))
         {
             material.SetColor("_BaseColor", color);
         }
-
         if (material.HasProperty("_Color"))
         {
             material.SetColor("_Color", color);
         }
-
         if (material.HasProperty("_EmissionColor"))
         {
-            Color emission = new Color(
+            material.SetColor("_EmissionColor", new Color(
                 color.r * emissionIntensity,
                 color.g * emissionIntensity,
                 color.b * emissionIntensity,
-                color.a);
-            material.SetColor("_EmissionColor", emission);
+                color.a));
             material.EnableKeyword("_EMISSION");
         }
     }
@@ -698,6 +518,14 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         {
             material.SetFloat(propertyName, value);
         }
+    }
+
+    private Color CreateSurfaceColor()
+    {
+        Color nearBlack = new Color(0.006f, 0.009f, 0.025f, 1f);
+        float tintAmount = Mathf.Clamp01(0.16f + surfaceOpacity * 0.55f);
+        float darkness = Mathf.Lerp(0.12f, 0.24f, voidOpacity);
+        return WithAlpha(Color.Lerp(nearBlack, difficultyColor, tintAmount * darkness), 1f);
     }
 
     private void HideLegacyRenderers()
@@ -715,7 +543,6 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
             {
                 continue;
             }
-
             if (!HasLegacyDecorationName(candidate.transform))
             {
                 continue;
@@ -746,10 +573,8 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
                     return true;
                 }
             }
-
             current = current.parent;
         }
-
         return false;
     }
 
@@ -767,7 +592,6 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
                 hiddenLegacyRenderers[i].enabled = true;
             }
         }
-
         hiddenLegacyRenderers.Clear();
     }
 
@@ -775,13 +599,6 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
     {
         color.a = Mathf.Clamp01(alpha);
         return color;
-    }
-
-    private Color CreateVoidColor(float alpha)
-    {
-        Color nearBlack = new Color(0.006f, 0.009f, 0.025f, 1f);
-        Color tintedVoid = Color.Lerp(nearBlack, difficultyColor, 0.16f);
-        return WithAlpha(tintedVoid, alpha);
     }
 
     private static void DestroyRuntimeObject(UnityEngine.Object target)
