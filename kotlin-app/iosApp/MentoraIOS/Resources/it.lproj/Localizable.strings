@@ -13,3 +13,12 @@
 "active_language_format" = "Lingua attiva: %@";
 "account" = "Account";
 "sign_out" = "Esci";
+"ai_machine_learning" = "IA e machine learning";
+"machine_learning_radar" = "Radar del machine learning";
+"machine_learning_radar_description" = "Prestazioni nelle competenze sui dati e nella creazione di modelli.";
+"ml_axis_data_prep" = "Preparazione dati";
+"ml_axis_regression" = "Regressione";
+"ml_axis_classification" = "Classificazione";
+"ml_axis_evaluation" = "Valutazione";
+"ml_axis_neural_networks" = "Reti neurali";
+"ml_axis_llms" = "LLM";

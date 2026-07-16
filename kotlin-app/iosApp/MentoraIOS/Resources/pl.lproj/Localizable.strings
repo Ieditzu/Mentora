@@ -13,3 +13,12 @@
 "active_language_format" = "Aktywny język: %@";
 "account" = "Konto";
 "sign_out" = "Wyloguj się";
+"ai_machine_learning" = "SI i uczenie maszynowe";
+"machine_learning_radar" = "Radar uczenia maszynowego";
+"machine_learning_radar_description" = "Wyniki w pracy z danymi i budowaniu modeli.";
+"ml_axis_data_prep" = "Przygotowanie danych";
+"ml_axis_regression" = "Regresja";
+"ml_axis_classification" = "Klasyfikacja";
+"ml_axis_evaluation" = "Ocena";
+"ml_axis_neural_networks" = "Sieci neuronowe";
+"ml_axis_llms" = "LLM-y";

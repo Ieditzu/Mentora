@@ -11,6 +11,8 @@ import io.github.kawase.database.services.TaskService;
 import io.github.kawase.packet.impl.game.LiveSessionUpdatePacket;
 import io.github.kawase.packet.impl.game.ParentChallengePacket;
 import io.github.kawase.packet.PacketManager;
+import io.github.kawase.machinelearning.MachineLearningService;
+import io.github.kawase.utility.ContainerExecution;
 import io.github.kawase.socket.ServerSocket;
 import lombok.Getter;
 import org.springframework.context.ApplicationContext;
@@ -46,6 +48,7 @@ public class Server {
     private io.github.kawase.database.services.GameSessionService gameSessionService;
     private LearningProfileService learningProfileService;
     private CourseService courseService;
+    private MachineLearningService machineLearningService;
 
     public void init(final int port,  final ApplicationContext applicationContext) {
         this.packetManager = new PacketManager();
@@ -64,6 +67,9 @@ public class Server {
         this.gameSessionService = context.getBean(io.github.kawase.database.services.GameSessionService.class);
         this.learningProfileService = context.getBean(LearningProfileService.class);
         this.courseService = context.getBean(CourseService.class);
+        this.machineLearningService = context.getBean(MachineLearningService.class);
+
+        ContainerExecution.logRunnerHealth();
 
         this.socket = new ServerSocket(port);
 

@@ -49,7 +49,11 @@ public class LearningProfileService {
         if (language == null) {
             updateProfile(gameStats, "aiProfileGeneral", eventType, resolvedTopic, correctness, details);
         } else {
-            updateProfile(gameStats, language.equals("cpp") ? "aiProfileCpp" : "aiProfilePython", eventType, resolvedTopic, correctness, details);
+            updateProfile(gameStats, switch (language) {
+                case "cpp" -> "aiProfileCpp";
+                case "machine_learning" -> "aiProfileMachineLearning";
+                default -> "aiProfilePython";
+            }, eventType, resolvedTopic, correctness, details);
             updateProfile(gameStats, "aiProfileGeneral", eventType, resolvedTopic, correctness, details);
         }
 
@@ -95,7 +99,12 @@ public class LearningProfileService {
 
         String profileKey = null;
         if (language != null) {
-            profileKey = language.equals("cpp") ? "aiProfileCpp" : language.equals("python") ? "aiProfilePython" : null;
+            profileKey = switch (language) {
+                case "cpp" -> "aiProfileCpp";
+                case "python" -> "aiProfilePython";
+                case "ml", "machine_learning" -> "aiProfileMachineLearning";
+                default -> null;
+            };
         }
 
         Map<String, Object> aiProfile = profileKey != null ? safeMap(gameStats.get(profileKey)) : Collections.emptyMap();
@@ -198,7 +207,12 @@ public class LearningProfileService {
 
         String profileKey = null;
         if (language != null) {
-            profileKey = language.equals("cpp") ? "aiProfileCpp" : language.equals("python") ? "aiProfilePython" : null;
+            profileKey = switch (language) {
+                case "cpp" -> "aiProfileCpp";
+                case "python" -> "aiProfilePython";
+                case "ml", "machine_learning" -> "aiProfileMachineLearning";
+                default -> null;
+            };
         }
 
         Map<String, Object> aiProfile = profileKey != null ? safeMap(gameStats.get(profileKey)) : Collections.emptyMap();
@@ -281,15 +295,17 @@ public class LearningProfileService {
         Map<String, Object> stats = child.getGameStats() == null ? Collections.emptyMap() : child.getGameStats();
         Map<String, Object> cpp = safeMap(stats.get("aiProfileCpp"));
         Map<String, Object> python = safeMap(stats.get("aiProfilePython"));
+        Map<String, Object> machineLearning = safeMap(stats.get("aiProfileMachineLearning"));
         Map<String, Object> general = safeMap(stats.get("aiProfileGeneral"));
 
         List<String> recentEvents = collectRecentWeeklyEvents(general, weekStart, weekEnd);
         if (recentEvents.isEmpty()) {
             recentEvents.addAll(collectRecentWeeklyEvents(cpp, weekStart, weekEnd));
             recentEvents.addAll(collectRecentWeeklyEvents(python, weekStart, weekEnd));
+            recentEvents.addAll(collectRecentWeeklyEvents(machineLearning, weekStart, weekEnd));
         }
 
-        String prompt = buildWeeklyReportPrompt(childName, weekStart, weekEnd, completedThisWeek, cpp, python, general, recentEvents, responseLanguage);
+        String prompt = buildWeeklyReportPrompt(childName, weekStart, weekEnd, completedThisWeek, cpp, python, machineLearning, general, recentEvents, responseLanguage);
         io.github.kawase.utility.GroqAI ai = new io.github.kawase.utility.GroqAI();
         String report = ai.generate(prompt);
         if (report == null || report.isBlank() || report.startsWith("AI Error")) {
@@ -305,6 +321,7 @@ public class LearningProfileService {
                                            final List<io.github.kawase.database.entity.CompletedTask> completedTasks,
                                            final Map<String, Object> cpp,
                                            final Map<String, Object> python,
+                                           final Map<String, Object> machineLearning,
                                            final Map<String, Object> general,
                                            final List<String> recentEvents,
                                            final String responseLanguage) {
@@ -312,6 +329,8 @@ public class LearningProfileService {
         int cppIncorrect = getInt(cpp.get("incorrectCount"));
         int pyCorrect = getInt(python.get("correctCount"));
         int pyIncorrect = getInt(python.get("incorrectCount"));
+        int machineLearningCorrect = getInt(machineLearning.get("correctCount"));
+        int machineLearningIncorrect = getInt(machineLearning.get("incorrectCount"));
         int generalCorrect = getInt(general.get("correctCount"));
         int generalIncorrect = getInt(general.get("incorrectCount"));
 
@@ -331,6 +350,7 @@ public class LearningProfileService {
                 "Task titles/counts: " + (taskCounts.isEmpty() ? "none" : taskCounts.toString()) + "\n" +
                 "C++ attempts: correct=" + cppCorrect + ", incorrect=" + cppIncorrect + ", hints=" + getInt(cpp.get("hintsUsed")) + ", common mistakes=" + topMistakes(cpp) + ", struggles=" + topConcepts(cpp, true) + "\n" +
                 "Python attempts: correct=" + pyCorrect + ", incorrect=" + pyIncorrect + ", hints=" + getInt(python.get("hintsUsed")) + ", common mistakes=" + topMistakes(python) + ", struggles=" + topConcepts(python, true) + "\n" +
+                "AI/ML attempts: correct=" + machineLearningCorrect + ", incorrect=" + machineLearningIncorrect + ", hints=" + getInt(machineLearning.get("hintsUsed")) + ", common mistakes=" + topMistakes(machineLearning) + ", struggles=" + topConcepts(machineLearning, true) + "\n" +
                 "Overall attempts: correct=" + generalCorrect + ", incorrect=" + generalIncorrect + ", hints=" + getInt(general.get("hintsUsed")) + ", chatTurns=" + getInt(general.get("chatTurns")) + "\n" +
                 "Recent tracked events from this week: " + (recentEvents.isEmpty() ? "none" : String.join(" | ", recentEvents)) + "\n\n" +
                 "Write the letter starting with: This week " + childName + " ";
@@ -442,6 +462,7 @@ public class LearningProfileService {
 
         ensureAiSummaryForProfile(gameStats, "aiProfileCpp", "C++");
         ensureAiSummaryForProfile(gameStats, "aiProfilePython", "Python");
+        ensureAiSummaryForProfile(gameStats, "aiProfileMachineLearning", "AI & Machine Learning");
         ensureAiSummaryForProfile(gameStats, "aiProfileGeneral", "General");
 
         child.setGameStats(gameStats);
@@ -1273,6 +1294,9 @@ public class LearningProfileService {
     private String deriveLanguage(final String topic, final String details) {
         String text = (topic == null ? "" : topic) + " " + (details == null ? "" : details);
         String normalized = text.toLowerCase();
+        if (normalized.startsWith("ml:") || normalized.contains("machine_learning") || normalized.contains("machine learning")) {
+            return "machine_learning";
+        }
         if (normalized.contains("cpp") || normalized.contains("c++")) {
             return "cpp";
         }

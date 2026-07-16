@@ -685,7 +685,15 @@ public class PauseMenuManager : MonoBehaviour
         multiplayerButton.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0.15f, 0.25f, 0.7f);
         multiplayerButton.onClick.AddListener(() => ShowPanel(multiplayerPanel));
 
-        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -98f), new Color(0.72f, 0.24f, 0.26f, 1f));
+        Button mlIslandButton = CreateButton(actions.transform, "MachineLearningIslandButton", "AI & ML Island", new Vector2(0f, -98f), new Color(0.48f, 0.18f, 0.68f, 1f));
+        mlIslandButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
+        mlIslandButton.GetComponentInChildren<Text>().fontSize = 14;
+        mlIslandButton.onClick.AddListener(() => {
+            ResumeGame();
+            MachineLearningIsland.TeleportLocalPlayer();
+        });
+
+        Button quitButton = CreateButton(actions.transform, "QuitButton", "Quit Game", new Vector2(0f, -142f), new Color(0.72f, 0.24f, 0.26f, 1f));
         quitButton.GetComponent<RectTransform>().sizeDelta = new Vector2(200f, 38f);
         quitButton.onClick.AddListener(QuitGame);
 

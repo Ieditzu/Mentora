@@ -10,6 +10,7 @@ struct GoalsView: View {
     @State private var selectedInsight: ServerInsight?
 
     private let accent = MentoraTheme.accent
+    private let machineLearningAccent = Color(red: 0.55, green: 0.36, blue: 0.96)
 
     private var child: Child? {
         guard let childID = store.selectedChildID else { return nil }
@@ -47,6 +48,7 @@ struct GoalsView: View {
                         weeklyReportCard
                         heatmapCard
                         radarCard
+                        machineLearningSection
                         insightsSection
                         goalsSection
                     } else {
@@ -260,6 +262,55 @@ struct GoalsView: View {
         }
     }
 
+    @ViewBuilder
+    private var machineLearningSection: some View {
+        if let data = profileData,
+           data.hasMachineLearningActivity,
+           let insight = data.machineLearningInsight {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ai_machine_learning")
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(machineLearningAccent)
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("machine_learning_radar", systemImage: "scope")
+                            .font(.headline.weight(.heavy))
+                            .foregroundStyle(machineLearningAccent)
+                        Text("machine_learning_radar_description")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        SkillRadarShape(
+                            accent: machineLearningAccent,
+                            values: ServerProfileData.machineLearningAxes.map {
+                                data.machineLearningScores[$0.id] ?? 0
+                            },
+                            labels: ServerProfileData.machineLearningAxes.map(\.label)
+                        )
+                        .frame(height: 210)
+                        HStack(spacing: 8) {
+                            ForEach(
+                                ServerProfileData.machineLearningAxes.sorted {
+                                    (data.machineLearningScores[$0.id] ?? 0) >
+                                        (data.machineLearningScores[$1.id] ?? 0)
+                                }.prefix(3),
+                                id: \.id
+                            ) { axis in
+                                MentoraMetric(
+                                    label: axis.label,
+                                    value: "\(Int((data.machineLearningScores[axis.id] ?? 0) * 100))%",
+                                    tint: machineLearningAccent
+                                )
+                            }
+                        }
+                    }
+                }
+
+                InsightCard(insight: insight) { selectedInsight = insight }
+            }
+        }
+    }
+
     private func insightRow(_ title: String, _ items: [String], color: Color) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(title).font(.caption.weight(.bold)).foregroundStyle(color).frame(width: 76, alignment: .leading)
@@ -414,7 +465,7 @@ private struct NewGoalSheet: View {
     }
 }
 
-private struct ServerInsight: Identifiable {
+struct ServerInsight: Identifiable {
     let id: String
     let title: String
     let accent: Color
@@ -594,15 +645,43 @@ private struct InsightDetailSheet: View {
     }
 }
 
-private struct ServerProfileData {
+struct ServerProfileData {
+    struct MachineLearningAxis {
+        let id: String
+        let label: String
+    }
+
     static let axes = ["Loops", "Functions", "Conditionals", "Recursion", "Memory", "Data Structures"]
     static let emptyScores = Dictionary(uniqueKeysWithValues: axes.map { ($0, CGFloat(0)) })
+    static let machineLearningAxes = [
+        MachineLearningAxis(id: "Data Prep", label: String(localized: "ml_axis_data_prep")),
+        MachineLearningAxis(id: "Regression", label: String(localized: "ml_axis_regression")),
+        MachineLearningAxis(id: "Classification", label: String(localized: "ml_axis_classification")),
+        MachineLearningAxis(id: "Evaluation", label: String(localized: "ml_axis_evaluation")),
+        MachineLearningAxis(id: "Neural Networks", label: String(localized: "ml_axis_neural_networks")),
+        MachineLearningAxis(id: "LLMs", label: String(localized: "ml_axis_llms"))
+    ]
 
     let insights: [ServerInsight]
     let skillScores: [String: CGFloat]
+    let machineLearningInsight: ServerInsight?
+    let machineLearningScores: [String: CGFloat]
+
+    var hasMachineLearningActivity: Bool {
+        guard let insight = machineLearningInsight else { return false }
+        return insight.totalInteractions > 0 ||
+            insight.correctCount > 0 ||
+            insight.incorrectCount > 0 ||
+            insight.hintsUsed > 0 ||
+            insight.chatTurns > 0
+    }
 
     init?(_ profile: IosChildProfile) {
-        guard let raw = profile.gameStatsJson.data(using: .utf8),
+        self.init(gameStatsJson: profile.gameStatsJson)
+    }
+
+    init?(gameStatsJson: String) {
+        guard let raw = gameStatsJson.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else { return nil }
 
         var aggregate = Dictionary(uniqueKeysWithValues: Self.axes.map { ($0, (correct: 0, incorrect: 0)) })
@@ -668,6 +747,112 @@ private struct ServerProfileData {
             let total = values.correct + values.incorrect
             return (axis, total == 0 ? 0 : CGFloat(values.correct) / CGFloat(total))
         })
+
+        let machineLearningProfile = root["aiProfileMachineLearning"] as? [String: Any]
+        machineLearningInsight = machineLearningProfile.map { Self.makeMachineLearningInsight($0) }
+        machineLearningScores = Self.makeMachineLearningScores(machineLearningProfile)
+    }
+
+    private static func makeMachineLearningInsight(_ profile: [String: Any]) -> ServerInsight {
+        let correct = nonNegativeInt(profile["correctCount"])
+        let incorrect = nonNegativeInt(profile["incorrectCount"])
+        let total = correct + incorrect
+        let topicScores = topicScores(profile["topics"] as? [String: Any])
+        let strengths = topicScores
+            .filter { $0.value > 0 }
+            .sorted { $0.value > $1.value }
+            .prefix(3)
+            .map { displayMachineLearningTopic($0.key) }
+        let needsHelp = topicScores
+            .filter { $0.value < 0 }
+            .sorted { $0.value < $1.value }
+            .prefix(3)
+            .map { displayMachineLearningTopic($0.key) }
+        let conceptScores = topicScores(profile["concepts"] as? [String: Any])
+        let struggles = conceptScores
+            .filter { $0.value < 0 }
+            .sorted { $0.value < $1.value }
+            .prefix(3)
+            .map { displayMachineLearningTopic($0.key) }
+        let score = total == 0 ? 0 : Int((Double(correct) / Double(total) * 100).rounded())
+        let level = level(forTotal: total, accuracy: score)
+        let summary = (profile["summaryOneLine"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (total == 0 ? "No activity yet." : "\(level) level - \(score)% accuracy across \(total) attempts.")
+        let detailedSummary = (profile["summaryThreeLine"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (profile["summaryText"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? detailSummary(summary: summary, strengths: strengths, needsHelp: needsHelp)
+        return ServerInsight(
+            id: "aiProfileMachineLearning",
+            title: String(localized: "ai_machine_learning"),
+            accent: Color(red: 0.55, green: 0.36, blue: 0.96),
+            strengths: strengths,
+            needsSupport: needsHelp,
+            score: score,
+            summary: summary,
+            detailedSummary: detailedSummary,
+            level: level,
+            totalInteractions: nonNegativeInt(profile["totalInteractions"]),
+            correctCount: correct,
+            incorrectCount: incorrect,
+            hintsUsed: nonNegativeInt(profile["hintsUsed"]),
+            chatTurns: nonNegativeInt(profile["chatTurns"]),
+            struggles: struggles,
+            commonMistakes: countedKeys(profile["mistakes"] as? [String: Any])
+                .map { displayMachineLearningTopic($0) },
+            helpTopics: helpTopics(profile["concepts"] as? [String: Any])
+                .map { displayMachineLearningTopic($0) },
+            recentMistakes: recentMistakes(profile["recentEvents"] as? [Any])
+                .map { displayMachineLearningTopic($0) }
+        )
+    }
+
+    private static func makeMachineLearningScores(_ profile: [String: Any]?) -> [String: CGFloat] {
+        var totals = Dictionary(
+            uniqueKeysWithValues: machineLearningAxes.map { ($0.id, (correct: 0, incorrect: 0)) }
+        )
+        for source in [profile?["topics"] as? [String: Any], profile?["concepts"] as? [String: Any]] {
+            for (topic, values) in topicStats(source) {
+                guard let axis = machineLearningAxis(for: topic) else { continue }
+                totals[axis, default: (0, 0)].correct += max(0, values.correct)
+                totals[axis, default: (0, 0)].incorrect += max(0, values.incorrect)
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: machineLearningAxes.map { axis in
+            let values = totals[axis.id] ?? (0, 0)
+            let attempts = values.correct + values.incorrect
+            return (axis.id, attempts == 0 ? 0 : CGFloat(values.correct) / CGFloat(attempts))
+        })
+    }
+
+    private static func machineLearningAxis(for rawTopic: String) -> String? {
+        let topic = rawTopic
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: ":", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        if ["data prep", "preprocess", "data clean", "missing value", "dataset inspection"]
+            .contains(where: { topic.contains($0) }) { return "Data Prep" }
+        if ["neural network", "neural", "mlp"].contains(where: { topic.contains($0) }) { return "Neural Networks" }
+        if ["llm", "language model", "n gram", "ngram", "tf idf", "tfidf", "intent", "next token"]
+            .contains(where: { topic.contains($0) }) { return "LLMs" }
+        if ["evaluation", "metric", "mean absolute", "mean squared", "mae", "mse", "r2", "r squared"]
+            .contains(where: { topic.contains($0) }) { return "Evaluation" }
+        if ["classification", "classifier", "logistic"].contains(where: { topic.contains($0) }) { return "Classification" }
+        return topic.contains("regression") ? "Regression" : nil
+    }
+
+    private static func displayMachineLearningTopic(_ rawTopic: String) -> String {
+        rawTopic
+            .replacingOccurrences(of: "ml:", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func nonNegativeInt(_ value: Any?) -> Int {
+        max(0, (value as? NSNumber)?.intValue ?? 0)
     }
 
     private static func topicStats(_ topics: [String: Any]?) -> [String: (correct: Int, incorrect: Int)] {

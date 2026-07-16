@@ -1,80 +1,49 @@
 package io.github.kawase.python;
 
+import io.github.kawase.utility.ContainerExecution;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.io.*;
-import java.nio.file.*;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 public class PythonExecutor {
     @Getter
     @Setter
     @AllArgsConstructor
     public static class ExecutionResult {
-        public String output;
-        public String error;
+        public String output, error;
         public int exitCode;
         public boolean isTimeout;
     }
 
-    public static ExecutionResult execute(String pythonCode, int timeoutSeconds) {
-        Path tempDir = null;
+    public static ExecutionResult execute(final String pythonCode, final int timeoutSeconds) {
+        Path workspace = null;
         try {
-            tempDir = Files.createTempDirectory("game_py_exec_");
-            Path sourceFile = tempDir.resolve("main.py");
+            final String source = pythonCode == null ? "" : pythonCode;
+            if (source.getBytes(StandardCharsets.UTF_8).length > 65_536)
+                return new ExecutionResult("", "Python source exceeds the 64 KB limit.", -1, false);
 
-            Files.writeString(sourceFile, pythonCode);
-
-            final String execCommand = String.format(
-                    "unshare --net --user --map-root-user bash -c '" +
-                            "ulimit -v 262144; " + // Limit virtual memory to ~256MB
-                            "ulimit -t %d; " +     // Limit CPU time
-                            "ulimit -f 2048; " +   // Limit created file size to ~2MB
-                            "ulimit -u 64; " +     // Limit max user processes
-                            "python3 -I -B -S %s'",
-                    timeoutSeconds, sourceFile.toAbsolutePath().toString()
+            workspace = Files.createTempDirectory("mentora_python_");
+            Files.writeString(workspace.resolve("main.py"), source, StandardCharsets.UTF_8);
+            ContainerExecution.makeWorkspaceReadable(workspace);
+            final ContainerExecution.Result result = ContainerExecution.run(
+                    workspace,
+                    System.getenv().getOrDefault("MENTORA_PYTHON_RUNNER_IMAGE", "mentora-python-runner:1"),
+                    List.of("python", "-I", "-B", "-S", "/workspace/main.py"),
+                    Math.clamp(timeoutSeconds, 1, 30),
+                    "256m",
+                    false
             );
-
-            ProcessBuilder runBuilder = new ProcessBuilder("bash", "-c", execCommand);
-            runBuilder.directory(tempDir.toFile());
-            Process runProcess = runBuilder.start();
-
-            boolean finishedInTime = runProcess.waitFor(timeoutSeconds + 2, TimeUnit.SECONDS);
-            if (!finishedInTime) {
-                runProcess.destroyForcibly();
-                return new ExecutionResult("", "Execution timed out or exhausted resources.", -1, true);
-            }
-
-            String output = readStream(runProcess.getInputStream());
-            String error = readStream(runProcess.getErrorStream());
-
-            return new ExecutionResult(output, error, runProcess.exitValue(), false);
-
-        } catch (IOException | InterruptedException e) {
-            return new ExecutionResult("", "System Exception: " + e.getMessage(), -1, false);
+            return new ExecutionResult(result.output(), result.error(), result.exitCode(), result.timeout());
+        } catch (IOException exception) {
+            return new ExecutionResult("", "System Exception: " + exception.getMessage(), -1, false);
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir.toFile());
-            }
+            ContainerExecution.deleteDirectory(workspace);
         }
-    }
-
-    private static String readStream(InputStream stream) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-            return reader.lines().collect(Collectors.joining("\n"));
-        }
-    }
-
-    private static void deleteDirectory(File directoryToBeDeleted) {
-        File[] allContents = directoryToBeDeleted.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                deleteDirectory(file);
-            }
-        }
-        directoryToBeDeleted.delete();
     }
 }

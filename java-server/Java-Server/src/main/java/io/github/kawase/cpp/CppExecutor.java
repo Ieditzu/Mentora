@@ -1,105 +1,49 @@
 package io.github.kawase.cpp;
 
+import io.github.kawase.utility.ContainerExecution;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.io.*;
-import java.nio.file.*;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 public class CppExecutor {
     @Getter
     @Setter
     @AllArgsConstructor
     public static class ExecutionResult {
-        public String output;
-        public String error;
+        public String output, error;
         public int exitCode;
         public boolean isTimeout;
     }
 
-    public static ExecutionResult execute(String cppCode, int timeoutSeconds) {
-        Path tempDir = null;
+    public static ExecutionResult execute(final String cppCode, final int timeoutSeconds) {
+        Path workspace = null;
         try {
-            tempDir = Files.createTempDirectory("game_cpp_exec_");
-            Path sourceFile = tempDir.resolve("main.cpp");
-            Path exeFile = tempDir.resolve("program.out");
+            final String source = cppCode == null ? "" : cppCode;
+            if (source.getBytes(StandardCharsets.UTF_8).length > 65_536)
+                return new ExecutionResult("", "C++ source exceeds the 64 KB limit.", -1, false);
 
-            Files.writeString(sourceFile, cppCode);
-
-            // 1. Compile the Code (with a strict timeout for template infinite loops)
-            ProcessBuilder compileBuilder = new ProcessBuilder(
-                    "g++", "-O2", sourceFile.toString(), "-o", exeFile.toString()
+            workspace = Files.createTempDirectory("mentora_cpp_");
+            Files.writeString(workspace.resolve("main.cpp"), source, StandardCharsets.UTF_8);
+            ContainerExecution.makeWorkspaceReadable(workspace);
+            final ContainerExecution.Result result = ContainerExecution.run(
+                    workspace,
+                    System.getenv().getOrDefault("MENTORA_CPP_RUNNER_IMAGE", "mentora-cpp-runner:1"),
+                    List.of(),
+                    Math.clamp(timeoutSeconds, 1, 30),
+                    "512m",
+                    true
             );
-            Process compileProcess = compileBuilder.start();
-
-            if (!compileProcess.waitFor(10, TimeUnit.SECONDS)) {
-                compileProcess.destroyForcibly();
-                return new ExecutionResult("", "Compilation timed out (Potential compiler bomb).", -1, true);
-            }
-
-            if (compileProcess.exitValue() != 0) {
-                String compileError = readStream(compileProcess.getErrorStream());
-                return new ExecutionResult("", "Compilation Error:\n" + compileError, compileProcess.exitValue(), false);
-            }
-
-            // 2. Build the OS-Level Security Wrapper
-            // unshare: Isolates the process. --net drops network. 
-            // --user --map-root-user allows non-root users to create this isolated environment.
-            // ulimit: Restricts resources heavily before running the binary.
-            final String execCommand = String.format(
-                    "unshare --net --user --map-root-user bash -c '" +
-                            "ulimit -v 262144; " + // Limit virtual memory to ~256MB
-                            "ulimit -t %d; " +     // Limit CPU time to timeoutSeconds
-                            "ulimit -f 2048; " +   // Limit created file size to ~2MB
-                            "ulimit -u 64; " +     // Limit max user processes (prevents fork bombs)
-                            "%s'",
-                    timeoutSeconds, exeFile.toAbsolutePath().toString()
-            );
-
-            // 3. Execute the Wrapped Binary
-            ProcessBuilder runBuilder = new ProcessBuilder("bash", "-c", execCommand);
-            // Crucial: Run in the temp directory so any file writes happen there
-            runBuilder.directory(tempDir.toFile());
-            Process runProcess = runBuilder.start();
-
-            // We still keep the Java-level timeout as a fallback
-            boolean finishedInTime = runProcess.waitFor(timeoutSeconds + 2, TimeUnit.SECONDS);
-
-            if (!finishedInTime) {
-                runProcess.destroyForcibly();
-                return new ExecutionResult("", "Execution timed out or exhausted resources.", -1, true);
-            }
-
-            String output = readStream(runProcess.getInputStream());
-            String error = readStream(runProcess.getErrorStream());
-
-            return new ExecutionResult(output, error, runProcess.exitValue(), false);
-
-        } catch (IOException | InterruptedException e) {
-            return new ExecutionResult("", "System Exception: " + e.getMessage(), -1, false);
+            return new ExecutionResult(result.output(), result.error(), result.exitCode(), result.timeout());
+        } catch (IOException exception) {
+            return new ExecutionResult("", "System Exception: " + exception.getMessage(), -1, false);
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir.toFile());
-            }
+            ContainerExecution.deleteDirectory(workspace);
         }
-    }
-
-    private static String readStream(InputStream stream) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-            return reader.lines().collect(Collectors.joining("\n"));
-        }
-    }
-
-    private static void deleteDirectory(File directoryToBeDeleted) {
-        File[] allContents = directoryToBeDeleted.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                deleteDirectory(file);
-            }
-        }
-        directoryToBeDeleted.delete();
     }
 }

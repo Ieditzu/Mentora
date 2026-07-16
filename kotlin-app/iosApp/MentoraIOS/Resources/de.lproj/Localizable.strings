@@ -13,3 +13,12 @@
 "active_language_format" = "Aktive Sprache: %@";
 "account" = "Konto";
 "sign_out" = "Abmelden";
+"ai_machine_learning" = "KI & Maschinelles Lernen";
+"machine_learning_radar" = "Radar für maschinelles Lernen";
+"machine_learning_radar_description" = "Leistung bei Daten- und Modellerstellungsfähigkeiten.";
+"ml_axis_data_prep" = "Datenaufbereitung";
+"ml_axis_regression" = "Regression";
+"ml_axis_classification" = "Klassifikation";
+"ml_axis_evaluation" = "Auswertung";
+"ml_axis_neural_networks" = "Neuronale Netze";
+"ml_axis_llms" = "LLMs";

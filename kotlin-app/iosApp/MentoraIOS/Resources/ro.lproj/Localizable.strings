@@ -13,3 +13,12 @@
 "active_language_format" = "Limbă activă: %@";
 "account" = "Cont";
 "sign_out" = "Deconectare";
+"ai_machine_learning" = "IA și învățare automată";
+"machine_learning_radar" = "Radar pentru învățare automată";
+"machine_learning_radar_description" = "Performanță în lucrul cu date și construirea modelelor.";
+"ml_axis_data_prep" = "Pregătirea datelor";
+"ml_axis_regression" = "Regresie";
+"ml_axis_classification" = "Clasificare";
+"ml_axis_evaluation" = "Evaluare";
+"ml_axis_neural_networks" = "Rețele neuronale";
+"ml_axis_llms" = "LLM-uri";

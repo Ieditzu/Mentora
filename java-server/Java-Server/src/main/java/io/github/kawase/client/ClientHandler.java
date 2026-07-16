@@ -26,6 +26,10 @@ import io.github.kawase.packet.impl.language.CodeWorldPythonRunPacket;
 import io.github.kawase.packet.impl.language.CodeWorldPythonResponsePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodeResponsePacket;
+import io.github.kawase.packet.impl.machinelearning.FetchMachineLearningProblemsPacket;
+import io.github.kawase.packet.impl.machinelearning.MachineLearningProblemsResponsePacket;
+import io.github.kawase.packet.impl.machinelearning.MachineLearningSubmissionResultPacket;
+import io.github.kawase.packet.impl.machinelearning.SubmitMachineLearningSolutionPacket;
 import io.github.kawase.packet.impl.qr.*;
 import io.github.kawase.socket.ServerSocket;
 import io.github.kawase.utility.GroqSpeechToText;
@@ -595,6 +599,30 @@ public class ClientHandler {
                     ).encode());
                 }
 
+                case FetchMachineLearningProblemsPacket fetchMachineLearningProblemsPacket -> {
+                    if (client.getChildId() == null)
+                        throw new RuntimeException("Not logged in as a child.");
+
+                    connection.send(new MachineLearningProblemsResponsePacket(
+                            fetchMachineLearningProblemsPacket.getRequestId(),
+                            Server.getInstance().getMachineLearningService().buildCatalogJson(client.getChildId())
+                    ).encode());
+                }
+
+                case SubmitMachineLearningSolutionPacket submitMachineLearningSolutionPacket -> {
+                    if (client.getChildId() == null)
+                        throw new RuntimeException("Not logged in as a child.");
+
+                    connection.send(new MachineLearningSubmissionResultPacket(
+                            submitMachineLearningSolutionPacket.getRequestId(),
+                            Server.getInstance().getMachineLearningService().submit(
+                                    client.getChildId(),
+                                    submitMachineLearningSolutionPacket.getProblemSlug(),
+                                    submitMachineLearningSolutionPacket.getSourceCode()
+                            )
+                    ).encode());
+                }
+
                 case AskAiPacket askAiPacket -> {
                     System.out.println("AI Question from " + (client.getChildId() != null ? "child " + client.getChildId() : "parent " + client.getParentId()) + ": " + askAiPacket.getQuestion());
                     
@@ -605,7 +633,9 @@ public class ClientHandler {
                         String language = null;
                         if (askAiPacket.getContext() != null) {
                             String ctx = askAiPacket.getContext().toLowerCase();
-                            if (ctx.contains("cpp")) {
+                            if (ctx.contains("machine learning") || ctx.contains("machine_learning") || ctx.contains("ml_")) {
+                                language = "machine_learning";
+                            } else if (ctx.contains("cpp")) {
                                 language = "cpp";
                             } else if (ctx.contains("python") || ctx.contains("py")) {
                                 language = "python";

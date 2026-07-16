@@ -24,6 +24,10 @@ import io.github.kawase.packet.impl.language.CodeWorldPythonRunPacket;
 import io.github.kawase.packet.impl.language.CodeWorldPythonResponsePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodePacket;
 import io.github.kawase.packet.impl.language.ExecutePythonCodeResponsePacket;
+import io.github.kawase.packet.impl.machinelearning.FetchMachineLearningProblemsPacket;
+import io.github.kawase.packet.impl.machinelearning.MachineLearningProblemsResponsePacket;
+import io.github.kawase.packet.impl.machinelearning.MachineLearningSubmissionResultPacket;
+import io.github.kawase.packet.impl.machinelearning.SubmitMachineLearningSolutionPacket;
 import io.github.kawase.packet.impl.qr.*;
 
 public class PacketManager {
@@ -89,6 +93,10 @@ public class PacketManager {
             case 74 -> new CodeWorldPythonRunPacket();
             case 75 -> new CodeWorldPythonResponsePacket();
             case 76 -> new SetClientLanguagePacket();
+            case 77 -> new FetchMachineLearningProblemsPacket();
+            case 78 -> new MachineLearningProblemsResponsePacket();
+            case 79 -> new SubmitMachineLearningSolutionPacket();
+            case 80 -> new MachineLearningSubmissionResultPacket();
 
             default -> throw new PacketException("Unknown packet ID: " + id);
         };

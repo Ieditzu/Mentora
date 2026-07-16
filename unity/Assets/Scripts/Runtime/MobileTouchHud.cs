@@ -13,6 +13,26 @@ public class MobileTouchHud : MonoBehaviour
     private Button pauseButton;
     private Button codeWorldButton;
     private GameObject[] gameplayControls = System.Array.Empty<GameObject>();
+    private bool externalOverlaySuppressed;
+
+    public static void SetExternalOverlaySuppressed(bool suppressed)
+    {
+        MobileTouchHud[] huds = Object.FindObjectsOfType<MobileTouchHud>(true);
+        for (int i = 0; i < huds.Length; i++)
+        {
+            MobileTouchHud hud = huds[i];
+            if (hud == null)
+            {
+                continue;
+            }
+
+            hud.externalOverlaySuppressed = suppressed;
+            if (hud.gameObject.activeInHierarchy)
+            {
+                hud.ApplyPausedState(PauseMenuManager.IsGamePaused);
+            }
+        }
+    }
 
     private void Awake()
     {
@@ -145,7 +165,7 @@ public class MobileTouchHud : MonoBehaviour
     {
         lastPausedState = paused;
         lastCodeWindowOpen = CodeWorldRuntime.ConsumesPauseInput;
-        bool hideForOverlay = paused || lastCodeWindowOpen;
+        bool hideForOverlay = paused || lastCodeWindowOpen || externalOverlaySuppressed;
 
         if (pauseButton != null)
         {

@@ -108,4 +108,13 @@
     <string name="skill_radar">Radar delle competenze</string>
     <string name="skill_radar_description">Stima delle competenze basata sui tentativi corretti e sui modelli di aiuto.</string>
     <string name="building_profile">Creazione del profilo dall\'attività recente…</string>
+    <string name="ai_machine_learning">IA e machine learning</string>
+    <string name="machine_learning_radar">Radar del machine learning</string>
+    <string name="machine_learning_radar_description">Prestazioni nelle competenze sui dati e nella creazione di modelli.</string>
+    <string name="ml_axis_data_prep">Preparazione dati</string>
+    <string name="ml_axis_regression">Regressione</string>
+    <string name="ml_axis_classification">Classificazione</string>
+    <string name="ml_axis_evaluation">Valutazione</string>
+    <string name="ml_axis_neural_networks">Reti neurali</string>
+    <string name="ml_axis_llms">LLM</string>
 </resources>

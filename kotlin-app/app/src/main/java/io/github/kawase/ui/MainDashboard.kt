@@ -1637,12 +1637,127 @@ private fun mergeSkillScores(profiles: List<AiProfile>): Map<String, Float> {
     }
 }
 
+private val MachineLearningPurple = Color(0xFF8B5CF6)
+
+@Composable
+private fun MachineLearningRadarCard(profile: AiProfile, isDarkMode: Boolean) {
+    val axes = listOf(
+        MachineLearningProfileParser.DATA_PREP to stringResource(R.string.ml_axis_data_prep),
+        MachineLearningProfileParser.REGRESSION to stringResource(R.string.ml_axis_regression),
+        MachineLearningProfileParser.CLASSIFICATION to stringResource(R.string.ml_axis_classification),
+        MachineLearningProfileParser.EVALUATION to stringResource(R.string.ml_axis_evaluation),
+        MachineLearningProfileParser.NEURAL_NETWORKS to stringResource(R.string.ml_axis_neural_networks),
+        MachineLearningProfileParser.LLMS to stringResource(R.string.ml_axis_llms)
+    )
+    val scores = profile.skillScores
+    val subtextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.55f)
+    val borderColor = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+    val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDarkMode) 0.18f else 0.12f)
+    val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Radar,
+                    contentDescription = null,
+                    tint = MachineLearningPurple,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        stringResource(R.string.machine_learning_radar),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        stringResource(R.string.machine_learning_radar_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subtextColor
+                    )
+                }
+            }
+
+            Canvas(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+                val center = Offset(size.width / 2f, size.height / 2f + 4.dp.toPx())
+                val radius = min(size.width, size.height) * 0.33f
+                val ringCount = 4
+
+                fun pointFor(index: Int, scale: Float): Offset {
+                    val angle = (-PI / 2.0) + (index * 2.0 * PI / axes.size)
+                    return Offset(
+                        center.x + (cos(angle).toFloat() * radius * scale),
+                        center.y + (sin(angle).toFloat() * radius * scale)
+                    )
+                }
+
+                repeat(ringCount) { ring ->
+                    val scale = (ring + 1).toFloat() / ringCount.toFloat()
+                    val path = Path()
+                    axes.indices.forEach { index ->
+                        val point = pointFor(index, scale)
+                        if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+                    }
+                    path.close()
+                    drawPath(path, gridColor, style = Stroke(width = 1.dp.toPx()))
+                }
+
+                axes.indices.forEach { index ->
+                    drawLine(gridColor, center, pointFor(index, 1f), strokeWidth = 1.dp.toPx())
+                }
+
+                val valuePath = Path()
+                axes.forEachIndexed { index, (axis, _) ->
+                    val point = pointFor(index, (scores[axis] ?: 0f).coerceIn(0f, 1f))
+                    if (index == 0) valuePath.moveTo(point.x, point.y) else valuePath.lineTo(point.x, point.y)
+                }
+                valuePath.close()
+                drawPath(valuePath, MachineLearningPurple.copy(alpha = 0.24f))
+                drawPath(valuePath, MachineLearningPurple, style = Stroke(width = 2.dp.toPx()))
+
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = labelColor
+                    textAlign = Paint.Align.CENTER
+                    textSize = 10.5f * density
+                    isFakeBoldText = true
+                }
+                axes.forEachIndexed { index, (_, label) ->
+                    val point = pointFor(index, 1.20f)
+                    drawContext.canvas.nativeCanvas.drawText(label, point.x, point.y + 4.dp.toPx(), paint)
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                axes.sortedByDescending { (axis, _) -> scores[axis] ?: 0f }
+                    .take(3)
+                    .forEach { (axis, label) ->
+                        MiniMetric(
+                            label,
+                            "${((scores[axis] ?: 0f) * 100).toInt()}%",
+                            MachineLearningPurple,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+            }
+        }
+    }
+}
+
 @Composable
 fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
     val goals = viewModel.goals
     val cppProfile = viewModel.aiProfilesCpp[childId]
     val pythonProfile = viewModel.aiProfilesPython[childId]
     val generalProfile = viewModel.aiProfilesGeneral[childId]
+    val machineLearningProfile = viewModel.aiProfilesMachineLearning[childId]
+    val activeMachineLearningProfile = machineLearningProfile?.takeIf(MachineLearningProfileParser::hasInteractions)
+    val machineLearningTitle = stringResource(R.string.ai_machine_learning)
     LaunchedEffect(childId) {
         if (childId != -1L) {
             viewModel.fetchChildProfile(childId)
@@ -1721,6 +1836,34 @@ fun GoalsScreen(viewModel: SocketViewModel, childId: Long) {
                     primaryColor = viewModel.primaryColor.value,
                     isDarkMode = viewModel.isDarkMode.value
                 )
+            }
+
+            if (activeMachineLearningProfile != null) {
+                item {
+                    Text(
+                        machineLearningTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MachineLearningPurple
+                    )
+                }
+
+                item {
+                    MachineLearningRadarCard(
+                        profile = activeMachineLearningProfile,
+                        isDarkMode = viewModel.isDarkMode.value
+                    )
+                }
+
+                item {
+                    ProfileInsightCard(
+                        label = machineLearningTitle,
+                        profile = activeMachineLearningProfile,
+                        accentColor = MachineLearningPurple,
+                        isDarkMode = viewModel.isDarkMode.value,
+                        onDetailClick = { detailPopupProfile = machineLearningTitle to activeMachineLearningProfile }
+                    )
+                }
             }
 
             item { Spacer(modifier = Modifier.height(4.dp)) }

@@ -108,4 +108,13 @@
     <string name="skill_radar">Radar de competențe</string>
     <string name="skill_radar_description">Estimare din încercările corecte și tiparele de ajutor.</string>
     <string name="building_profile">Se construiește profilul din activitatea recentă…</string>
+    <string name="ai_machine_learning">IA și învățare automată</string>
+    <string name="machine_learning_radar">Radar pentru învățare automată</string>
+    <string name="machine_learning_radar_description">Performanță în lucrul cu date și construirea modelelor.</string>
+    <string name="ml_axis_data_prep">Pregătirea datelor</string>
+    <string name="ml_axis_regression">Regresie</string>
+    <string name="ml_axis_classification">Clasificare</string>
+    <string name="ml_axis_evaluation">Evaluare</string>
+    <string name="ml_axis_neural_networks">Rețele neuronale</string>
+    <string name="ml_axis_llms">LLM-uri</string>
 </resources>

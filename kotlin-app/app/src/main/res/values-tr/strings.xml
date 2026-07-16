@@ -108,4 +108,13 @@
     <string name="skill_radar">Beceri radarı</string>
     <string name="skill_radar_description">Doğru denemeler ve yardım örüntülerinden yeterlilik tahmini.</string>
     <string name="building_profile">Son etkinliklerden profil oluşturuluyor…</string>
+    <string name="ai_machine_learning">Yapay zekâ ve makine öğrenmesi</string>
+    <string name="machine_learning_radar">Makine öğrenmesi radarı</string>
+    <string name="machine_learning_radar_description">Veri ve model oluşturma becerilerindeki performans.</string>
+    <string name="ml_axis_data_prep">Veri hazırlama</string>
+    <string name="ml_axis_regression">Regresyon</string>
+    <string name="ml_axis_classification">Sınıflandırma</string>
+    <string name="ml_axis_evaluation">Değerlendirme</string>
+    <string name="ml_axis_neural_networks">Sinir ağları</string>
+    <string name="ml_axis_llms">LLM modelleri</string>
 </resources>

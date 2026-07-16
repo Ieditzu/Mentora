@@ -13,3 +13,12 @@
 "active_language_format" = "Активна мова: %@";
 "account" = "Обліковий запис";
 "sign_out" = "Вийти";
+"ai_machine_learning" = "ШІ та машинне навчання";
+"machine_learning_radar" = "Радар машинного навчання";
+"machine_learning_radar_description" = "Результати роботи з даними та побудови моделей.";
+"ml_axis_data_prep" = "Підготовка даних";
+"ml_axis_regression" = "Регресія";
+"ml_axis_classification" = "Класифікація";
+"ml_axis_evaluation" = "Оцінювання";
+"ml_axis_neural_networks" = "Нейронні мережі";
+"ml_axis_llms" = "LLM-моделі";

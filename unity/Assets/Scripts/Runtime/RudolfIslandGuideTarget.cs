@@ -7,7 +7,8 @@ public sealed class RudolfIslandGuideTarget : MonoBehaviour
         Community,
         Logic,
         Python,
-        Cpp
+        Cpp,
+        MachineLearning
     }
 
     [SerializeField] private IslandId island = IslandId.Python;
@@ -74,6 +75,17 @@ public sealed class RudolfIslandGuideTarget : MonoBehaviour
             return true;
         }
 
+        if (normalized.Contains("machine learning") ||
+            normalized.Contains("machinelearning") ||
+            normalized.Contains("ml island") ||
+            normalized.Contains("ai island") ||
+            normalized.Contains("llm island") ||
+            normalized.Contains("learning island"))
+        {
+            islandId = IslandId.MachineLearning;
+            return true;
+        }
+
         if (normalized.Contains("python") ||
             normalized.Contains("py island") ||
             normalized.Contains("piton") ||
@@ -110,6 +122,8 @@ public sealed class RudolfIslandGuideTarget : MonoBehaviour
                 return "Logic Island";
             case IslandId.Cpp:
                 return "C++ Island";
+            case IslandId.MachineLearning:
+                return "AI & Machine Learning Island";
             default:
                 return "Python Island";
         }

@@ -22,3 +22,14 @@ targets:
         script: |
           cd "$SRCROOT/.."
           ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+  MentoraIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MentoraIOSTests
+    dependencies:
+      - target: MentoraIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.kawase.mentora.ios.tests
+        GENERATE_INFOPLIST_FILE: YES

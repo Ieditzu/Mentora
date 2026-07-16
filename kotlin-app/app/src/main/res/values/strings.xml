@@ -108,4 +108,13 @@
     <string name="skill_radar">Skill radar</string>
     <string name="skill_radar_description">Competency estimate from correct attempts and help patterns.</string>
     <string name="building_profile">Building profile from recent activity…</string>
+    <string name="ai_machine_learning">AI &amp; Machine Learning</string>
+    <string name="machine_learning_radar">Machine learning radar</string>
+    <string name="machine_learning_radar_description">Performance across data and model-building skills.</string>
+    <string name="ml_axis_data_prep">Data Prep</string>
+    <string name="ml_axis_regression">Regression</string>
+    <string name="ml_axis_classification">Classification</string>
+    <string name="ml_axis_evaluation">Evaluation</string>
+    <string name="ml_axis_neural_networks">Neural Networks</string>
+    <string name="ml_axis_llms">LLMs</string>
 </resources>

@@ -108,4 +108,13 @@
     <string name="skill_radar">Радар навичок</string>
     <string name="skill_radar_description">Оцінка компетентності за правильними спробами та шаблонами допомоги.</string>
     <string name="building_profile">Створення профілю на основі останньої активності…</string>
+    <string name="ai_machine_learning">ШІ та машинне навчання</string>
+    <string name="machine_learning_radar">Радар машинного навчання</string>
+    <string name="machine_learning_radar_description">Результати роботи з даними та побудови моделей.</string>
+    <string name="ml_axis_data_prep">Підготовка даних</string>
+    <string name="ml_axis_regression">Регресія</string>
+    <string name="ml_axis_classification">Класифікація</string>
+    <string name="ml_axis_evaluation">Оцінювання</string>
+    <string name="ml_axis_neural_networks">Нейронні мережі</string>
+    <string name="ml_axis_llms">LLM-моделі</string>
 </resources>

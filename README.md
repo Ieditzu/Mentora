@@ -1,8 +1,8 @@
 # Mentora
 
-Mentora este un ecosistem educațional bazat pe IA pentru învățarea programării prin intermediul unui joc Unity, al unei aplicații Android pentru părinți, al unui creator web de cursuri și al unui backend Java/Spring. Proiectul îi învață pe copii Python și C++ punându-i să scrie și să ruleze cod real, să primească îndrumare oferită de IA și să își construiască un profil de învățare persistent, care îi însoțește pe parcursul sarcinilor, testelor, sesiunilor și activităților multiplayer.
+Mentora este un ecosistem educațional bazat pe IA pentru învățarea programării și a învățării automate prin intermediul unui joc Unity, al aplicațiilor Android/iOS pentru părinți, al unui creator web de cursuri și al unui backend Java/Spring. Proiectul îi învață pe copii Python, C++ și concepte AI/ML punându-i să scrie și să ruleze cod real, să lucreze cu seturi de date, să primească îndrumare oferită de IA și să își construiască un profil de învățare persistent.
 
-Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `72`, un nivel multiplayer Unity prin LAN separat, cu ID-uri de pachete locale până la `73`, editare colaborativă CodeWorld, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor, un companion cu interacțiune vocală și îmbinarea profilurilor de programare pentru fiecare jucător.
+Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `80`, un nivel multiplayer Unity prin LAN separat, editare colaborativă CodeWorld, o insulă AI/ML cu evaluare deterministă pe server, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor și un companion cu interacțiune vocală.
 
 ## Prezentare vizuală
 
@@ -91,8 +91,9 @@ flowchart LR
 
     Backend --> DB[(PostgreSQL)]
     Backend --> Groq[Groq API<br/>LLaMA 3.3 70B]
-    Backend --> Python[Mediu izolat Python]
-    Backend --> Cpp[Mediu izolat C++]
+    Backend --> Python[Container Python fără rețea]
+    Backend --> Cpp[Container C++ fără rețea]
+    Backend --> ML[Container NumPy/pandas/scikit-learn]
 
     Unity <--> LAN[Multiplayer Unity prin LAN<br/>TCP 7777 + descoperire UDP 7776]
 ```
@@ -126,7 +127,7 @@ flowchart TD
 | Backend | Java 21, Spring Boot 3.2.4, Spring Data JPA, Hibernate, PostgreSQL |
 | Protocol backend în timp real | Java-WebSocket, pachete binare criptate personalizate |
 | IA | Groq API, `llama-3.3-70b-versatile`, memorie cache pentru răspunsuri, rotația cheilor API |
-| Executarea codului | Procese de execuție Python și C++ pe server, izolate în Linux |
+| Executarea codului | Containere Docker efemere pentru Python, C++, CodeWorld și NumPy/pandas/scikit-learn |
 | Joc | Unity 2022.3.62f3, C#, HDRP |
 | Android | Kotlin, Jetpack Compose, CameraX, ZXing pentru scanarea codurilor QR, Coil |
 | Web | React 19, Vite 7, Tailwind CSS v4, Framer Motion, lucide-react |
@@ -143,11 +144,14 @@ Fișiere importante:
 | `packet/Packet.java` | Clasa de bază a pachetelor, criptare/decriptare, serializarea șirurilor de caractere |
 | `packet/PacketManager.java` | Fabrica de pachete pentru ID-urile pachetelor backend |
 | `database/services/LearningProfileService.java` | Actualizări ale profilului IA pentru fiecare copil, rezumate, rapoarte săptămânale |
+| `machinelearning/MachineLearningService.java` | Catalogul celor nouă probleme AI/ML, evaluarea ascunsă, progresul și recompensele |
+| `machinelearning/MachineLearningExecutor.java` | Rularea soluțiilor AI/ML în containerul științific Python |
 | `database/services/CourseService.java` | Operații CRUD pentru cursuri, publicare, finalizare, logica recompenselor |
 | `database/services/TaskService.java` | Popularea inițială a sarcinilor globale și finalizarea sarcinilor |
 | `utility/GroqAI.java` | Componentă de integrare pentru API-ul de chat Groq, memorie cache pentru răspunsuri, rotația cheilor |
 | `python/PythonExecutor.java` | Executarea Python într-un mediu izolat |
 | `cpp/CppExecutor.java` | Compilarea și executarea C++ într-un mediu izolat |
+| `utility/ContainerExecution.java` | Politica comună de izolare Docker pentru tot codul trimis de elevi |
 | `web/WebAuthController.java` | Endpointuri web pentru autentificare |
 | `web/WebCourseController.java` | API REST web pentru cursuri |
 
@@ -251,6 +255,10 @@ Există două sisteme de pachete:
 | `66/67/68` | Pachete pentru provocări trimise de părinte | Părintele trimite provocarea și primește confirmarea finalizării |
 | `69/70` | Pachete pentru raportul săptămânal | Raportul IA săptămânal pentru părinte |
 | `71/72` | Pachete cu rezumatul profilului de programare | Rezumatul profilului copilului pentru contextul jocului/modului multiplayer |
+| `74/75` | `CodeWorldPythonRunPacket` / răspuns | Rularea corelată a codului Python care controlează CodeWorld |
+| `76` | `SetClientLanguagePacket` | Limba preferată pentru răspunsurile serverului |
+| `77/78` | `FetchMachineLearningProblemsPacket` / răspuns | Catalogul AI/ML și progresul copilului |
+| `79/80` | `SubmitMachineLearningSolutionPacket` / rezultat | Rularea, evaluarea ascunsă și recompensa unei soluții AI/ML |
 
 `ClientHandler.java` aplică o listă de permisiuni pentru clienții neautentificați. Pachetele din afara setului permis returnează un `ActionResponsePacket` de neautorizare, cu excepția cazului în care clientul are o sesiune validă de părinte sau copil.
 
@@ -362,38 +370,21 @@ Capabilitățile din baza de cod actuală:
 
 Codul elevului este executat pe server, dar nu direct în procesul backendului.
 
-### Python
+Toate căile de execuție — Python, C++, CodeWorld Python și problemele AI/ML — folosesc imagini Docker fixate și containere noi pentru fiecare rulare. Procesul Java nu mai pornește interpretorul sau compilatorul direct pe gazdă. Imaginile se construiesc prin `sh code-runners/build-images.sh`.
 
-`PythonExecutor.java`:
-
-- creează un director temporar.
-- scrie codul în `main.py`.
-- rulează `python3 -I -B -S`.
-- izolează spațiile de nume ale rețelei/utilizatorului cu `unshare --net --user --map-root-user`.
-- aplică limite stricte cu `ulimit`.
-- șterge apoi directorul temporar.
-
-### C++
-
-`CppExecutor.java`:
-
-- creează un director temporar.
-- scrie codul în `main.cpp`.
-- compilează cu `g++ -O2`.
-- aplică o limită de timp pentru compilare.
-- rulează binarul compilat prin același mecanism bazat pe `unshare` și `ulimit`.
-- șterge apoi directorul temporar.
-
-Limitele sandboxului:
+Politica sandboxului:
 
 | Limită | Valoare |
 | --- | --- |
-| Memorie virtuală | `ulimit -v 262144` |
-| Timp CPU | `ulimit -t <timeoutSeconds>` |
-| Dimensiunea fișierelor create | `ulimit -f 2048` |
-| Număr de procese | `ulimit -u 64` |
-| Rețea | dezactivată prin `unshare --net` |
-| Timp-limită de rezervă Java | `timeoutSeconds + 2` |
+| Identitate | UID/GID `65532`, fără privilegii root |
+| Rețea | `--network none` |
+| Sistem de fișiere | rădăcină și surse read-only; doar `/tmp` temporar |
+| Privilegii | toate capabilitățile eliminate, `no-new-privileges` |
+| Resurse | un CPU, memorie fixată, maximum 64 procese și 64 descriptori |
+| Fișiere/ieșire | fișiere de maximum 2 MB; stdout/stderr limitate la 16 KB |
+| Timp | timeout Java; containerul este eliminat forțat dacă expiră |
+
+Seturile de date de antrenare și caracteristicile de test sunt montate în containerul AI/ML, însă etichetele ascunse rămân în procesul Java. Corectitudinea și recompensele sunt astfel stabilite exclusiv de evaluatorul serverului, nu de client sau de un răspuns LLM.
 
 ## Jocul Unity
 
@@ -414,6 +405,12 @@ Scripturi importante:
 | `PythonDebugPadCinematic.cs` | Provocările Python și fluxul de evaluare cu IA |
 | `CodeChallengePadCinematic.cs` | Panourile de programare/depanare C++ |
 | `CppQuestionPadCinematic.cs` | Panoul cu întrebări C++ cu variante multiple de răspuns |
+
+### AI & Machine Learning Island
+
+Insula AI/ML este salvată în scena principală și conține portaluri deschise pentru `Easy`, `Medium` și `Hard`. Catalogul este livrat de server prin pachetele `77/78`, iar soluțiile corelate prin `requestId` sunt trimise și evaluate prin `79/80`. Cele nouă probleme acoperă pregătirea datelor, regresia, clasificarea, evaluarea modelelor, rețele neuronale, NLP și bazele predicției următorului token. Progresul și recompensele sunt persistente și idempotente în `ChildMachineLearningProgress`.
+
+Profilul rezultat este stocat sub cheia JSON `aiProfileMachineLearning`. Aplicațiile Android și iOS îl afișează separat, cu radar pentru Data Prep, Regression, Classification, Evaluation, Neural Networks și LLMs; clienții mai vechi ignoră în siguranță cheia nouă.
 
 ### CodeWorld
 

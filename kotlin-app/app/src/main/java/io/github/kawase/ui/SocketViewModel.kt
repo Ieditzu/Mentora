@@ -202,6 +202,8 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     val aiProfilesPython: Map<Long, AiProfile> = _aiProfilesPython
     private val _aiProfilesGeneral = mutableStateMapOf<Long, AiProfile>()
     val aiProfilesGeneral: Map<Long, AiProfile> = _aiProfilesGeneral
+    private val _aiProfilesMachineLearning = mutableStateMapOf<Long, AiProfile>()
+    val aiProfilesMachineLearning: Map<Long, AiProfile> = _aiProfilesMachineLearning
     private val _liveSessions = mutableStateMapOf<Long, LiveSessionState>()
     val liveSessions: Map<Long, LiveSessionState> = _liveSessions
     private val _weeklyReports = mutableStateMapOf<Long, WeeklyReport>()
@@ -492,6 +494,12 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     parseAiProfile(packet.gameStatsJson, "aiProfileGeneral")?.let { profile ->
                         _aiProfilesGeneral[targetId] = profile
+                    }
+                    val machineLearningProfile = MachineLearningProfileParser.parse(packet.gameStatsJson)
+                    if (machineLearningProfile == null) {
+                        _aiProfilesMachineLearning.remove(targetId)
+                    } else {
+                        _aiProfilesMachineLearning[targetId] = machineLearningProfile
                     }
                     pendingChildStatsId = null
                 }

@@ -1,24 +1,19 @@
 package io.github.kawase.python;
 
+import io.github.kawase.utility.ContainerExecution;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import org.json.JSONArray;
 
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public class CodeWorldPythonExecutor {
-    private static final String COMMANDS_FILE_NAME = "commands.json";
     private static final int MAX_COMMANDS = 512;
     private static final int MAX_OUTPUT_CHARS = 16_000;
     private static final int MAX_ERROR_CHARS = 16_000;
@@ -34,76 +29,52 @@ public class CodeWorldPythonExecutor {
     }
 
     public static ExecutionResult execute(final String pythonCode, final int timeoutSeconds) {
-        Path tempDir = null;
+        Path workspace = null;
         try {
-            tempDir = Files.createTempDirectory("code_world_py_");
-            Path libraryFile = tempDir.resolve("mentora_world.py");
-            Path userFile = tempDir.resolve("user_code.py");
-            Path wrapperFile = tempDir.resolve("main.py");
-            Path commandsFile = tempDir.resolve(COMMANDS_FILE_NAME);
+            final String source = pythonCode == null ? "" : pythonCode;
+            if (source.getBytes(StandardCharsets.UTF_8).length > 65_536)
+                return new ExecutionResult("", "", "Code World source exceeds the 64 KB limit.", -1, false);
 
-            Files.writeString(libraryFile, buildLibrarySource());
-            Files.writeString(userFile, pythonCode == null ? "" : pythonCode);
-            Files.writeString(wrapperFile, buildWrapperSource());
+            workspace = Files.createTempDirectory("mentora_code_world_");
+            Files.writeString(workspace.resolve("mentora_world.py"), buildLibrarySource(), StandardCharsets.UTF_8);
+            Files.writeString(workspace.resolve("user_code.py"), source, StandardCharsets.UTF_8);
+            Files.writeString(workspace.resolve("main.py"), buildWrapperSource(), StandardCharsets.UTF_8);
+            ContainerExecution.makeWorkspaceReadable(workspace);
 
-            final String execCommand = String.format(
-                    "ulimit -v 262144; " +
-                            "ulimit -t %d; " +
-                            "ulimit -f 2048; " +
-                            "ulimit -u 64; " +
-                            "python3 -B -S %s",
+            final ContainerExecution.Result result = ContainerExecution.run(
+                    workspace,
+                    System.getenv().getOrDefault("MENTORA_PYTHON_RUNNER_IMAGE", "mentora-python-runner:1"),
+                    List.of("python", "-B", "-S", "/workspace/main.py"),
                     timeoutSeconds,
-                    wrapperFile.toAbsolutePath()
+                    "256m",
+                    false
             );
-
-            ProcessBuilder runBuilder = new ProcessBuilder(
-                    "unshare", "--net", "--user", "--map-root-user", "bash", "-c", execCommand
-            );
-            runBuilder.directory(tempDir.toFile());
-            Process runProcess = runBuilder.start();
-
-            boolean finishedInTime = runProcess.waitFor(timeoutSeconds + 2L, TimeUnit.SECONDS);
-            if (!finishedInTime) {
-                runProcess.destroyForcibly();
-                return new ExecutionResult("", "", "Code World Python timed out or exhausted resources.", -1, true);
-            }
-
-            String rawOutput = readStream(runProcess.getInputStream());
-            String error = trimTo(readStream(runProcess.getErrorStream()), MAX_ERROR_CHARS);
-            String commandsText = readCommands(commandsFile);
+            final int markerIndex = result.output().lastIndexOf("MENTORA_COMMANDS=");
+            final String commandsText = markerIndex < 0 ? "" : readCommands(result.output().substring(markerIndex + "MENTORA_COMMANDS=".length()).trim());
+            final String rawOutput = markerIndex < 0 ? result.output() : result.output().substring(0, markerIndex);
 
             return new ExecutionResult(
                     commandsText,
                     trimTo(rawOutput.trim(), MAX_OUTPUT_CHARS),
-                    error,
-                    runProcess.exitValue(),
-                    false
+                    trimTo(result.error(), MAX_ERROR_CHARS),
+                    result.exitCode(),
+                    result.timeout()
             );
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            return new ExecutionResult("", "", "System Exception: " + e.getMessage(), -1, false);
+        } catch (IOException exception) {
+            return new ExecutionResult("", "", "System Exception: " + exception.getMessage(), -1, false);
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir.toFile());
-            }
+            ContainerExecution.deleteDirectory(workspace);
         }
     }
 
-    private static String readCommands(final Path commandsFile) {
-        List<String> commands = new ArrayList<>();
+    private static String readCommands(final String commandsJson) {
+        final List<String> commands = new ArrayList<>();
         try {
-            if (!Files.exists(commandsFile)) {
-                return "";
-            }
-
-            JSONArray array = new JSONArray(Files.readString(commandsFile));
+            final JSONArray array = new JSONArray(commandsJson);
             for (int i = 0; i < array.length() && commands.size() < MAX_COMMANDS; i++) {
-                String command = array.optString(i, "").trim();
-                if (!command.isBlank()) {
+                final String command = array.optString(i, "").trim();
+                if (!command.isBlank())
                     commands.add(command);
-                }
             }
         } catch (Exception ignored) {
             return "";
@@ -112,28 +83,12 @@ public class CodeWorldPythonExecutor {
         return String.join("\n", commands);
     }
 
-    private static String readStream(final InputStream stream) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-            return reader.lines().collect(Collectors.joining("\n"));
-        }
-    }
-
     private static String trimTo(final String value, final int maxChars) {
         if (value == null || value.length() <= maxChars) {
             return value == null ? "" : value;
         }
 
         return value.substring(0, maxChars) + "\n...[truncated]";
-    }
-
-    private static void deleteDirectory(final File directoryToBeDeleted) {
-        File[] allContents = directoryToBeDeleted.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                deleteDirectory(file);
-            }
-        }
-        directoryToBeDeleted.delete();
     }
 
     private static String buildWrapperSource() {
@@ -146,13 +101,12 @@ public class CodeWorldPythonExecutor {
 
                 exit_code = 0
                 try:
-                    runpy.run_path("user_code.py", init_globals=mentora_world._exports(), run_name="__main__")
+                    runpy.run_path("/workspace/user_code.py", init_globals=mentora_world._exports(), run_name="__main__")
                 except BaseException:
                     traceback.print_exc()
                     exit_code = 1
 
-                with open("commands.json", "w", encoding="utf-8") as command_file:
-                    json.dump(mentora_world._commands, command_file)
+                print("MENTORA_COMMANDS=" + json.dumps(mentora_world._commands, separators=(",", ":")))
                 sys.exit(exit_code)
                 """;
     }

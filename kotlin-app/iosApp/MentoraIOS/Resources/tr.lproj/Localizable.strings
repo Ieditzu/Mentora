@@ -13,3 +13,12 @@
 "active_language_format" = "Etkin dil: %@";
 "account" = "Hesap";
 "sign_out" = "Çıkış yap";
+"ai_machine_learning" = "Yapay zekâ ve makine öğrenmesi";
+"machine_learning_radar" = "Makine öğrenmesi radarı";
+"machine_learning_radar_description" = "Veri ve model oluşturma becerilerindeki performans.";
+"ml_axis_data_prep" = "Veri hazırlama";
+"ml_axis_regression" = "Regresyon";
+"ml_axis_classification" = "Sınıflandırma";
+"ml_axis_evaluation" = "Değerlendirme";
+"ml_axis_neural_networks" = "Sinir ağları";
+"ml_axis_llms" = "LLM modelleri";

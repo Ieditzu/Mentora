@@ -71,6 +71,10 @@ namespace Mentora.Network
                 73 => new MultiplayerProfileSummaryPacket(),
                 74 => new CodeWorldPythonRunPacket(),
                 75 => new CodeWorldPythonResponsePacket(),
+                77 => new FetchMlProblemsPacket(),
+                78 => new MlProblemsResponsePacket(),
+                79 => new SubmitMlSolutionPacket(),
+                80 => new MlSubmissionResultPacket(),
                 _ => throw new Exception("Unknown packet ID: " + id),
             };
         }
@@ -1308,6 +1312,114 @@ namespace Mentora.Network
             CommandsText = ReadString(reader);
             Output = ReadString(reader);
             Error = ReadString(reader);
+        }
+    }
+
+    /// <summary>Unity -&gt; server: request the authenticated child's ML problem catalog.</summary>
+    public class FetchMlProblemsPacket : Packet
+    {
+        public string RequestId;
+
+        public FetchMlProblemsPacket(string requestId) : base(77)
+        {
+            RequestId = requestId;
+        }
+
+        public FetchMlProblemsPacket() : base(77) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, RequestId ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+        }
+    }
+
+    /// <summary>Server -&gt; Unity: correlated ML catalog JSON.</summary>
+    public class MlProblemsResponsePacket : Packet
+    {
+        public string RequestId;
+        public string ProblemsJson;
+
+        public MlProblemsResponsePacket() : base(78) { }
+
+        public MlProblemsResponsePacket(string requestId, string problemsJson) : base(78)
+        {
+            RequestId = requestId;
+            ProblemsJson = problemsJson;
+        }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, RequestId ?? string.Empty);
+            PutString(writer, ProblemsJson ?? "{\"problems\":[]}");
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+            ProblemsJson = ReadString(reader);
+        }
+    }
+
+    /// <summary>Unity -&gt; server: submit Python source for one stable ML problem slug.</summary>
+    public class SubmitMlSolutionPacket : Packet
+    {
+        public string RequestId;
+        public string ProblemSlug;
+        public string SourceCode;
+
+        public SubmitMlSolutionPacket(string requestId, string problemSlug, string sourceCode) : base(79)
+        {
+            RequestId = requestId;
+            ProblemSlug = problemSlug;
+            SourceCode = sourceCode;
+        }
+
+        public SubmitMlSolutionPacket() : base(79) { }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, RequestId ?? string.Empty);
+            PutString(writer, ProblemSlug ?? string.Empty);
+            PutString(writer, SourceCode ?? string.Empty);
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+            ProblemSlug = ReadString(reader);
+            SourceCode = ReadString(reader);
+        }
+    }
+
+    /// <summary>Server -&gt; Unity: correlated deterministic grading result JSON.</summary>
+    public class MlSubmissionResultPacket : Packet
+    {
+        public string RequestId;
+        public string ResultJson;
+
+        public MlSubmissionResultPacket() : base(80) { }
+
+        public MlSubmissionResultPacket(string requestId, string resultJson) : base(80)
+        {
+            RequestId = requestId;
+            ResultJson = resultJson;
+        }
+
+        protected override void Write(BinaryWriter writer)
+        {
+            PutString(writer, RequestId ?? string.Empty);
+            PutString(writer, ResultJson ?? "{}");
+        }
+
+        protected override void Read(BinaryReader reader)
+        {
+            RequestId = ReadString(reader);
+            ResultJson = ReadString(reader);
         }
     }
 
