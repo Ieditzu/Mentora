@@ -1,0 +1,187 @@
+name: Build Unity game releases
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Atașează buildurile la un GitHub Release existent sau nou"
+        required: true
+        default: false
+        type: boolean
+      tag:
+        description: "Tagul release-ului (obligatoriu doar când publicarea este activată)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unity-game-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - targetPlatform: StandaloneWindows64
+            label: Windows
+            artifact: Mentora-Windows
+          - targetPlatform: StandaloneLinux64
+            label: Linux
+            artifact: Mentora-Linux
+          - targetPlatform: Android
+            label: Android APK
+            artifact: Mentora-Android
+          - targetPlatform: iOS
+            label: iOS Xcode project
+            artifact: Mentora-iOS-Xcode
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: unity/Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('unity/Packages/packages-lock.json', 'unity/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ matrix.targetPlatform }}-
+            Library-
+
+      - name: Build with Unity
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: unity
+          unityVersion: auto
+          targetPlatform: ${{ matrix.targetPlatform }}
+          buildsPath: build
+          buildName: Mentora
+          androidExportType: androidPackage
+          versioning: Semantic
+
+      - name: Upload ${{ matrix.label }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: unity/build
+          if-no-files-found: error
+          retention-days: 30
+
+  package-ios-ipa:
+    name: Package iOS IPA
+    needs: build
+    runs-on: macos-15
+
+    steps:
+      - name: Download iOS Xcode project
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-iOS-Xcode
+          path: ios-project
+
+      - name: Archive iOS game and create IPA
+        shell: bash
+        run: |
+          project_path="$(find ios-project -type d -name '*.xcodeproj' -print -quit)"
+          test -n "$project_path"
+          xcodebuild archive \
+            -project "$project_path" \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/Mentora.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+          mkdir -p "$RUNNER_TEMP/ipa/Payload" releases/ios
+          find "$RUNNER_TEMP/Mentora.xcarchive/Products/Applications" -maxdepth 1 -type d -name '*.app' -exec cp -R {} "$RUNNER_TEMP/ipa/Payload/" \;
+          test -n "$(find "$RUNNER_TEMP/ipa/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          (cd "$RUNNER_TEMP/ipa" && zip -qr "$GITHUB_WORKSPACE/releases/ios/Mentora.ipa" Payload)
+
+      - name: Upload iOS IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mentora-iOS-IPA
+          path: releases/ios/Mentora.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Attach game builds to release
+    needs: [build, package-ios-ipa]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || inputs.publish_release
+
+    steps:
+      - name: Validate release tag
+        run: test -n "${{ github.event.release.tag_name || inputs.tag }}"
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-Windows
+          path: staging/windows
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-Linux
+          path: staging/linux
+
+      - name: Download Android build
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-Android
+          path: staging/android
+
+      - name: Download iOS project
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-iOS-Xcode
+          path: staging/ios
+
+      - name: Download iOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: Mentora-iOS-IPA
+          path: staging/ios-ipa
+
+      - name: Package release files
+        shell: bash
+        run: |
+          mkdir -p release
+          (cd staging/windows && zip -qr ../../release/Mentora-Windows.zip .)
+          (cd staging/linux && zip -qr ../../release/Mentora-Linux.zip .)
+          (cd staging/ios && zip -qr ../../release/Mentora-iOS-Xcode.zip .)
+          find staging/android -type f -name '*.apk' -exec cp {} release/Mentora-Android.apk \;
+          find staging/ios-ipa -type f -name '*.ipa' -exec cp {} release/Mentora-iOS.ipa \;
+          test -f release/Mentora-Android.apk
+          test -f release/Mentora-iOS.ipa
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+          generate_release_notes: true
+          files: |
+            release/Mentora-Windows.zip
+            release/Mentora-Linux.zip
+            release/Mentora-Android.apk
+            release/Mentora-iOS.ipa
+            release/Mentora-iOS-Xcode.zip
