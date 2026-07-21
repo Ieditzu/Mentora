@@ -57,7 +57,7 @@ jobs:
           -scheme MentoraIOS
           -configuration Release
           -sdk iphoneos
-          -archivePath ${{ runner.temp }}/MentoraIOS.xcarchive
+          -archivePath ${{ runner.temp }}/MentoraParentIOS.xcarchive
           CODE_SIGNING_ALLOWED=NO
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGN_IDENTITY=""
@@ -65,14 +65,14 @@ jobs:
       - name: Package IPA
         run: |
           mkdir -p ${{ runner.temp }}/ipa/Payload
-          cp -r "${{ runner.temp }}/MentoraIOS.xcarchive/Products/Applications/MentoraIOS.app" \
-            "${{ runner.temp }}/ipa/Payload/"
+          cp -r "${{ runner.temp }}/MentoraParentIOS.xcarchive/Products/Applications/MentoraIOS.app" \
+            "${{ runner.temp }}/ipa/Payload/MentoraParentIOS.app"
           cd ${{ runner.temp }}/ipa
-          zip -r MentoraIOS.ipa Payload
+          zip -r MentoraParentIOS.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: MentoraIOS
-          path: ${{ runner.temp }}/ipa/MentoraIOS.ipa
+          name: MentoraParentIOS
+          path: ${{ runner.temp }}/ipa/MentoraParentIOS.ipa
           retention-days: 14
