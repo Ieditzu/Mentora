@@ -16,8 +16,10 @@ La publicarea unui GitHub Release, aceste fișiere sunt atașate automat la rele
 
 În repository, în **Settings → Secrets and variables → Actions**, se adaugă credentialele Unity:
 
-- `UNITY_LICENSE` — fișierul de licență Unity activat și codificat Base64, pentru Unity Personal;
-- sau `UNITY_EMAIL`, `UNITY_PASSWORD` și, pentru licență Pro, `UNITY_SERIAL`.
+- pentru Unity Personal: rulează workflow-ul **Request Unity activation file**, descarcă artefactul `.alf`, încarcă-l pe `license.unity3d.com/manual`, apoi salvează conținutul `.ulf` primit ca secret `UNITY_LICENSE`; adaugă și `UNITY_EMAIL`, respectiv `UNITY_PASSWORD`;
+- pentru licență Pro: adaugă `UNITY_EMAIL`, `UNITY_PASSWORD` și `UNITY_SERIAL`.
+
+Fișierul `.alf` trebuie generat de workflow-ul GitHub, nu local: Unity îl leagă de runnerul care va face buildul.
 
 ## iOS
 
