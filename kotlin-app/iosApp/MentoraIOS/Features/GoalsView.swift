@@ -757,18 +757,18 @@ struct ServerProfileData {
         let correct = nonNegativeInt(profile["correctCount"])
         let incorrect = nonNegativeInt(profile["incorrectCount"])
         let total = correct + incorrect
-        let topicScores = topicScores(profile["topics"] as? [String: Any])
-        let strengths = topicScores
+        let topicScoreByTopic = Self.topicScores(profile["topics"] as? [String: Any])
+        let strengths = topicScoreByTopic
             .filter { $0.value > 0 }
             .sorted { $0.value > $1.value }
             .prefix(3)
             .map { displayMachineLearningTopic($0.key) }
-        let needsHelp = topicScores
+        let needsHelp = topicScoreByTopic
             .filter { $0.value < 0 }
             .sorted { $0.value < $1.value }
             .prefix(3)
             .map { displayMachineLearningTopic($0.key) }
-        let conceptScores = topicScores(profile["concepts"] as? [String: Any])
+        let conceptScores = Self.topicScores(profile["concepts"] as? [String: Any])
         let struggles = conceptScores
             .filter { $0.value < 0 }
             .sorted { $0.value < $1.value }
