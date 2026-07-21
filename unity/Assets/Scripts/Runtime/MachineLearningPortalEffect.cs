@@ -59,7 +59,7 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
     private float nextAnimationTime;
     private float nextCullingCheckTime;
     private bool visualsBuilt;
-    private bool visibleForCamera = true;
+    private bool animateForCamera = true;
 
     private sealed class RingVisual
     {
@@ -103,10 +103,10 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         HideLegacyRenderers();
         nextAnimationTime = 0f;
         nextCullingCheckTime = Time.unscaledTime + cullingCheckInterval;
-        visibleForCamera = ShouldRenderForCamera();
+        animateForCamera = ShouldAnimateForCamera();
         if (generatedRoot != null)
         {
-            generatedRoot.gameObject.SetActive(visibleForCamera);
+            generatedRoot.gameObject.SetActive(true);
         }
     }
 
@@ -180,14 +180,10 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         if (now >= nextCullingCheckTime)
         {
             nextCullingCheckTime = now + cullingCheckInterval;
-            visibleForCamera = ShouldRenderForCamera();
-            if (generatedRoot != null && generatedRoot.gameObject.activeSelf != visibleForCamera)
-            {
-                generatedRoot.gameObject.SetActive(visibleForCamera);
-            }
+            animateForCamera = ShouldAnimateForCamera();
         }
 
-        if (!visibleForCamera || now < nextAnimationTime)
+        if (!animateForCamera || now < nextAnimationTime)
         {
             return;
         }
@@ -348,7 +344,7 @@ public sealed class MachineLearningPortalEffect : MonoBehaviour
         }
     }
 
-    private bool ShouldRenderForCamera()
+    private bool ShouldAnimateForCamera()
     {
         if (cachedCamera == null || !cachedCamera.isActiveAndEnabled)
         {
