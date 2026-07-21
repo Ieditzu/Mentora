@@ -34,6 +34,14 @@ Toate imaginile din [`images/`](images/) sunt incluse mai jos.
 | --- | --- | --- |
 | ![Continuarea ghidului lui Rudolf](images/RudolfGuide2.png) | ![Răspunsul lui Rudolf](images/rudolfAnswer.png) | ![Rudolf pe PC](images/rudolf_pc.png) |
 
+#### Experiența în realitate virtuală
+
+| Jocul Mentora în VR | Conversație cu Rudolf în VR |
+| --- | --- |
+| ![Experiență de joc Mentora în realitate virtuală](images/vr.jpeg) | ![Utilizatorul VR discută cu Rudolf în lumea Mentora](images/vrRudolf.jpeg) |
+
+Mentora poate fi explorată în realitate virtuală, folosind controlere VR pentru deplasare și interacțiune. Companionul educațional Rudolf rămâne disponibil și în această experiență, unde utilizatorul poate comunica direct cu el și poate primi îndrumare în lumea 3D.
+
 | Comunitate | Proiectil | Obiect de tip cutie |
 | --- | --- | --- |
 | ![Comunitate](images/community.png) | ![Rachetă](images/missile.png) | ![Cutie](images/box.png) |
