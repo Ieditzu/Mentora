@@ -114,6 +114,76 @@ PERSOANA 2: Harta este organizată pe activități. Fiecare zonă are un scop ed
 -->
 
 ---
+
+<div class="speaker-tag">Persoana 2</div>
+<div class="kicker">Python Island</div>
+
+# Python: de la primele funcții la provocări vizuale
+
+<div class="track-gallery">
+  <figure><img src="./public/python_island.png" /><figcaption>Portaluri Easy · Medium · Hard</figcaption></figure>
+  <figure><img src="./public/python_section_in_game.png" /><figcaption>Insula integrată în lumea Mentora</figcaption></figure>
+  <figure class="main"><img src="./public/python_coding.png" /><figcaption>Editor, cerință, încercări, indiciu AI, rulare și verificare</figcaption></figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.75rem">
+  <span>Easy · bazele</span><span>Medium · debugging</span><span>Hard · vizual</span><span>Docker Python</span>
+</div>
+
+<div class="card violet" style="min-height:5.2rem;margin-top:.7rem;text-align:center"><strong>Buclă completă:</strong> elevul citește cerința, modifică sursa, rulează codul real, verifică rezultatul și poate cere un indiciu contextual.</div>
+
+<!--
+PERSOANA 2: Insula Python are trasee Easy, Medium și Hard. Elevul începe cu funcții și operații de bază, continuă cu debugging și ajunge la probleme vizuale. Editorul păstrează cerința și numărul de încercări, oferă indicii și asistent AI, iar butoanele Run și Verify separă observarea rezultatului de evaluarea finală. Codul este executat în containerul Python izolat.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 1</div>
+<div class="kicker">C++ Island</div>
+
+# C++: quiz, debugging și compilare cu feedback
+
+<div class="grid-2" style="margin-top:.6rem;align-items:start">
+  <figure style="margin:0"><img class="shot" src="./public/cpp.png" style="height:18.2rem" /><figcaption class="image-caption">Provocare Medium: repararea unei funcții C++ direct în editor</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/cppAI.png" style="height:18.2rem" /><figcaption class="image-caption">Asistent AI contextual: ghidează raționamentul fără a livra direct soluția</figcaption></figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.75rem">
+  <span>Easy · quiz</span><span>Medium · debugging</span><span>Hard · coding</span><span>Docker C++</span>
+</div>
+
+<div class="card cyan" style="min-height:5.2rem;margin-top:.7rem;text-align:center"><strong>Feedback tehnic real:</strong> sursa este compilată și executată, iar elevul vede outputul, erorile, verificarea cerinței și progresul salvat.</div>
+
+<!--
+PERSOANA 1: Traseul C++ combină întrebări introductive, debugging la nivel Medium și probleme de programare la nivel Hard. Elevul lucrează cu sursă C++ reală, poate cere un indiciu sau discuta cu asistentul AI, apoi compilează și rulează soluția într-un container separat. Rezultatul și conceptele exersate actualizează profilul C++ al copilului.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 1</div>
+<div class="kicker">Personalizare pe profil</div>
+
+# Fiecare traseu construiește un profil de învățare separat
+
+<div class="grid-3" style="margin-top:.55rem;align-items:start">
+  <figure style="margin:0"><img class="shot" src="./public/pythonAiChallenge.png" style="height:12.8rem" /><figcaption class="image-caption">Python · provocare generată după punctele slabe</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/cppAI.png" style="height:12.8rem" /><figcaption class="image-caption">C++ · ajutor legat de codul și greșeala curentă</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/ml_island_front.png" style="height:12.8rem" /><figcaption class="image-caption">AI/ML + LLM · progres separat pe competențe</figcaption></figure>
+</div>
+
+<div class="grid-3" style="margin-top:.75rem">
+  <div class="card violet" style="min-height:8.1rem"><h3>`aiProfilePython`</h3><p>Reține concepte, greșeli, indicii și acuratețe; generează schelete de cod care țintesc dificultățile elevului.</p></div>
+  <div class="card cyan" style="min-height:8.1rem"><h3>`aiProfileCpp`</h3><p>Alimentează provocări C++ personalizate și explicații contextuale pentru sursa compilată.</p></div>
+  <div class="card green" style="min-height:8.1rem"><h3>`aiProfileMachineLearning`</h3><p>Urmărește Data Prep, Regression, Classification, Evaluation, Neural Networks și LLMs.</p></div>
+</div>
+
+<div class="card orange" style="min-height:4.6rem;margin-top:.65rem;text-align:center"><strong>Generare adaptivă:</strong> Python, C++ și CodeWorld primesc probleme noi din profil. AI/ML–LLM păstrează evaluarea deterministă a catalogului, dar contribuie la profil, ghidaj și recomandarea următorului pas.</div>
+
+<!--
+PERSOANA 1: Personalizarea nu folosește un singur scor general. Serverul păstrează profiluri separate pentru Python, C++ și AI/Machine Learning. Pentru Python și C++, AI-ul primește punctele forte, dificultățile, greșelile și evenimentele recente și generează o cerință cu sursă incompletă, recompensă și nivel potrivit. CodeWorld folosește același mecanism pentru o misiune construită în lumea 3D. Traseul AI/ML și LLM actualizează propriul profil pe șase competențe, dar cele nouă probleme sunt intenționat evaluate determinist pe server.
+-->
+
+---
 layout: image-right
 image: /codeIsland.png
 backgroundSize: cover
