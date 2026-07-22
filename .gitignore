@@ -1,1 +1,8 @@
 .directory
+
+# Slidev dependencies, builds, and caches
+presentation-slidev/node_modules/
+presentation-slidev/dist/
+presentation-slidev/.vite/
+presentation-slidev/.slidev/
+presentation-slidev/.cache/

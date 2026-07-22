@@ -52,8 +52,8 @@ PERSOANA 1: Bună ziua. Vă prezentăm Mentora, un ecosistem educațional pentru
 </div>
 
 <div class="flow">
-  <div class="flow-step"><span class="num">01</span><strong>Scrie</strong><span>Python sau C++</span></div>
-  <div class="flow-step"><span class="num">02</span><strong>Rulează</strong><span>în mediu controlat</span></div>
+  <div class="flow-step"><span class="num">01</span><strong>Scrie</strong><span>Python, C++ sau AI/ML</span></div>
+  <div class="flow-step"><span class="num">02</span><strong>Rulează</strong><span>în container Docker efemer</span></div>
   <div class="flow-step"><span class="num">03</span><strong>Observă</strong><span>efectul în lume</span></div>
   <div class="flow-step"><span class="num">04</span><strong>Înțelege</strong><span>feedback și indicii</span></div>
   <div class="flow-step"><span class="num">05</span><strong>Evoluează</strong><span>profil personalizat</span></div>
@@ -74,7 +74,7 @@ PERSOANA 1: Ideea centrală este ca elevul să fie activ. El formulează soluți
   <div class="card violet"><span class="icon icon-word">01 / PLAY</span><h3>Joc Unity</h3><p>Explorare 3D, coding pads, quiz-uri, Code Quest, CodeWorld, Rudolf și multiplayer LAN.</p></div>
   <div class="card green"><span class="icon icon-word">02 / TRACK</span><h3>Aplicație parentală</h3><p>QR, progres, obiective, profil AI, raport săptămânal și sesiune live.</p></div>
   <div class="card cyan"><span class="icon icon-word">03 / CREATE</span><h3>Creator Web</h3><p>Crearea, editarea și publicarea cursurilor și quiz-urilor pentru Community Island.</p></div>
-  <div class="card orange"><span class="icon icon-word">04 / CONNECT</span><h3>Backend central</h3><p>Autentificare, persistență, AI, execuție securizată de cod și comunicare în timp real.</p></div>
+  <div class="card orange"><span class="icon icon-word">04 / CONNECT</span><h3>Backend central</h3><p>Autentificare, persistență, AI, evaluare AI/ML și execuție izolată în containere Docker.</p></div>
 </div>
 
 <div class="grid-3" style="margin-top:1.2rem">
@@ -100,6 +100,7 @@ class: visual-split
 # Lumea 3D transformă codul în experiență
 
 - **Insule Python și C++** pentru exerciții, debugging și concepte algoritmice.
+- **Insulă AI/ML** cu nouă probleme Python, de la pregătirea datelor la bazele LLM.
 - **Quiz Island** pentru evaluare individuală sau multiplayer.
 - **Community Island** pentru cursurile publicate din Creator-ul Web.
 - **Code Quest Island** pentru provocări construite direct în lume.
@@ -163,6 +164,33 @@ class: visual-split
 
 <!--
 PERSOANA 1: CodeWorld răspunde direct criteriului de utilitate și interactivitate. Elevul are libertate în Sandbox, dar și obiective clare în provocări. Feedbackul îl ajută să identifice exact ce trebuie corectat.
+-->
+
+---
+layout: image-right
+image: /ml_island_front.png
+backgroundSize: cover
+class: visual-split
+---
+
+<div class="speaker-tag">Persoana 1</div>
+<div class="kicker">AI & Machine Learning Island</div>
+
+# AI/ML în Python: de la date la bazele LLM
+
+<div class="pill-row">
+  <span class="pill">3 Easy</span><span class="pill">3 Medium</span><span class="pill">3 Hard</span><span class="pill">20–50 puncte</span>
+</div>
+
+- **9 probleme Python:** pregătirea datelor, regresie, metrici, pipeline-uri, clasificare, selecția modelelor și rețele neuronale.
+- **Două provocări LLM:** clasificarea intențiilor cu TF-IDF și predicția deterministă a următorului token cu un model bigram.
+- **Evaluare reală:** rezultate verificate prin exactitate, MAE sau accuracy pe date ascunse păstrate de server.
+- **Execuție științifică izolată:** NumPy, pandas și scikit-learn într-un container Docker fără rețea.
+
+<div class="card cyan" style="margin-top:.7rem"><strong>Progres persistent:</strong> încercările, scorul maxim, finalizarea și recompensa sunt salvate, iar profilul parental include competențe AI/ML și LLM.</div>
+
+<!--
+PERSOANA 1: Noua insulă AI și Machine Learning are trei portaluri de dificultate și nouă probleme scrise în Python. Traseul ajunge până la NLP și fundamentele modelelor de limbaj: elevul clasifică intenții și construiește un predictor simplu de următor token. Soluția nu este notată de un LLM, ci determinist, pe server, folosind date ascunse.
 -->
 
 ---
@@ -290,14 +318,14 @@ flowchart TB
   W["REACT 19 + VITE 7\nCreator Web"] -->|"REST + Bearer"| S
   S["JAVA 21 + SPRING BOOT\nservicii, validare, AI, protocol"] --> D[("POSTGRESQL\nconturi, cursuri, progres, JSONB")]
   S --> G["GROQ / LLAMA\nmentorat și provocări"]
-  S --> X["PYTHON + C++ SANDBOX\nexecuție izolată"]
+  S --> X["DOCKER RUNNERS EFEMERE\nPython · C++ · CodeWorld · AI/ML"]
   U <-. "TCP sesiune + UDP discovery" .-> L["MULTIPLAYER LAN"]
 ```
 
-<div class="pill-row" style="margin-top:.8rem"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
+<div class="pill-row" style="margin-top:.8rem"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Docker</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
 
 <!--
-PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp real prin WebSocket, web-ul folosește REST pentru administrare, iar serverul izolează logica de domeniu, datele, AI-ul și execuția de cod.
+PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp real prin WebSocket, web-ul folosește REST pentru administrare, iar serverul izolează logica de domeniu, datele și AI-ul. Orice cod al elevului rulează într-un container Docker nou, separat de procesul Java.
 -->
 
 ---
@@ -347,6 +375,34 @@ PERSOANA 1: Portabilitatea nu este doar declarată. În proiect există setări 
 ---
 
 <div class="speaker-tag">Persoana 1</div>
+<div class="kicker">I.3 · VR și Meta Quest</div>
+
+# Mentora în VR: explorare și ghidaj cu Rudolf
+
+<div class="grid-2" style="margin-top:.65rem;align-items:start">
+  <figure style="margin:0">
+    <img class="shot" src="./public/vr.jpeg" style="height:17.2rem" />
+    <figcaption class="image-caption">Explorarea lumii Mentora cu un controller VR urmărit în spațiu</figcaption>
+  </figure>
+  <figure style="margin:0">
+    <img class="shot" src="./public/vrRudolf.jpeg" style="height:17.2rem" />
+    <figcaption class="image-caption">Dialogul contextual cu Rudolf rămâne disponibil în experiența imersivă</figcaption>
+  </figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.75rem">
+  <span>OpenXR</span><span>Meta Quest</span><span>Controlere VR</span><span>Hand tracking</span>
+</div>
+
+<div class="card cyan" style="min-height:5.4rem;margin-top:.75rem;text-align:center"><strong>Aceeași platformă educațională:</strong> explorare 3D, meniuri cu ray pointer și companion AI, adaptate interacțiunii imersive.</div>
+
+<!--
+PERSOANA 1: Acestea sunt capturi reale din versiunea VR. Elevul poate explora lumea Mentora folosind controlere urmărite în spațiu, poate interacționa cu meniurile prin ray pointer și poate discuta cu Rudolf fără să părăsească experiența imersivă. Implementarea folosește OpenXR și include suport pentru Meta Quest și hand tracking.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 1</div>
 <div class="section-slide">
   <div class="chapter-number">II</div>
   <div class="kicker">Capitolul II · 20 puncte</div>
@@ -366,7 +422,7 @@ PERSOANA 1: Portabilitatea nu este doar declarată. În proiect există setări 
   <div class="card cyan"><h2>Calitate</h2><ul><li>Nume semnificative: `CodeWorldQuestIsland`, `LearningProfileService`, `SocketViewModel`.</li><li>Metode cu responsabilitate precisă și fluxuri documentate.</li><li>Compoziție și încapsulare pentru reducerea dependențelor.</li><li>Cod consecvent între client, server și aplicațiile conexe.</li></ul></div>
 </div>
 
-<div class="card green" style="margin-top:1rem"><strong>Complexitate tehnică:</strong> lume 3D procedurală, execuție Python/C++, AI cu cache și timeout, protocol binar, QR, aplicație mobilă, web, multiplayer LAN cu voce și sincronizare colaborativă.</div>
+<div class="card green" style="margin-top:1rem"><strong>Complexitate tehnică:</strong> lume 3D procedurală, containere Docker pentru Python/C++/AI-ML, evaluare ascunsă, AI cu cache și timeout, protocol binar, QR, aplicație mobilă, web și multiplayer LAN.</div>
 
 <!--
 PERSOANA 1: Eleganța nu înseamnă cod puțin, ci cod împărțit corect. Fiecare modul are o sarcină clară și poate fi extins: de exemplu, putem adăuga o insulă, un packet sau un ecran fără să schimbăm arhitectura de bază.
@@ -381,17 +437,19 @@ PERSOANA 1: Eleganța nu înseamnă cod puțin, ci cod împărțit corect. Fieca
 
 <div class="grid-2 security-grid">
   <div class="card red"><h2>Protecție la execuție</h2>
-<pre><code>unshare --net --user --map-root-user
-ulimit -v 262144   // memorie
-ulimit -t ...      // CPU și timp
-ulimit -f 2048     // fișiere
-ulimit -u 64       // procese</code></pre>
-<p>Python și C++ rulează în directoare temporare, cu timeout și curățare la final.</p></div>
+<pre><code>docker run --rm
+  --network none --read-only
+  --cap-drop ALL
+  --security-opt no-new-privileges
+  --pids-limit 64 --cpus 1
+  --memory 256m/512m
+  --user 65532:65532</code></pre>
+<p>Un container nou pentru fiecare rulare; sursele sunt montate read-only, iar `/tmp` este temporar.</p></div>
   <div class="card cyan"><h2>Protecție la acces</h2><ul><li>Pachete WebSocket criptate AES/CBC cu seed dinamic și validare de lungime.</li><li>Tokenuri Bearer cu expirare pentru Creator-ul Web.</li><li>Verificarea proprietarului cursurilor și a relației părinte–copil.</li><li>Cheile AI și configurațiile sensibile sunt separate de cod.</li></ul></div>
 </div>
 
 <!--
-PERSOANA 2: Securitatea este importantă deoarece elevul rulează cod. De aceea codul nu rulează direct în server: nu are rețea, are resurse limitate, timeout și fișiere temporare. În plus, accesul la date este verificat prin autentificare și ownership.
+PERSOANA 2: Securitatea este importantă deoarece elevul rulează cod. Python, C++, CodeWorld și problemele AI/ML pornesc fiecare într-un container Docker efemer, fără rețea și fără capabilități Linux. Containerul are filesystem read-only, utilizator fără privilegii, CPU, memorie, procese și fișiere limitate; la timeout este eliminat forțat. În plus, accesul la date este verificat prin autentificare și ownership.
 -->
 
 ---
@@ -402,8 +460,8 @@ PERSOANA 2: Securitatea este importantă deoarece elevul rulează cod. De aceea 
 # Verificare continuă și proiect pregătit pentru demonstrare
 
 <div class="grid-3 test-grid">
-  <div class="card violet"><span class="icon icon-word">01 / TEST</span><h3>Testare funcțională</h3><p>Autentificare, QR, soluții corecte și incorecte, indicii AI, cursuri, quiz, obiective, sesiuni live și multiplayer.</p></div>
-  <div class="card cyan"><span class="icon icon-word">02 / INTEGRATE</span><h3>Integrare</h3><p>Fluxuri validate între server, Unity, Android/iOS și Creator-ul Web; builduri și console verificate înaintea demonstrației.</p></div>
+  <div class="card violet"><span class="icon icon-word">01 / TEST</span><h3>Testare funcțională</h3><p>Autentificare, QR, soluții corecte și incorecte, evaluare AI/ML, indicii AI, cursuri, quiz, obiective și multiplayer.</p></div>
+  <div class="card cyan"><span class="icon icon-word">02 / INTEGRATE</span><h3>Integrare</h3><p>Teste pentru serviciul și pachetele AI/ML, fluxuri server–Unity–mobil–web și builduri verificate înaintea demonstrației.</p></div>
   <div class="card green"><span class="icon icon-word">03 / SHIP</span><h3>Maturitate</h3><p>Fluxuri complete pentru conturi, copii, conținut, AI, execuție de cod, rapoarte, multiplayer și localizare.</p></div>
 </div>
 
@@ -459,8 +517,8 @@ PERSOANA 2: Interfața este adaptată rolului utilizatorului: joc pentru elev, d
 # Conținut care implică, evaluează și se actualizează
 
 <div class="grid-4 content-grid" style="margin-top:1rem">
-  <div class="card violet"><span class="icon icon-word">01 / INTERACT</span><h3>Interactivitate</h3><p>Exerciții Python/C++, lumi modificabile prin cod, portaluri, quiz-uri, multiplayer și Rocket Landing.</p></div>
-  <div class="card cyan"><span class="icon icon-word">02 / EVALUATE</span><h3>Evaluare</h3><p>Rezultat de execuție, checklist, scor, explicație, indicii AI și istoric persistent.</p></div>
+  <div class="card violet"><span class="icon icon-word">01 / INTERACT</span><h3>Interactivitate</h3><p>Exerciții Python/C++, AI/ML și LLM, lumi modificabile prin cod, portaluri, quiz-uri, multiplayer și simulare.</p></div>
+  <div class="card cyan"><span class="icon icon-word">02 / EVALUATE</span><h3>Evaluare</h3><p>Teste ascunse, exactitate, MAE, accuracy, checklist, scor, explicație, indicii AI și istoric persistent.</p></div>
   <div class="card green"><span class="icon icon-word">03 / MANAGE</span><h3>Gestionare</h3><p>Creator-ul poate crea, edita, publica și șterge cursuri și întrebări din aplicație.</p></div>
   <div class="card orange"><span class="icon icon-word">04 / VERIFY</span><h3>Corectitudine</h3><p>Concepte de programare verificabile, răspunsuri corecte definite și explicații asociate fiecărei întrebări.</p></div>
 </div>
@@ -511,7 +569,7 @@ PERSOANA 1: Originalitatea rezultă din combinarea acestor mecanisme. În mod no
 </div>
 
 <div class="grid-2" style="margin-top:1.1rem">
-  <div class="card orange"><h3>Ghid de instalare</h3><p>Java 21 și PostgreSQL pentru server, `npm install` pentru web, Android Studio/Xcode pentru mobil și Unity Hub 2022.3.62f3 pentru joc.</p></div>
+  <div class="card orange"><h3>Ghid de instalare</h3><p>Java 21, PostgreSQL și imaginile Docker pentru server, `npm install` pentru web, Android Studio/Xcode pentru mobil și Unity Hub pentru joc.</p></div>
   <div class="card"><h3>Ghid de utilizare</h3><p>Autentificare QR, explorarea jocului, rezolvarea activităților, administrarea cursurilor și consultarea progresului părintelui.</p></div>
 </div>
 
