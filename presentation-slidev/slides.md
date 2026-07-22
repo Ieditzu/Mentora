@@ -206,7 +206,7 @@ class: visual-split
 - **AI Profile:** provocare generată după profilul de învățare al elevului.
 - **Sandbox:** spațiu liber pentru a crea, muta, redimensiona și colora obiecte cu Python.
 
-<div class="card cyan" style="margin-top:.8rem"><strong>Implementare reală:</strong> <code>CodeWorldQuestIsland</code> generează procedural platforma, portalurile, coliziunile și decorul; <code>CodeWorldQuestPortal</code> activează modul sau provocarea aleasă.</div>
+<div class="card cyan" style="margin-top:.45rem;min-height:4.8rem;padding:.65rem .9rem;font-size:.9rem"><p style="margin:0"><strong>Implementare reală:</strong> <code>CodeWorldQuestIsland</code> generează platforma și portalurile; <code>CodeWorldQuestPortal</code> pornește provocarea aleasă.</p></div>
 
 <!--
 PERSOANA 2: Code Quest Island este una dintre cele mai concrete funcții ale proiectului. Nu oferă doar întrebări: fiecare cerință este verificată în lume după nume, poziție, dimensiune, culoare sau număr de obiecte. Insula poate fi generată direct din Pause Menu pentru o sesiune nouă de freestyle.
@@ -386,19 +386,19 @@ PERSOANA 1: Aplicația nu afișează doar un scor. Părintele poate vedea activi
 
 <div class="grid-2" style="align-items:center">
   <div>
-    <img class="web-shot" src="./public/web_creator_courses.png" />
+    <img class="web-shot" src="./public/web_creator_courses.png" style="height:16.7rem" />
     <div class="image-caption">Bibliotecă de cursuri: drafturi și cursuri publicate</div>
   </div>
   <div>
-    <img class="web-shot" src="./public/web_creator.png" />
+    <img class="web-shot" src="./public/web_creator.png" style="height:16.7rem" />
     <div class="image-caption">Editor: metadate, limbaj, dificultate, puncte și întrebări</div>
   </div>
 </div>
 
-<div class="grid-3" style="margin-top:.9rem">
-  <div class="card cyan"><h3>CRUD complet</h3><p>Creare, citire, editare și ștergere a cursurilor.</p></div>
-  <div class="card violet"><h3>Evaluare controlată</h3><p>Patru variante, răspuns corect și explicație pentru fiecare întrebare.</p></div>
-  <div class="card green"><h3>Publicare în joc</h3><p>Cursurile ajung în Community Island fără actualizarea jocului.</p></div>
+<div class="grid-3" style="margin-top:.65rem">
+  <div class="card cyan" style="min-height:6.6rem;padding:.8rem 1rem"><h3>CRUD complet</h3><p>Creare, citire, editare și ștergere a cursurilor.</p></div>
+  <div class="card violet" style="min-height:6.6rem;padding:.8rem 1rem"><h3>Evaluare controlată</h3><p>Patru variante, răspuns corect și explicație pentru fiecare întrebare.</p></div>
+  <div class="card green" style="min-height:6.6rem;padding:.8rem 1rem"><h3>Publicare în joc</h3><p>Cursurile ajung în Community Island fără actualizarea jocului.</p></div>
 </div>
 
 <!--
@@ -426,18 +426,24 @@ PERSOANA 1: În continuare prezentăm partea tehnică. Fiecare tehnologie este a
 
 # Arhitectură multi-client cu backend central
 
-```mermaid {scale: 1}
-flowchart TB
-  U["UNITY / C#\nJoc 3D, CodeWorld, multiplayer"] -->|"WebSocket criptat"| S
-  A["KOTLIN + COMPOSE\nAndroid / punte iOS"] -->|"WebSocket criptat"| S
-  W["REACT 19 + VITE 7\nCreator Web"] -->|"REST + Bearer"| S
-  S["JAVA 21 + SPRING BOOT\nservicii, validare, AI, protocol"] --> D[("POSTGRESQL\nconturi, cursuri, progres, JSONB")]
-  S --> G["GROQ / LLAMA\nmentorat și provocări"]
-  S --> X["DOCKER RUNNERS EFEMERE\nPython · C++ · CodeWorld · AI/ML"]
-  U <-. "TCP sesiune + UDP discovery" .-> L["MULTIPLAYER LAN"]
-```
+<div class="architecture-map">
+  <div class="architecture-stack clients">
+    <div class="arch-box violet"><strong>UNITY / C#</strong><span>Joc 3D · CodeWorld · multiplayer</span><em>WebSocket criptat</em></div>
+    <div class="arch-box green"><strong>KOTLIN + COMPOSE</strong><span>Android · punte iOS</span><em>WebSocket criptat</em></div>
+    <div class="arch-box cyan"><strong>REACT 19 + VITE 7</strong><span>Creator Web</span><em>REST + Bearer</em></div>
+  </div>
+  <div class="architecture-arrow"><span>›</span></div>
+  <div class="arch-box architecture-core"><small>BACKEND CENTRAL</small><strong>JAVA 21<br />SPRING BOOT</strong><span>servicii · validare<br />AI · protocol</span></div>
+  <div class="architecture-arrow"><span>›</span></div>
+  <div class="architecture-stack services">
+    <div class="arch-box violet"><strong>POSTGRESQL</strong><span>conturi · cursuri · progres · JSONB</span></div>
+    <div class="arch-box cyan"><strong>GROQ / LLAMA</strong><span>mentorat · provocări</span></div>
+    <div class="arch-box green"><strong>DOCKER RUNNERS EFEMERE</strong><span>Python · C++ · CodeWorld · AI/ML</span></div>
+    <div class="arch-box orange"><strong>MULTIPLAYER LAN</strong><span>TCP sesiune · UDP discovery</span></div>
+  </div>
+</div>
 
-<div class="pill-row" style="margin-top:.8rem"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Docker</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
+<div class="pill-row" style="margin-top:.55rem"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Docker</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
 
 <!--
 PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp real prin WebSocket, web-ul folosește REST pentru administrare, iar serverul izolează logica de domeniu, datele și AI-ul. Orice cod al elevului rulează într-un container Docker nou, separat de procesul Java.
@@ -452,9 +458,9 @@ PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp
 
 <div class="grid-4" style="margin-top:1.05rem">
   <div class="card violet"><h3>Backend</h3><p>Entity · Repository · Service · Packet · Web Controller. Separă persistența, domeniul, transportul și API-ul.</p></div>
-  <div class="card cyan"><h3>Unity</h3><p>`GameClient`, `CodeWorldRuntime`, `CodeWorldQuestIsland`, `RobotCompanion`, manageri UI și multiplayer.</p></div>
-  <div class="card green"><h3>Mobil</h3><p>`SocketViewModel` centralizează starea; Compose redă ecrane reactive bazate pe date.</p></div>
-  <div class="card orange"><h3>Web</h3><p>Componente React reutilizabile, `api.js` pentru apeluri și `i18n.js` pentru traduceri.</p></div>
+  <div class="card cyan"><h3>Unity</h3><p><code>GameClient</code>, <code>CodeWorldRuntime</code>, <code>CodeWorldQuestIsland</code>, <code>RobotCompanion</code>, manageri UI și multiplayer.</p></div>
+  <div class="card green"><h3>Mobil</h3><p><code>SocketViewModel</code> centralizează starea; Compose redă ecrane reactive bazate pe date.</p></div>
+  <div class="card orange"><h3>Web</h3><p>Componente React reutilizabile, <code>api.js</code> pentru apeluri și <code>i18n.js</code> pentru traduceri.</p></div>
 </div>
 
 <div class="grid-3" style="margin-top:1rem">
@@ -557,7 +563,7 @@ PERSOANA 1: Acestea sunt capturi reale din versiunea VR. Elevul poate explora lu
 
 <div class="grid-2 large-grid">
   <div class="card violet"><h2>Extensibilitate</h2><ul><li>Servicii Spring și repository-uri JPA pentru logica de domeniu.</li><li>Clase Unity separate pentru lume, portaluri, companion, UI și multiplayer.</li><li>Catalog central de traduceri și API web centralizat.</li><li>Protocol extensibil prin clase de pachete și manager de pachete.</li></ul></div>
-  <div class="card cyan"><h2>Calitate</h2><ul><li>Nume semnificative: `CodeWorldQuestIsland`, `LearningProfileService`, `SocketViewModel`.</li><li>Metode cu responsabilitate precisă și fluxuri documentate.</li><li>Compoziție și încapsulare pentru reducerea dependențelor.</li><li>Cod consecvent între client, server și aplicațiile conexe.</li></ul></div>
+  <div class="card cyan"><h2>Calitate</h2><ul><li>Nume semnificative: <code>CodeWorldQuestIsland</code>, <code>LearningProfileService</code>, <code>SocketViewModel</code>.</li><li>Metode cu responsabilitate precisă și fluxuri documentate.</li><li>Compoziție și încapsulare pentru reducerea dependențelor.</li><li>Cod consecvent între client, server și aplicațiile conexe.</li></ul></div>
 </div>
 
 <div class="card green" style="margin-top:1rem"><strong>Complexitate tehnică:</strong> lume 3D procedurală, containere Docker pentru Python/C++/AI-ML, evaluare ascunsă, AI cu cache și timeout, protocol binar, QR, aplicație mobilă, web și multiplayer LAN.</div>
@@ -582,7 +588,7 @@ PERSOANA 1: Eleganța nu înseamnă cod puțin, ci cod împărțit corect. Fieca
   --pids-limit 64 --cpus 1
   --memory 256m/512m
   --user 65532:65532</code></pre>
-<p>Un container nou pentru fiecare rulare; sursele sunt montate read-only, iar `/tmp` este temporar.</p></div>
+<p>Un container nou pentru fiecare rulare; sursele sunt montate read-only, iar <code>/tmp</code> este temporar.</p></div>
   <div class="card cyan"><h2>Protecție la acces</h2><ul><li>Pachete WebSocket criptate AES/CBC cu seed dinamic și validare de lungime.</li><li>Tokenuri Bearer cu expirare pentru Creator-ul Web.</li><li>Verificarea proprietarului cursurilor și a relației părinte–copil.</li><li>Cheile AI și configurațiile sensibile sunt separate de cod.</li></ul></div>
 </div>
 
@@ -637,7 +643,7 @@ PERSOANA 1: Testarea urmărește traseul complet al utilizatorului și integrare
   <div class="card cyan">
     <h2>Patru limbi în întregul ecosistem</h2>
     <div class="pill-row"><span class="pill">Română</span><span class="pill">English</span><span class="pill">Français</span><span class="pill">Deutsch</span></div>
-    <ul><li>Unity actualizează textele fără repornire și salvează preferința în `PlayerPrefs`.</li><li>Web-ul păstrează limba în `localStorage`.</li><li>Aplicația mobilă permite limba sistemului sau o limbă aleasă explicit.</li><li>Layouturi responsive pentru browser, telefon, desktop și VR.</li></ul>
+    <ul><li>Unity actualizează textele fără repornire și salvează preferința în <code>PlayerPrefs</code>.</li><li>Web-ul păstrează limba în <code>localStorage</code>.</li><li>Aplicația mobilă permite limba sistemului sau o limbă aleasă explicit.</li><li>Layouturi responsive pentru browser, telefon, desktop și VR.</li></ul>
   </div>
 </div>
 
@@ -707,7 +713,7 @@ PERSOANA 1: Originalitatea rezultă din combinarea acestor mecanisme. În mod no
 </div>
 
 <div class="grid-2" style="margin-top:1.1rem">
-  <div class="card orange"><h3>Ghid de instalare</h3><p>Java 21, PostgreSQL și imaginile Docker pentru server, `npm install` pentru web, Android Studio/Xcode pentru mobil și Unity Hub pentru joc.</p></div>
+  <div class="card orange"><h3>Ghid de instalare</h3><p>Java 21, PostgreSQL și imaginile Docker pentru server, <code>npm install</code> pentru web, Android Studio/Xcode pentru mobil și Unity Hub pentru joc.</p></div>
   <div class="card"><h3>Ghid de utilizare</h3><p>Autentificare QR, explorarea jocului, rezolvarea activităților, administrarea cursurilor și consultarea progresului părintelui.</p></div>
 </div>
 

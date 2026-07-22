@@ -578,6 +578,106 @@
 .arch-box strong { display: block; margin-bottom: .2rem; }
 .arch-box span { color: #aeb4c1; font-size: .74rem; }
 
+.architecture-map {
+  display: grid;
+  grid-template-columns: 1.08fr 2rem 1fr 2rem 1.12fr;
+  gap: .35rem;
+  align-items: stretch;
+  height: 14.1rem;
+  margin-top: .1rem;
+}
+
+.architecture-stack {
+  display: grid;
+  gap: .42rem;
+  min-height: 0;
+}
+
+.architecture-stack.clients { grid-template-rows: repeat(3, minmax(0, 1fr)); }
+.architecture-stack.services { grid-template-rows: repeat(4, minmax(0, 1fr)); }
+
+.architecture-map .arch-box {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: .48rem .62rem;
+  line-height: 1.25;
+}
+
+.architecture-map .arch-box strong {
+  margin: 0 0 .15rem;
+  color: #fff;
+  font-size: .75rem;
+  letter-spacing: .02em;
+}
+
+.architecture-map .arch-box span { font-size: .63rem; }
+
+.architecture-map .arch-box em {
+  margin-top: .22rem;
+  color: var(--mentora-electric);
+  font-size: .58rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.architecture-map .arch-box.violet { border-color: rgba(139,124,255,.58); background: linear-gradient(150deg, rgba(139,124,255,.23), rgba(139,124,255,.04)); }
+.architecture-map .arch-box.cyan { border-color: rgba(50,216,199,.55); background: linear-gradient(150deg, rgba(50,216,199,.21), rgba(50,216,199,.035)); }
+.architecture-map .arch-box.green { border-color: rgba(155,226,45,.52); background: linear-gradient(150deg, rgba(155,226,45,.18), rgba(155,226,45,.03)); }
+.architecture-map .arch-box.orange { border-color: rgba(255,156,85,.52); background: linear-gradient(150deg, rgba(255,156,85,.18), rgba(255,156,85,.03)); }
+
+.architecture-core {
+  align-self: center;
+  height: 8.4rem;
+  border: 2px solid rgba(50,216,199,.7);
+  background: linear-gradient(145deg, rgba(50,216,199,.24), rgba(139,124,255,.17));
+  box-shadow: 0 0 35px rgba(50,216,199,.12), inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+.architecture-map .architecture-core small {
+  margin-bottom: .4rem;
+  color: var(--mentora-cyan);
+  font-size: .58rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.architecture-map .architecture-core strong {
+  margin-bottom: .45rem;
+  font-size: 1rem;
+  line-height: 1.05;
+}
+
+.architecture-map .architecture-core span { font-size: .7rem; }
+
+.architecture-arrow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.architecture-arrow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(50,216,199,.2), var(--mentora-cyan), rgba(139,124,255,.25));
+}
+
+.architecture-arrow span {
+  position: relative;
+  z-index: 1;
+  color: var(--mentora-electric);
+  font-family: "Arial Black", sans-serif;
+  font-size: 1.75rem;
+  text-shadow: 0 0 18px rgba(50,216,199,.7);
+}
+
 .slidev-layout.cover {
   padding: 0;
   overflow: hidden;
