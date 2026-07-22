@@ -443,7 +443,7 @@ PERSOANA 1: În continuare prezentăm partea tehnică. Fiecare tehnologie este a
   </div>
 </div>
 
-<div class="pill-row" style="margin-top:.55rem"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Docker</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
+<div class="pill-row architecture-pills"><span class="pill">Unity 2022.3.62f3</span><span class="pill">Java 21 + Spring Boot 3.2</span><span class="pill">PostgreSQL 42.7.10</span><span class="pill">Docker</span><span class="pill">Kotlin + Compose</span><span class="pill">React 19 + Vite 7</span></div>
 
 <!--
 PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp real prin WebSocket, web-ul folosește REST pentru administrare, iar serverul izolează logica de domeniu, datele și AI-ul. Orice cod al elevului rulează într-un container Docker nou, separat de procesul Java.
@@ -456,14 +456,14 @@ PERSOANA 1: Acesta este centrul arhitecturii. Unity și mobil comunică în timp
 
 # Module cu responsabilități clare și extensibile
 
-<div class="grid-4" style="margin-top:1.05rem">
+<div class="grid-4 module-grid">
   <div class="card violet"><h3>Backend</h3><p>Entity · Repository · Service · Packet · Web Controller. Separă persistența, domeniul, transportul și API-ul.</p></div>
   <div class="card cyan"><h3>Unity</h3><p><code>GameClient</code>, <code>CodeWorldRuntime</code>, <code>CodeWorldQuestIsland</code>, <code>RobotCompanion</code>, manageri UI și multiplayer.</p></div>
   <div class="card green"><h3>Mobil</h3><p><code>SocketViewModel</code> centralizează starea; Compose redă ecrane reactive bazate pe date.</p></div>
   <div class="card orange"><h3>Web</h3><p>Componente React reutilizabile, <code>api.js</code> pentru apeluri și <code>i18n.js</code> pentru traduceri.</p></div>
 </div>
 
-<div class="grid-3" style="margin-top:1rem">
+<div class="grid-3 module-metrics">
   <div class="metric"><span class="value">OOP</span><span class="label">încapsulare, compoziție, clase cu scop clar</span></div>
   <div class="metric" style="border-color:var(--mentora-cyan)"><span class="value">Event-driven</span><span class="label">pachete, evenimente de UI și sincronizare</span></div>
   <div class="metric" style="border-color:var(--mentora-green)"><span class="value">Async</span><span class="label">rețea, AI, sesiuni și actualizări reactive</span></div>
