@@ -165,19 +165,20 @@ PERSOANA 1: Traseul C++ combină întrebări introductive, debugging la nivel Me
 
 # Fiecare traseu construiește un profil de învățare separat
 
-<div class="grid-3" style="margin-top:.55rem;align-items:start">
-  <figure style="margin:0"><img class="shot" src="./public/pythonAiChallenge.png" style="height:12.8rem" /><figcaption class="image-caption">Python · provocare generată după punctele slabe</figcaption></figure>
-  <figure style="margin:0"><img class="shot" src="./public/cppAI.png" style="height:12.8rem" /><figcaption class="image-caption">C++ · ajutor legat de codul și greșeala curentă</figcaption></figure>
-  <figure style="margin:0"><img class="shot" src="./public/ml_island_front.png" style="height:12.8rem" /><figcaption class="image-caption">AI/ML + LLM · progres separat pe competențe</figcaption></figure>
+<div class="grid-4" style="margin-top:.55rem;align-items:start;gap:.75rem">
+  <figure style="margin:0"><img class="shot" src="./public/pythonAiChallenge.png" style="height:9.2rem" /><figcaption class="image-caption">Python · provocare generată din profil</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/ai_python.png" style="height:9.2rem" /><figcaption class="image-caption">Python · mentor pentru codul curent</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/cppAI.png" style="height:9.2rem" /><figcaption class="image-caption">C++ · ajutor contextual</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/ml_island_front.png" style="height:9.2rem" /><figcaption class="image-caption">AI/ML + LLM · profil pe competențe</figcaption></figure>
 </div>
 
 <div class="grid-3" style="margin-top:.75rem">
-  <div class="card violet" style="min-height:8.1rem"><h3>`aiProfilePython`</h3><p>Reține concepte, greșeli, indicii și acuratețe; generează schelete de cod care țintesc dificultățile elevului.</p></div>
-  <div class="card cyan" style="min-height:8.1rem"><h3>`aiProfileCpp`</h3><p>Alimentează provocări C++ personalizate și explicații contextuale pentru sursa compilată.</p></div>
-  <div class="card green" style="min-height:8.1rem"><h3>`aiProfileMachineLearning`</h3><p>Urmărește Data Prep, Regression, Classification, Evaluation, Neural Networks și LLMs.</p></div>
+  <div class="card violet" style="min-height:7.2rem"><h3>aiProfilePython</h3><p>Reține concepte, greșeli și indicii; generează schelete care țintesc dificultățile elevului.</p></div>
+  <div class="card cyan" style="min-height:7.2rem"><h3>aiProfileCpp</h3><p>Alimentează provocări C++ personalizate și explicații pentru sursa compilată.</p></div>
+  <div class="card green" style="min-height:7.2rem"><h3>aiProfileMachineLearning</h3><p>Urmărește Data Prep, Regression, Classification, Evaluation, Neural Networks și LLMs.</p></div>
 </div>
 
-<div class="card orange" style="min-height:4.6rem;margin-top:.65rem;text-align:center"><strong>Generare adaptivă:</strong> Python, C++ și CodeWorld primesc probleme noi din profil. AI/ML–LLM păstrează evaluarea deterministă a catalogului, dar contribuie la profil, ghidaj și recomandarea următorului pas.</div>
+<div class="card orange" style="min-height:3.9rem;margin-top:.55rem;text-align:center"><strong>Generare adaptivă:</strong> Python, C++ și CodeWorld primesc probleme noi din profil; AI/ML–LLM păstrează evaluarea deterministă și contribuie la ghidaj.</div>
 
 <!--
 PERSOANA 1: Personalizarea nu folosește un singur scor general. Serverul păstrează profiluri separate pentru Python, C++ și AI/Machine Learning. Pentru Python și C++, AI-ul primește punctele forte, dificultățile, greșelile și evenimentele recente și generează o cerință cu sursă incompletă, recompensă și nivel potrivit. CodeWorld folosește același mecanism pentru o misiune construită în lumea 3D. Traseul AI/ML și LLM actualizează propriul profil pe șase competențe, dar cele nouă probleme sunt intenționat evaluate determinist pe server.
@@ -185,7 +186,7 @@ PERSOANA 1: Personalizarea nu folosește un singur scor general. Serverul păstr
 
 ---
 layout: image-right
-image: /codeIsland.png
+image: /codeQuestIsland.png
 backgroundSize: cover
 class: visual-split
 ---
@@ -205,7 +206,7 @@ class: visual-split
 - **AI Profile:** provocare generată după profilul de învățare al elevului.
 - **Sandbox:** spațiu liber pentru a crea, muta, redimensiona și colora obiecte cu Python.
 
-<div class="card cyan" style="margin-top:.8rem"><strong>Implementare reală:</strong> `CodeWorldQuestIsland` generează procedural platforma, portalurile, coliziunile și decorul; `CodeWorldQuestPortal` activează modul sau provocarea aleasă.</div>
+<div class="card cyan" style="margin-top:.8rem"><strong>Implementare reală:</strong> <code>CodeWorldQuestIsland</code> generează procedural platforma, portalurile, coliziunile și decorul; <code>CodeWorldQuestPortal</code> activează modul sau provocarea aleasă.</div>
 
 <!--
 PERSOANA 2: Code Quest Island este una dintre cele mai concrete funcții ale proiectului. Nu oferă doar întrebări: fiecare cerință este verificată în lume după nume, poziție, dimensiune, culoare sau număr de obiecte. Insula poate fi generată direct din Pause Menu pentru o sesiune nouă de freestyle.
@@ -293,6 +294,28 @@ PERSOANA 2: Rudolf este mai mult decât un personaj decorativ. El leagă lumea 3
 ---
 
 <div class="speaker-tag">Persoana 2</div>
+<div class="kicker">Quiz Island</div>
+
+# Evaluare în lumea 3D, individual sau multiplayer
+
+<div class="grid-2" style="margin-top:.65rem;align-items:start">
+  <figure style="margin:0"><img class="shot" src="./public/quiz.png" style="height:18rem" /><figcaption class="image-caption">Întrebare contextuală, patru variante și timp de răspuns</figcaption></figure>
+  <figure style="margin:0"><img class="shot" src="./public/quiz2.png" style="height:18rem" /><figcaption class="image-caption">Clasament și punctaj după încheierea rundei</figcaption></figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.75rem">
+  <span>Solo</span><span>Multiplayer LAN</span><span>Scor + timp</span><span>Explicații</span>
+</div>
+
+<div class="card violet" style="min-height:5.2rem;margin-top:.7rem;text-align:center"><strong>Evaluare activă:</strong> întrebarea apare direct în lume, răspunsul este sincronizat, iar scorul reflectă atât corectitudinea, cât și viteza.</div>
+
+<!--
+PERSOANA 2: Quiz Island mută evaluarea dintr-un formular obișnuit în lumea 3D. Elevul răspunde individual sau într-o sesiune LAN, vede timpul disponibil, primește explicația răspunsului și intră într-un clasament calculat după corectitudine și viteză. Sistemul poate folosi cursuri publicate sau quiz-uri generate după profilul participanților.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 2</div>
 <div class="kicker">Experimente și comunitate</div>
 
 # Quiz, cursuri comunitare și simulare
@@ -330,6 +353,28 @@ PERSOANA 2: Aceste activități arată diversitatea conținutului. Avem evaluare
 
 <!--
 PERSOANA 1: Aici se vede explicit suportul pe Android și iOS. Părintele conectează copilul prin QR, consultă istoricul, profilurile AI și rapoartele, urmărește sesiunea live și poate trimite provocări în joc.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 1</div>
+<div class="kicker">Aplicația parentală · Date acționabile</div>
+
+# De la sesiunea live la următorul obiectiv
+
+<div class="parent-gallery" style="margin-top:.5rem">
+  <figure><img src="./public/appGoals.png" /><figcaption>Sesiune live și provocare trimisă în joc</figcaption></figure>
+  <figure><img src="./public/appSkill.png" /><figcaption>Rezumat AI pe limbaj și recomandări</figcaption></figure>
+  <figure><img src="./public/appTaskHistory.png" /><figcaption>Istoric verificabil al activităților</figcaption></figure>
+  <figure><img src="./public/appMyKids2.png" /><figcaption>Copii conectați, puncte și acces QR</figcaption></figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.75rem">
+  <span>Observă live</span><span>Înțelege profilul</span><span>Verifică istoricul</span><span>Trimite obiectiv</span>
+</div>
+
+<!--
+PERSOANA 1: Aplicația nu afișează doar un scor. Părintele poate vedea activitatea curentă și codul pe măsură ce este scris, poate consulta rezumatul AI și istoricul taskurilor și poate transforma observația într-o acțiune concretă: un obiectiv sau o provocare trimisă direct în joc.
 -->
 
 ---
@@ -440,6 +485,29 @@ PERSOANA 2: Am folosit programare orientată pe obiecte, încapsulare, compoziț
 
 <!--
 PERSOANA 1: Portabilitatea nu este doar declarată. În proiect există setări Unity pentru Android și iPhone, module mobile comune pentru iOS, suport VR și o aplicație web bazată pe standardele browserului.
+-->
+
+---
+
+<div class="speaker-tag">Persoana 1</div>
+<div class="kicker">Portabilitate demonstrată</div>
+
+# Aceeași lume pe desktop și telefon
+
+<div class="device-gallery">
+  <figure class="main"><img src="./public/playing_game_on_phone.png" /><figcaption>Build Unity rulat pe telefon</figcaption></figure>
+  <figure><img src="./public/entire_map_in_game.png" /><figcaption>Lumea completă în editorul Unity</figcaption></figure>
+  <figure><img src="./public/rudolf_pc.png" /><figcaption>Rudolf și insulele în buildul desktop</figcaption></figure>
+</div>
+
+<div class="mobile-feature-bar" style="grid-template-columns:repeat(4,1fr);margin-top:.8rem">
+  <span>Desktop</span><span>Android / iOS</span><span>Touch</span><span>Profil comun</span>
+</div>
+
+<div class="card cyan" style="min-height:5rem;margin-top:.7rem;text-align:center"><strong>Continuitate:</strong> dispozitivul schimbă modul de control, nu lumea, contul, progresul sau companionul educațional.</div>
+
+<!--
+PERSOANA 1: Aceste capturi arată aceeași experiență în editor, în buildul desktop și pe telefon. Harta, Rudolf și progresul rămân comune; se schimbă doar controlul, de la tastatură și mouse la touch. Acest lucru permite elevului să continue același parcurs pe dispozitivul disponibil.
 -->
 
 ---
