@@ -57,11 +57,6 @@ Mentora conectează experiența de învățare a copilului cu instrumentele de m
 
 ## Prezentare vizuală
 
-<details>
-<summary><strong>Deschide galeria completă a produsului</strong></summary>
-
-<br />
-
 ### Jocul Unity
 
 | Harta lumii | Harta actualizată | Scenă din joc |
@@ -119,8 +114,6 @@ Mentora poate fi explorată în realitate virtuală, folosind controlere VR pent
 | Panoul creatorului | Biblioteca de cursuri și editorul | Interfața creatorului în franceză |
 | --- | --- | --- |
 | ![Panoul creatorului web](images/web_creator.png) | ![Cursurile creatorului web](images/web_creator_courses.png) | ![Creatorul web în franceză](images/web_creator-fr.png) |
-
-</details>
 
 ## Arhitectura sistemului
 
