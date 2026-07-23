@@ -1,5 +1,8 @@
 .directory
 
+# Local project backups
+backup-old/
+
 # Slidev dependencies, builds, and caches
 presentation-slidev/node_modules/
 presentation-slidev/dist/
