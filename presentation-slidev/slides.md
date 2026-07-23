@@ -731,7 +731,6 @@ PERSOANA 1: Documentația este separată logic. Avem informațiile generale pent
   <h1 class="cover-title" style="font-size:4.2rem">În Mentora, elevul <span>construiește</span> ca să învețe.</h1>
   <p class="final-motto">Mentora demonstrează nu doar o idee, ci un produs educațional complet, interactiv și extensibil.</p>
   <p class="cover-subtitle">Cod · explorare 3D · feedback · AI · colaborare · familie · conținut creat de comunitate.</p>
-  <div class="pill-row" style="margin-top:1.5rem"><span class="pill">Mulțumim!</span><span class="pill">Urmează demonstrația live</span></div>
 </div>
 
 <!--
