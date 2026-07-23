@@ -74,7 +74,7 @@ PERSOANA 1: Ideea centrală este ca elevul să fie activ. El formulează soluți
   <div class="card violet"><span class="icon icon-word">01 / PLAY</span><h3>Joc Unity</h3><p>Explorare 3D, coding pads, quiz-uri, Code Quest, CodeWorld, Rudolf și multiplayer LAN.</p></div>
   <div class="card green"><span class="icon icon-word">02 / TRACK</span><h3>Aplicație parentală</h3><p>QR, progres, obiective, profil AI, raport săptămânal și sesiune live.</p></div>
   <div class="card cyan"><span class="icon icon-word">03 / CREATE</span><h3>Creator Web</h3><p>Crearea, editarea și publicarea cursurilor și quiz-urilor pentru Community Island.</p></div>
-  <div class="card orange"><span class="icon icon-word">04 / CONNECT</span><h3>Backend central</h3><p>Autentificare, persistență, AI, evaluare AI/ML și execuție izolată în containere Docker.</p></div>
+  <div class="card backend"><span class="icon icon-word">04 / CONNECT</span><h3>Backend central</h3><p>Autentificare, persistență, AI, evaluare AI/ML și execuție izolată în containere Docker.</p></div>
 </div>
 
 <div class="grid-3" style="margin-top:1.2rem">
