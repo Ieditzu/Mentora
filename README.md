@@ -14,7 +14,6 @@
 
 <p align="center">
   <a href="https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml"><img alt="Teste de integrare" src="https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml/badge.svg" /></a>
-  <a href="https://github.com/Ieditzu/Mentora/actions/workflows/ios-simulator-build.yml"><img alt="Build iOS" src="https://github.com/Ieditzu/Mentora/actions/workflows/ios-simulator-build.yml/badge.svg" /></a>
 </p>
 
 <p align="center">
