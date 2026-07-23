@@ -734,6 +734,7 @@
 }
 
 .cover-title span { color: var(--mentora-cyan); }
+.cover-logo { display:inline-block; width:1.28em; height:1.28em; margin:0 -.20em -.31em 0; object-fit:contain; vertical-align:baseline; }
 
 .cover-subtitle {
   max-width: 46rem;

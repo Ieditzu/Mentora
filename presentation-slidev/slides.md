@@ -23,7 +23,7 @@ htmlAttrs:
 <div class="cover-overlay" />
 <div class="cover-content">
   <div class="kicker">Prezentare proiect · Software educațional</div>
-  <h1 class="cover-title">Mentora<span>.</span></h1>
+  <h1 class="cover-title"><img class="cover-logo" src="./public/mentora-logo.png" alt="Mentora" />entora<span>.</span></h1>
   <p class="cover-subtitle">Ecosistem educațional în care elevul scrie cod real, îl vede în acțiune într-o lume 3D și primește feedback adaptat progresului său.</p>
 </div>
 
