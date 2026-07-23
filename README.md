@@ -1,8 +1,10 @@
 # Mentora
 
+[![Integration tests](https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml)
+
 Mentora este un ecosistem educațional bazat pe IA pentru învățarea programării și a învățării automate prin intermediul unui joc Unity, al aplicațiilor Android/iOS pentru părinți, al unui creator web de cursuri și al unui backend Java/Spring. Proiectul îi învață pe copii Python, C++ și concepte AI/ML punându-i să scrie și să ruleze cod real, să lucreze cu seturi de date, să primească îndrumare oferită de IA și să își construiască un profil de învățare persistent.
 
-Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `80`, un nivel multiplayer Unity prin LAN separat, editare colaborativă CodeWorld, o insulă AI/ML cu evaluare deterministă pe server, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor și un companion cu interacțiune vocală.
+Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `92`, un nivel multiplayer Unity prin LAN separat, editare colaborativă CodeWorld, o insulă AI/ML cu evaluare deterministă pe server, autentificare TOTP pentru părinți, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor și un companion cu interacțiune vocală.
 
 ## Prezentare vizuală
 
@@ -126,13 +128,13 @@ flowchart TD
 | `kotlin-app/` | Panou Android pentru părinți, construit cu Kotlin și Jetpack Compose |
 | `web-creator/` | Platformă React/Vite pentru crearea cursurilor |
 | `images/` | Capturi de ecran ale proiectului, folosite în acest README și în materialele de prezentare |
-| `mentora-presentation-slidev/` | Resurse pentru prezentarea Slidev |
+| `presentation-slidev/` | Resurse pentru prezentarea Slidev |
 
 ## Stiva tehnologică
 
 | Strat | Tehnologii |
 | --- | --- |
-| Backend | Java 21, Spring Boot 3.2.4, Spring Data JPA, Hibernate, PostgreSQL |
+| Backend | Java 21, Spring Boot 3.2.12, Spring Data JPA, Hibernate, PostgreSQL |
 | Protocol backend în timp real | Java-WebSocket, pachete binare criptate personalizate |
 | IA | Groq API, `llama-3.3-70b-versatile`, memorie cache pentru răspunsuri, rotația cheilor API |
 | Executarea codului | Containere Docker efemere pentru Python, C++, CodeWorld și NumPy/pandas/scikit-learn |
@@ -267,8 +269,16 @@ Există două sisteme de pachete:
 | `76` | `SetClientLanguagePacket` | Limba preferată pentru răspunsurile serverului |
 | `77/78` | `FetchMachineLearningProblemsPacket` / răspuns | Catalogul AI/ML și progresul copilului |
 | `79/80` | `SubmitMachineLearningSolutionPacket` / rezultat | Rularea, evaluarea ascunsă și recompensa unei soluții AI/ML |
+| `81/82` | Solicitare/verificare al doilea factor | Provocarea de autentificare TOTP sau prin cod de recuperare |
+| `83/84` | Pornire/configurare TOTP | Generează secretul și URI-ul `otpauth://` pentru aplicația Authenticator |
+| `85/86` | Confirmare/rezultat configurare TOTP | Confirmă primul cod și livrează o singură dată codurile de recuperare |
+| `87` | `DisableParentTotpPacket` | Dezactivează TOTP după reverificarea parolei și a celui de-al doilea factor |
+| `88/89` | Solicitare/răspuns stare de securitate | Returnează starea TOTP și numărul codurilor de recuperare rămase |
+| `90` | `ParentAuthSessionPacket` | Livrează tokenul opac al sesiunii de părinte și expirarea sa |
+| `91` | `ResumeParentSessionPacket` | Reia și rotește o sesiune legată de dispozitiv |
+| `92` | `RevokeParentSessionPacket` | Revocă sesiunea curentă sau toate sesiunile părintelui |
 
-`ClientHandler.java` aplică o listă de permisiuni pentru clienții neautentificați. Pachetele din afara setului permis returnează un `ActionResponsePacket` de neautorizare, cu excepția cazului în care clientul are o sesiune validă de părinte sau copil.
+`ClientHandler.java` aplică o politică explicită pentru rolurile `UNAUTHENTICATED`, `PASSWORD_VERIFIED_PENDING_TOTP`, `PARENT` și `CHILD`. Operațiile vocale/STT și cele care execută cod sunt disponibile numai unei sesiuni de copil. Pachetele de dezvoltare `41`, `43` și `44` sunt dezactivate implicit; chiar dacă `MENTORA_DEV_PACKETS_ENABLED=true`, acestea cer o sesiune de părinte și verifică proprietatea asupra profilului de copil.
 
 ### Pachete multiplayer locale Unity
 
@@ -290,15 +300,20 @@ Mentora are fluxuri separate pentru părinți și copii.
 
 ### Autentificarea părinților
 
-Părinții se pot autentifica prin pachete WebSocket Android sau prin API-ul REST web. API-ul web expune:
+Părinții se pot autentifica prin pachete WebSocket în aplicațiile Android/iOS sau prin API-ul REST web. Dacă TOTP este activat, verificarea parolei produce o provocare scurtă, legată de conexiune; sesiunea este emisă numai după un cod TOTP valid sau un cod de recuperare nefolosit. API-ul web expune:
 
 | Metodă | Endpoint | Scop |
 | --- | --- | --- |
 | `POST` | `/api/web/auth/lookup` | Verifică dacă există o adresă de e-mail |
 | `POST` | `/api/web/auth/register` | Creează părintele și returnează tokenul |
-| `POST` | `/api/web/auth/login` | Autentifică și returnează tokenul |
+| `POST` | `/api/web/auth/login` | Verifică parola; returnează tokenul sau HTTP `202` cu provocarea 2FA |
+| `POST` | `/api/web/auth/login/totp` | Verifică TOTP/codul de recuperare și emite sesiunea |
+| `GET` | `/api/web/auth/security` | Returnează starea TOTP pentru sesiunea autentificată |
+| `POST` | `/api/web/auth/totp/setup` | Începe configurarea TOTP după reverificarea parolei |
+| `POST` | `/api/web/auth/totp/enable` | Confirmă primul cod și activează TOTP |
+| `DELETE` | `/api/web/auth/totp` | Dezactivează TOTP după reverificarea ambilor factori |
 
-Datele de autentificare sunt transformate în hash cu `SHA-256` în `HashUtility`. Sesiunile web sunt tokenuri UUID stocate în memorie de `WebSessionService`, cu un TTL de 7 zile.
+Pentru compatibilitatea protocolului existent, clienții derivă mai întâi o acreditare cu `SHA-256`; backendul nu o mai stochează direct, ci o protejează cu un hash adaptiv BCrypt, sărat. Înregistrările vechi care conțin acreditarea rapidă sunt migrate automat după prima autentificare reușită. Sesiunile de părinte folosesc tokenuri opace generate aleatoriu; baza de date păstrează numai hashul tokenului și al identificatorului de dispozitiv. Reluarea rotește tokenul, iar activarea sau dezactivarea TOTP revocă sesiunile anterioare. Secretele TOTP sunt criptate la stocare cu AES-256-GCM, codurile de recuperare sunt stocate numai sub formă de hash și sunt consumate o singură dată. Bugetul de încercări 2FA este comun contului și nu poate fi resetat prin solicitarea repetată a unor challenge-uri noi.
 
 ### Autentificarea copiilor prin QR
 
@@ -501,6 +516,8 @@ Fișiere principale:
 Funcționalitățile implementate ale aplicației includ:
 
 - autentificarea/înregistrarea părinților.
+- autentificare în doi pași TOTP, configurare prin cod QR, coduri de recuperare și dezactivare din Setări.
+- sesiuni persistente rotite, stocate prin Android Keystore sau iOS Keychain.
 - o buclă de reconectare.
 - un tablou de bord pentru copii, cu punctaj și stare online.
 - un flux de scanare a codurilor QR pentru asocierea sesiunilor de joc.
@@ -539,6 +556,9 @@ API REST:
 | `POST` | `/api/web/courses` | Creează un curs |
 | `PUT` | `/api/web/courses/{courseId}` | Actualizează cursul și întrebările |
 | `DELETE` | `/api/web/courses/{courseId}` | Șterge cursul |
+| `POST` | `/api/web/ml-problems` | Publică o problemă de cod/ML cu date ascunse |
+| `GET` | `/api/web/ml-problems/mine` | Listează problemele de cod/ML deținute |
+| `GET` | `/api/web/ml-problems/children/{childId}/progress` | Arată părintelui feedbackul și progresul copilului |
 
 Validarea cursurilor în `CourseService`:
 
@@ -584,7 +604,7 @@ Sarcinile globale sunt inițializate din `DefaultTaskType`:
 | Python vizual, nivel avansat | linie cu bare, bară de progres, grilă pătrată, scară, model alternant |
 | Puzzle-uri logice | puterea/fizica saltului, dezvăluirea insulei, dezvăluirea podului |
 
-`TaskService.completeTask()` creează un `CompletedTask`, adaugă la punctajul copilului valoarea în puncte a sarcinii, incrementează `game_stats["tasks_completed"]`, salvează copilul și declanșează verificarea obiectivelor. În prezent, metoda nu împiedică finalizările duplicate în fluxul de cod prezentat, așadar apelanții trebuie să evite trimiterea repetată a aceleiași finalizări, cu excepția cazului în care se doresc recompense repetate.
+`TaskService.completeTask()` blochează profilul copilului pe durata tranzacției și verifică perechea copil-sarcină înainte de a crea un `CompletedTask`. Prima finalizare adaugă punctele, incrementează `game_stats["tasks_completed"]` și verifică obiectivele; trimiterile repetate devin idempotente. O constrângere unică în baza de date protejează aceeași regulă și la nivel de persistență.
 
 ### Obiective
 
@@ -627,6 +647,7 @@ erDiagram
     CHILD ||--o{ COMPLETED_TASK : finalizează
     TASK ||--o{ COMPLETED_TASK : apare_în
     PARENT ||--o{ GOAL : creează
+    PARENT ||--o{ PARENT_SESSION : autentifică
     CHILD ||--o{ GOAL : primește
     TASK ||--o{ GOAL : poate_impune
     PARENT ||--o{ COURSE : creează
@@ -667,7 +688,8 @@ Concepte persistente importante:
 
 - `children.game_stats` stochează profilul de IA aflat în continuă evoluție, în format JSONB.
 - `game_sessions` stochează tokenurile persistente ale sesiunilor copiilor.
-- `completed_tasks` stochează înregistrările sarcinilor finalizate.
+- `parent_sessions` stochează hashurile tokenurilor și ale dispozitivelor, expirarea și revocarea sesiunilor părinților.
+- `completed_tasks` stochează înregistrările sarcinilor finalizate, unice pentru fiecare pereche copil-sarcină.
 - `goals` stochează obiectivele cu recompense create de părinți.
 - `child_course_progress` stochează încercările la cursuri, punctajele și starea recompenselor.
 
@@ -677,28 +699,42 @@ Protecții implementate:
 
 - pachete WebSocket binare criptate între backend și Unity/Android.
 - seed de criptare dinamic pentru fiecare pachet.
-- validarea lungimii seed-ului.
-- hashing-ul datelor de autentificare cu SHA-256.
-- tokenuri Bearer web cu TTL.
+- limite stricte pentru cadre, seed, șiruri UTF-8 și date rămase în pachet.
+- acreditare de protocol derivată cu SHA-256, apoi stocată pe server numai ca hash adaptiv BCrypt sărat; rândurile vechi sunt migrate la autentificare.
+- TOTP conform RFC 6238, protecție la reutilizarea aceluiași pas temporal și coduri de recuperare de unică folosință.
+- buget comun pe cont și cooldown pentru încercările TOTP, inclusiv între challenge-uri nou emise.
+- secrete TOTP criptate cu AES-256-GCM și tokenuri de sesiune persistate numai ca hash.
+- tokenuri Bearer cu TTL, legare de dispozitiv, rotație la reluare și revocare.
+- autorizare pe rol pentru fiecare ID de pachet; pachetele de dezvoltare sunt dezactivate implicit.
 - validarea proprietarului cursului.
 - verificarea apartenenței copilului în operațiunile efectuate de părinți.
+- finalizarea idempotentă a sarcinilor și unicitate în baza de date pentru perechea copil-sarcină.
 - executarea codului într-un sandbox cu restricții pentru procese, memorie, fișiere, CPU și rețea.
 
 Limitări cunoscute, vizibile în cod:
 
-- sesiunile web sunt păstrate în memorie, așadar se resetează la repornirea backendului.
-- hashing-ul parolelor folosește SHA-256 simplu, în locul unui algoritm lent pentru parole, precum BCrypt/Argon2.
-- unele pachete pentru dezvoltare/administrare există în registrul de pachete și în lista de permisiuni; înaintea unei lansări publice, configurația de producție trebuie verificată pentru a limita expunerea lor.
-- prevenirea înregistrărilor duplicate la finalizarea sarcinilor nu este impusă în `TaskService.completeTask()`.
+- challenge-urile și bugetele temporare 2FA sunt păstrate în memoria instanței; un deployment cu mai multe instanțe trebuie să le mute într-un store distribuit.
+- cheia folosită pentru criptarea secretelor TOTP nu are încă un flux automat de rotație; aceasta trebuie păstrată stabilă și protejată prin managerul de secrete al mediului.
 
 ## Rularea proiectului
 
 ### Backend
 
+Pentru TOTP, generați o singură cheie AES-256 și păstrați-o într-un manager de secrete. Comanda afișează o valoare Base64 care conține exact 32 de octeți aleatori:
+
+```bash
+openssl rand -base64 32
+```
+
+Configurați valoarea generată înainte de pornire:
+
 ```bash
 cd java-server/Java-Server
+export MENTORA_TOTP_ENCRYPTION_KEY='<valoarea-Base64-generată-o-singură-dată>'
 ./gradlew bootRun
 ```
+
+Nu reutilizați cheia demonstrativă din workflow-ul CI și nu comiteți cheia reală. Aceeași valoare trebuie restaurată după fiecare repornire/deploy; schimbarea ei fără o migrare face imposibilă decriptarea secretelor TOTP deja înrolate. Backendul poate porni fără variabilă, dar configurarea TOTP este indisponibilă, iar conturile care au deja TOTP activat nu pot finaliza autentificarea.
 
 Servicii disponibile:
 
@@ -746,15 +782,88 @@ wss://neuro.serenityutils.club
 
 ## Starea actuală a testării
 
-Repository-ul nu conține în prezent o suită completă de teste automate pentru toate componentele. Verificarea este realizată în principal manual și prin teste de integrare:
+Testele sunt împărțite intenționat pe straturi, pentru ca verificările rapide să nu depindă de Docker, iar testele de infrastructură să folosească aceleași limite și motoare ca producția.
 
-- backendul pornește și acceptă trafic WebSocket/REST.
-- Unity se conectează și schimbă pachete criptate.
-- Android se conectează și afișează starea copilului și progresul acestuia.
-- creatorul web se poate autentifica și poate gestiona cursuri.
-- capturile de ecran selectate din `images/` documentează interfețele actuale ale jocului, aplicației și platformei web.
+| Strat | Comandă locală | Ce verifică | Dependențe |
+| --- | --- | --- | --- |
+| Backend unit/contract | `./gradlew test` în `java-server/Java-Server/` | autorizare pe rol, TOTP/sesiuni, evaluator, validări, idempotentizarea sarcinilor, cadre binare invalide și fixture-ul protocolului | Java 21 |
+| Backend + PostgreSQL | `./gradlew integrationTest` | creatorul REST de cursuri, ciclul REST TOTP și persistența separată a cursurilor/progresului pe PostgreSQL real | Java 21 și Docker |
+| Docker/evaluator + golden path | `./gradlew dockerAdversarialTest` | creatorul publică o problemă ML → catalogul copilului ascunde datele private → evaluatorul Docker rulează testele ascunse → feedbackul/progresul se persistă → părintele vede actualizarea; plus izolarea adversarială, Python/C++/ML și eliminarea containerului | Docker, PostgreSQL Testcontainers și imaginile Mentora |
+| Rapoarte backend | `./gradlew test integrationTest dockerAdversarialTest jacocoTestReport jacocoTestCoverageVerification` | JUnit și raport JaCoCo XML/HTML pentru straturile unitare, PostgreSQL și Docker | Java 21 și Docker |
+| Android + Kotlin shared | `./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebugAndroidTest` în `kotlin-app/` | contracte shared, fluxuri 2FA și fixture binar; compilează și testele instrumentate | Java 21 și Android SDK |
+| Android pe dispozitiv | `./gradlew :app:connectedDebugAndroidTest` | persistența sesiunii criptate prin Android Keystore | emulator/dispozitiv Android |
+| Kotlin/iOS shared | `./gradlew :shared:iosSimulatorArm64Test` | contractul Kotlin/Native și fluxurile de securitate iOS | macOS/Xcode |
+| iOS nativ | `xcodebuild test ...` din exemplul de mai jos | fixture-ul Swift și integrarea aplicației cu bridge-ul shared | macOS, Xcode și XcodeGen |
+| Unity EditMode | comanda Unity de mai jos | decodificarea/codificarea fixture-ului comun și limitele defensive ale protocolului | Unity `2022.3.62f3` |
 
-Aceasta este o direcție importantă de îmbunătățire. Cele mai valoroase teste viitoare ar acoperi compatibilitatea codificării și decodificării pachetelor, regulile de recompensare la finalizarea cursurilor, comportamentul în cazul sarcinilor duplicate, actualizările profilului de învățare și comportamentul sandboxului de executare a codului.
+Testele PostgreSQL folosesc Testcontainers cu imaginea `postgres:16-alpine`; nu există fallback H2. Dacă Docker nu este disponibil, clasele marcate `disabledWithoutDocker` sunt raportate ca omise. Testele adversariale nu fac parte din taskul Gradle `check`: invocarea explicită a `dockerAdversarialTest` este opt-in-ul local. Odată invocat, taskul eșuează dacă Docker sau una dintre imaginile Mentora lipsește, pentru a evita un rezultat fals pozitiv.
+
+Construiți imaginile runner înaintea testelor adversariale:
+
+```bash
+cd java-server/Java-Server
+sh code-runners/build-images.sh
+./gradlew dockerAdversarialTest
+```
+
+Rapoartele backend sunt scrise în `build/test-results/`, `build/reports/tests/` și `build/reports/jacoco/`.
+
+### Fixture-uri canonice pentru protocol
+
+[`test-fixtures/protocol/v1/packets.json`](test-fixtures/protocol/v1/packets.json) conține 24 de vectori canonici cu payloadul decriptat și cadrul WebSocket criptat determinist. Fixture-ul este consumat independent de backendul Java, jocul Unity, clientul Kotlin/Android și testul nativ Swift; fiecare client verifică direcțiile și ID-urile pe care le implementează, în timp ce backendul validează întregul registru. Vectorii includ metadatele handshake v1/v2, date Unicode/binare și contractele de securitate `81`–`92`.
+
+Generatorul de referință este independent de implementările de producție. Necesită Python 3 și pachetul `cryptography`:
+
+```bash
+python3 -m pip install cryptography
+python3 test-fixtures/protocol/v1/generate_vectors.py --check
+```
+
+După o schimbare deliberată de protocol:
+
+```bash
+python3 test-fixtures/protocol/v1/generate_vectors.py --write
+python3 test-fixtures/protocol/v1/generate_vectors.py --check
+```
+
+Orice modificare a ordinii/codificării câmpurilor trebuie revizuită împreună cu fixture-ul și reprezentată printr-o versiune nouă, nu prin rescrierea silențioasă a contractului v1.
+
+### Comenzi Unity și iOS
+
+Testele Unity pot fi rulate din `Window > General > Test Runner > EditMode` sau fără interfață:
+
+```bash
+export UNITY_EDITOR_PATH='/cale/către/Unity/Hub/Editor/2022.3.62f3/Editor/Unity'
+"$UNITY_EDITOR_PATH" \
+  -batchmode -nographics \
+  -projectPath "$PWD/unity" \
+  -runTests -testPlatform EditMode \
+  -testResults "$PWD/unity-editmode-results.xml" \
+  -logFile -
+```
+
+Pe macOS, testele shared și cele Swift se rulează astfel:
+
+```bash
+cd kotlin-app
+./gradlew :shared:iosSimulatorArm64Test
+xcodegen generate --spec iosApp/project.yml --project iosApp
+xcodebuild test \
+  -project iosApp/MentoraIOS.xcodeproj \
+  -scheme MentoraIOS \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+```
+
+### Integrare continuă
+
+Workflow-ul [`integration-tests.yml`](.github/workflows/integration-tests.yml) construiește imaginile runner și rulează în paralel:
+
+- testele backend unitare, PostgreSQL/Testcontainers, evaluator și sandbox adversarial, cu rezultate JUnit și JaCoCo publicate ca artefacte.
+- testele host Android/Kotlin shared, urmate de testul Android Keystore instrumentat pe un emulator API 35.
+- testele Unity EditMode prin GameCI, cu rezultatele Unity păstrate ca artefact.
+
+Jobul Unity necesită secretele de licențiere potrivite tipului de licență: `UNITY_LICENSE`, `UNITY_EMAIL` și `UNITY_PASSWORD` pentru Personal sau `UNITY_EMAIL`, `UNITY_PASSWORD` și `UNITY_SERIAL` pentru Professional. Workflow-ul [`ios-simulator-build.yml`](.github/workflows/ios-simulator-build.yml) rulează separat testele Kotlin/Native și Swift pe un runner macOS, publică bundle-ul `.xcresult`, apoi construiește artefactul iOS.
 
 ## Corelarea cu criteriile competiției/proiectului
 

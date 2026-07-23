@@ -1,8 +1,49 @@
 package io.github.kawase.socket.packet;
 
 import io.github.kawase.socket.exceptions.PacketException;
-import io.github.kawase.socket.packet.impl.*;
-import io.github.kawase.socket.packet.impl.ai.*;
+import io.github.kawase.socket.packet.impl.ActionResponsePacket;
+import io.github.kawase.socket.packet.impl.AddChildPacket;
+import io.github.kawase.socket.packet.impl.AddGoalPacket;
+import io.github.kawase.socket.packet.impl.AuthPacket;
+import io.github.kawase.socket.packet.impl.AuthResponsePacket;
+import io.github.kawase.socket.packet.impl.BeginParentTotpEnrollmentPacket;
+import io.github.kawase.socket.packet.impl.ClaimQRLoginPacket;
+import io.github.kawase.socket.packet.impl.CompleteTaskPacket;
+import io.github.kawase.socket.packet.impl.ConfirmParentTotpEnrollmentPacket;
+import io.github.kawase.socket.packet.impl.DisableParentTotpPacket;
+import io.github.kawase.socket.packet.impl.FetchChildStatsByParentPacket;
+import io.github.kawase.socket.packet.impl.FetchChildStatsResponsePacket;
+import io.github.kawase.socket.packet.impl.FetchChildrenPacket;
+import io.github.kawase.socket.packet.impl.FetchChildrenResponsePacket;
+import io.github.kawase.socket.packet.impl.FetchCompletedTasksPacket;
+import io.github.kawase.socket.packet.impl.FetchCompletedTasksResponsePacket;
+import io.github.kawase.socket.packet.impl.FetchGoalsPacket;
+import io.github.kawase.socket.packet.impl.FetchGoalsResponsePacket;
+import io.github.kawase.socket.packet.impl.FetchParentSecurityStatusPacket;
+import io.github.kawase.socket.packet.impl.FetchTasksPacket;
+import io.github.kawase.socket.packet.impl.FetchTasksResponsePacket;
+import io.github.kawase.socket.packet.impl.FetchWeeklyReportPacket;
+import io.github.kawase.socket.packet.impl.HandShakePacket;
+import io.github.kawase.socket.packet.impl.LiveSessionUpdatePacket;
+import io.github.kawase.socket.packet.impl.ParentAuthSessionPacket;
+import io.github.kawase.socket.packet.impl.ParentChallengeCompletedPacket;
+import io.github.kawase.socket.packet.impl.ParentChallengePacket;
+import io.github.kawase.socket.packet.impl.ParentSecondFactorRequiredPacket;
+import io.github.kawase.socket.packet.impl.ParentSecurityStatusPacket;
+import io.github.kawase.socket.packet.impl.ParentTotpEnrollmentDetailsPacket;
+import io.github.kawase.socket.packet.impl.ParentTotpEnrollmentResultPacket;
+import io.github.kawase.socket.packet.impl.RegisterParentPacket;
+import io.github.kawase.socket.packet.impl.RemoveChildPacket;
+import io.github.kawase.socket.packet.impl.ResumeParentSessionPacket;
+import io.github.kawase.socket.packet.impl.RevokeParentSessionPacket;
+import io.github.kawase.socket.packet.impl.SendParentChallengePacket;
+import io.github.kawase.socket.packet.impl.SetClientLanguagePacket;
+import io.github.kawase.socket.packet.impl.SubscribeLiveSessionPacket;
+import io.github.kawase.socket.packet.impl.UpdatePfpPacket;
+import io.github.kawase.socket.packet.impl.VerifyParentSecondFactorPacket;
+import io.github.kawase.socket.packet.impl.WeeklyReportResponsePacket;
+import io.github.kawase.socket.packet.impl.ai.AiResponsePacket;
+import io.github.kawase.socket.packet.impl.ai.AskAiPacket;
 
 public class PacketManager {
     public Packet createPacket(final int id) {
@@ -27,9 +68,9 @@ public class PacketManager {
             case 24: return new FetchChildStatsResponsePacket();
             case 26: return new UpdatePfpPacket();
             case 27: return new RemoveChildPacket();
-            case 32: return new FetchChildStatsByParentPacket();
             case 30: return new AskAiPacket();
             case 31: return new AiResponsePacket();
+            case 32: return new FetchChildStatsByParentPacket();
             case 64: return new SubscribeLiveSessionPacket();
             case 65: return new LiveSessionUpdatePacket();
             case 66: return new SendParentChallengePacket();
@@ -38,8 +79,19 @@ public class PacketManager {
             case 69: return new FetchWeeklyReportPacket();
             case 70: return new WeeklyReportResponsePacket();
             case 76: return new SetClientLanguagePacket();
+            case 81: return new ParentSecondFactorRequiredPacket();
+            case 82: return new VerifyParentSecondFactorPacket();
+            case 83: return new BeginParentTotpEnrollmentPacket();
+            case 84: return new ParentTotpEnrollmentDetailsPacket();
+            case 85: return new ConfirmParentTotpEnrollmentPacket();
+            case 86: return new ParentTotpEnrollmentResultPacket();
+            case 87: return new DisableParentTotpPacket();
+            case 88: return new FetchParentSecurityStatusPacket();
+            case 89: return new ParentSecurityStatusPacket();
+            case 90: return new ParentAuthSessionPacket();
+            case 91: return new ResumeParentSessionPacket();
+            case 92: return new RevokeParentSessionPacket();
+            default: throw new PacketException("Unknown packet ID: " + id);
         }
-
-        return null;
     }
 }

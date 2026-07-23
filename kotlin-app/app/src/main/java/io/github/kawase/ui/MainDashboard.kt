@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -88,6 +90,7 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeWriter
 import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -103,6 +106,13 @@ sealed class Screen(val route: String, val icon: ImageVector, @param:androidx.an
     object History : Screen("history", Icons.AutoMirrored.Filled.List, R.string.nav_history)
     object Goals : Screen("goals", Icons.Default.Star, R.string.nav_goals)
     object Settings : Screen("settings", Icons.Default.Settings, R.string.nav_settings)
+}
+
+private enum class TotpDialogMode {
+    ENABLE,
+    CONFIRM,
+    DISABLE,
+    RECOVERY_CODES
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -760,8 +770,30 @@ fun ColorBox(color: Color, viewModel: SocketViewModel) {
 fun SettingsScreen(viewModel: SocketViewModel) {
     var childName by remember { mutableStateOf("") }
     val email by viewModel.email
+    val securityState by viewModel.securityState
+    val isConnected by viewModel.isConnected
     val scrollState = rememberScrollState()
     var showPfpPickerForId by remember { mutableStateOf<Long?>(null) } // -1 for parent, childId for kids
+    var totpDialogMode by remember { mutableStateOf<TotpDialogMode?>(null) }
+    var currentPassword by remember { mutableStateOf("") }
+    var totpCode by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchParentSecurityStatus()
+    }
+    LaunchedEffect(securityState.enrollmentDetails) {
+        if (securityState.enrollmentDetails != null) {
+            currentPassword = ""
+            totpCode = ""
+            totpDialogMode = TotpDialogMode.CONFIRM
+        }
+    }
+    LaunchedEffect(securityState.recoveryCodes) {
+        if (securityState.recoveryCodes.isNotEmpty()) {
+            totpCode = ""
+            totpDialogMode = TotpDialogMode.RECOVERY_CODES
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(scrollState)) {
         Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
@@ -780,6 +812,109 @@ fun SettingsScreen(viewModel: SocketViewModel) {
                 Column {
                     Text(stringResource(R.string.parent_account), style = MaterialTheme.typography.labelMedium, color = viewModel.primaryColor.value, fontWeight = FontWeight.Bold)
                     Text(email, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            stringResource(R.string.security),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().border(
+                1.dp,
+                if (viewModel.isDarkMode.value) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.08f),
+                RoundedCornerShape(24.dp)
+            ),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.two_factor_authentication),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            stringResource(R.string.two_factor_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
+                    if (securityState.isLoading && securityState.totpEnabled == null) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (securityState.totpEnabled == true) R.string.enabled else R.string.disabled
+                                    )
+                                )
+                            }
+                        )
+                    }
+                }
+                if (securityState.totpEnabled == true) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        stringResource(
+                            R.string.recovery_codes_remaining,
+                            securityState.recoveryCodesRemaining
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
+                securityState.message?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        currentPassword = ""
+                        totpCode = ""
+                        totpDialogMode = if (securityState.totpEnabled == true) {
+                            TotpDialogMode.DISABLE
+                        } else {
+                            TotpDialogMode.ENABLE
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = isConnected && !securityState.isLoading && securityState.totpEnabled != null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (securityState.totpEnabled == true) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            viewModel.primaryColor.value
+                        }
+                    )
+                ) {
+                    Text(
+                        stringResource(
+                            if (securityState.totpEnabled == true) {
+                                R.string.disable_two_factor
+                            } else {
+                                R.string.enable_two_factor
+                            }
+                        ),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -994,11 +1129,196 @@ fun SettingsScreen(viewModel: SocketViewModel) {
         Spacer(modifier = Modifier.height(100.dp))
     }
 
+    totpDialogMode?.let { mode ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!securityState.isLoading) {
+                    currentPassword = ""
+                    totpCode = ""
+                    if (mode != TotpDialogMode.RECOVERY_CODES) {
+                        viewModel.clearTotpEnrollmentResult()
+                    }
+                    totpDialogMode = null
+                }
+            },
+            title = {
+                Text(
+                    stringResource(
+                        when (mode) {
+                            TotpDialogMode.ENABLE,
+                            TotpDialogMode.CONFIRM -> R.string.enable_two_factor
+                            TotpDialogMode.DISABLE -> R.string.disable_two_factor
+                            TotpDialogMode.RECOVERY_CODES -> R.string.recovery_codes_title
+                        }
+                    )
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    when (mode) {
+                        TotpDialogMode.ENABLE -> {
+                            Text(stringResource(R.string.two_factor_description))
+                            OutlinedTextField(
+                                value = currentPassword,
+                                onValueChange = { currentPassword = it },
+                                label = { Text(stringResource(R.string.current_password)) },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true
+                            )
+                        }
+                        TotpDialogMode.CONFIRM -> {
+                            val details = securityState.enrollmentDetails
+                            if (details != null) {
+                                Text(stringResource(R.string.scan_authenticator_qr))
+                                remember(details.otpAuthUri) {
+                                    createQrBitmap(details.otpAuthUri)
+                                }?.let { qrBitmap ->
+                                    Image(
+                                        bitmap = qrBitmap.asImageBitmap(),
+                                        contentDescription = stringResource(R.string.scan_authenticator_qr),
+                                        modifier = Modifier
+                                            .size(220.dp)
+                                            .align(Alignment.CenterHorizontally)
+                                            .background(Color.White)
+                                            .padding(8.dp)
+                                    )
+                                }
+                                Text(
+                                    stringResource(R.string.manual_setup_key),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                SelectionContainer {
+                                    Text(
+                                        details.secretBase32,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = totpCode,
+                                    onValueChange = {
+                                        totpCode = it.filter(Char::isDigit).take(6)
+                                    },
+                                    label = { Text(stringResource(R.string.authenticator_code)) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                        TotpDialogMode.DISABLE -> {
+                            Text(stringResource(R.string.two_factor_description))
+                            OutlinedTextField(
+                                value = currentPassword,
+                                onValueChange = { currentPassword = it },
+                                label = { Text(stringResource(R.string.current_password)) },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = totpCode,
+                                onValueChange = { totpCode = it.take(64) },
+                                label = { Text(stringResource(R.string.authenticator_code)) },
+                                singleLine = true
+                            )
+                        }
+                        TotpDialogMode.RECOVERY_CODES -> {
+                            Text(stringResource(R.string.recovery_codes_description))
+                            SelectionContainer {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    securityState.recoveryCodes.forEach {
+                                        Text(it, fontFamily = FontFamily.Monospace)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (securityState.isLoading) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    securityState.message?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        when (mode) {
+                            TotpDialogMode.ENABLE -> viewModel.beginTotpEnrollment(currentPassword)
+                            TotpDialogMode.CONFIRM -> viewModel.confirmTotpEnrollment(totpCode)
+                            TotpDialogMode.DISABLE -> {
+                                viewModel.disableTotp(currentPassword, totpCode)
+                                currentPassword = ""
+                                totpCode = ""
+                                totpDialogMode = null
+                            }
+                            TotpDialogMode.RECOVERY_CODES -> {
+                                viewModel.clearTotpEnrollmentResult()
+                                totpDialogMode = null
+                            }
+                        }
+                    },
+                    enabled = isConnected && !securityState.isLoading && when (mode) {
+                        TotpDialogMode.ENABLE -> currentPassword.isNotEmpty()
+                        TotpDialogMode.CONFIRM -> totpCode.length == 6
+                        TotpDialogMode.DISABLE -> currentPassword.isNotEmpty() && totpCode.isNotBlank()
+                        TotpDialogMode.RECOVERY_CODES -> true
+                    }
+                ) {
+                    Text(
+                        stringResource(
+                            when (mode) {
+                                TotpDialogMode.ENABLE -> R.string.continue_label
+                                TotpDialogMode.CONFIRM -> R.string.verify
+                                TotpDialogMode.DISABLE -> R.string.disable_two_factor
+                                TotpDialogMode.RECOVERY_CODES -> R.string.done
+                            }
+                        )
+                    )
+                }
+            },
+            dismissButton = if (mode == TotpDialogMode.RECOVERY_CODES) {
+                null
+            } else {
+                {
+                    TextButton(
+                        onClick = {
+                            currentPassword = ""
+                            totpCode = ""
+                            viewModel.clearTotpEnrollmentResult()
+                            totpDialogMode = null
+                        },
+                        enabled = !securityState.isLoading
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+        )
+    }
+
     showPfpPickerForId?.let { id ->
         ImagePickerBottomSheet(
             onImageSelected = { base64 -> viewModel.updatePfp(id, base64) },
             onDismiss = { showPfpPickerForId = null }
         )
+    }
+}
+
+private fun createQrBitmap(contents: String): Bitmap? {
+    return try {
+        val matrix = QRCodeWriter().encode(contents, BarcodeFormat.QR_CODE, 512, 512)
+        Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888).apply {
+            for (x in 0 until 512) {
+                for (y in 0 until 512) {
+                    setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+        }
+    } catch (_: Exception) {
+        null
     }
 }
 

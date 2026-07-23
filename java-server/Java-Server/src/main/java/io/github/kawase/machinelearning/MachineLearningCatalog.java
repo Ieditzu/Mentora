@@ -1,12 +1,18 @@
 package io.github.kawase.machinelearning;
 
+import io.github.kawase.database.entity.CreatorMachineLearningProblem;
+import io.github.kawase.database.repository.CreatorMachineLearningProblemRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class MachineLearningCatalog {
-    private final List<MachineLearningProblem> problems = List.of(
+    private final Optional<CreatorMachineLearningProblemRepository> creatorProblemRepository;
+    private final List<MachineLearningProblem> builtInProblems = List.of(
             MachineLearningProblem.builder()
                     .slug("easy-dataset-detective")
                     .title("Dataset Detective")
@@ -289,14 +295,53 @@ public class MachineLearningCatalog {
                     .build()
     );
 
+    public MachineLearningCatalog() {
+        creatorProblemRepository = Optional.empty();
+    }
+
+    @Autowired
+    public MachineLearningCatalog(final CreatorMachineLearningProblemRepository creatorProblemRepository) {
+        this.creatorProblemRepository = Optional.of(creatorProblemRepository);
+    }
+
     public List<MachineLearningProblem> getProblems() {
-        return problems;
+        if (creatorProblemRepository.isEmpty()) return builtInProblems;
+
+        final List<MachineLearningProblem> problems = new ArrayList<>(builtInProblems);
+        problems.addAll(creatorProblemRepository.get().findByPublishedTrueOrderByUpdatedAtDesc().stream()
+                .map(this::toProblem)
+                .toList());
+        return List.copyOf(problems);
     }
 
     public MachineLearningProblem requireProblem(final String slug) {
-        return problems.stream()
+        return getProblems().stream()
                 .filter(problem -> problem.getSlug().equals(slug))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Machine-learning problem not found"));
+    }
+
+    private MachineLearningProblem toProblem(final CreatorMachineLearningProblem problem) {
+        return MachineLearningProblem.builder()
+                .slug(problem.getSlug())
+                .title(problem.getTitle())
+                .titleRo(problem.getTitleRo())
+                .description(problem.getDescription())
+                .descriptionRo(problem.getDescriptionRo())
+                .hint(problem.getHint())
+                .hintRo(problem.getHintRo())
+                .difficulty(problem.getDifficulty())
+                .concepts(List.copyOf(problem.getConcepts()))
+                .starterCode(problem.getStarterCode())
+                .datasetPreview(problem.getDatasetPreview())
+                .datasetColumns(List.copyOf(problem.getDatasetColumns()))
+                .trainCsv(problem.getTrainCsv())
+                .testCsv(problem.getTestCsv())
+                .expectedJson(problem.getExpectedJson())
+                .metricName(problem.getMetricName())
+                .metricType(problem.getMetricType())
+                .threshold(problem.getThreshold())
+                .rewardPoints(problem.getRewardPoints())
+                .build();
     }
 }

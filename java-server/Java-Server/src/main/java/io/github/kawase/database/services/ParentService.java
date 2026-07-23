@@ -1,17 +1,21 @@
 package io.github.kawase.database.services;
 
+import io.github.kawase.database.entity.Child;
 import io.github.kawase.database.entity.Parent;
 import io.github.kawase.database.repository.ParentRepository;
+import io.github.kawase.security.ParentPasswordService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class ParentService {
     private final ParentRepository parentRepository;
+    private final ParentPasswordService parentPasswordService;
 
     @Transactional
     public Parent createParentAccount(final String email, final String passwordHash) {
@@ -21,20 +25,9 @@ public class ParentService {
 
         final Parent newParent = new Parent();
         newParent.setEmail(email);
-        newParent.setPasswordHash(passwordHash);
+        newParent.setPasswordHash(parentPasswordService.encode(passwordHash));
 
         return parentRepository.save(newParent);
-    }
-
-    public boolean loginParent(final String email, final String passwordHash) {
-        final Optional<Parent> parentOpt = parentRepository.findByEmail(email);
-
-        if (parentOpt.isPresent()) {
-            final Parent parent = parentOpt.get();
-            return parent.getPasswordHash().equals(passwordHash);
-        }
-
-        return false;
     }
 
     public Optional<Parent> findByEmail(final String email) {
@@ -54,12 +47,12 @@ public class ParentService {
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<io.github.kawase.database.entity.Child> getChildren(final Long parentId) {
+    public List<Child> getChildren(final Long parentId) {
         return parentRepository.findById(parentId)
                 .map(parent -> {
                     parent.getChildEntities().size(); // Force initialization
                     return parent.getChildEntities();
                 })
-                .orElse(java.util.List.of());
+                .orElse(List.of());
     }
 }

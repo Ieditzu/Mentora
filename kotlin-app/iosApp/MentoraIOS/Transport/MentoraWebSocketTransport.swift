@@ -74,18 +74,35 @@ final class MentoraWebSocketTransport: NSObject {
         }
     }
 
-    func send(_ data: Data) {
+    func send(
+        _ data: Data,
+        completion: ((Result<Void, Error>) -> Void)? = nil
+    ) {
         stateQueue.async { [weak self] in
             guard let self else { return }
             guard let socket = self.socket, self.state == .connected else {
-                self.reportError(MentoraWebSocketTransportError.notConnected)
+                let error = MentoraWebSocketTransportError.notConnected
+                self.reportError(error)
+                self.callbackQueue.async {
+                    completion?(.failure(error))
+                }
                 return
             }
 
             socket.send(.data(data)) { [weak self, weak socket] error in
-                guard let self, let error else { return }
+                guard let self else { return }
+                if error == nil {
+                    self.callbackQueue.async {
+                        completion?(.success(()))
+                    }
+                    return
+                }
+                guard let error else { return }
                 self.stateQueue.async {
                     self.reportError(error)
+                    self.callbackQueue.async {
+                        completion?(.failure(error))
+                    }
                     if let socket, self.socket === socket {
                         self.socket = nil
                     }

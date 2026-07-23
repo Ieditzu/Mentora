@@ -10,7 +10,7 @@ object PacketFactory {
     fun decode(payload: ByteArray): MentoraPacket {
         val cursor = ByteCursor.reader(payload)
         val packet = when (val id = cursor.readInt()) {
-            1 -> HandshakePacket(cursor.readString())
+            1 -> decodeHandshake(cursor)
             2 -> AuthPacket(cursor.readString(), cursor.readString())
             3 -> RegisterParentPacket(cursor.readString(), cursor.readString())
             4 -> AddChildPacket(cursor.readString())
@@ -41,9 +41,44 @@ object PacketFactory {
             69 -> FetchWeeklyReportPacket(cursor.readLong())
             70 -> WeeklyReportResponsePacket(cursor.readLong(), cursor.readString(), cursor.readString(), cursor.readString(), cursor.readString(), cursor.readBoolean())
             76 -> SetClientLanguagePacket(cursor.readString())
+            81 -> ParentSecondFactorRequiredPacket(cursor.readString(), cursor.readInt(), cursor.readBoolean())
+            82 -> VerifyParentSecondFactorPacket(cursor.readString(), cursor.readString())
+            83 -> BeginParentTotpEnrollmentPacket(cursor.readString())
+            84 -> ParentTotpEnrollmentDetailsPacket(cursor.readString(), cursor.readString(), cursor.readString())
+            85 -> ConfirmParentTotpEnrollmentPacket(cursor.readString(), cursor.readString())
+            86 -> ParentTotpEnrollmentResultPacket(
+                cursor.readBoolean(),
+                cursor.readString(),
+                List(cursor.readCollectionSize()) { cursor.readString() }
+            )
+            87 -> DisableParentTotpPacket(cursor.readString(), cursor.readString())
+            88 -> FetchParentSecurityStatusPacket()
+            89 -> ParentSecurityStatusPacket(cursor.readBoolean(), cursor.readInt())
+            90 -> ParentAuthSessionPacket(
+                cursor.readBoolean(),
+                cursor.readLong(),
+                cursor.readString(),
+                cursor.readString(),
+                cursor.readString(),
+                cursor.readLong()
+            )
+            91 -> ResumeParentSessionPacket(cursor.readString(), cursor.readString())
+            92 -> RevokeParentSessionPacket(cursor.readString(), cursor.readBoolean())
             else -> throw ProtocolException("Unknown packet ID: $id")
         }
         if (!cursor.isAtEnd) throw ProtocolException("Unexpected trailing data in packet ${packet.id}")
         return packet
+    }
+
+    private fun decodeHandshake(cursor: ByteCursor): HandshakePacket {
+        val clientFingerprint = cursor.readString()
+        if (cursor.isAtEnd) return HandshakePacket(clientFingerprint)
+
+        val protocolVersion = cursor.readInt().coerceAtLeast(1)
+        return HandshakePacket(
+            clientFingerprint,
+            protocolVersion,
+            if (cursor.isAtEnd) "" else cursor.readString()
+        )
     }
 }

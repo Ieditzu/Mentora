@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.kawase.utility.ContainerExecution;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
@@ -21,15 +22,17 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class MachineLearningExecutor {
+    private static final int MAX_RUNNER_OUTPUT_BYTES = 64 * 1024;
+    private static final int MAX_USER_OUTPUT_CHARS = 16 * 1024;
     private final ObjectMapper objectMapper;
     private final String containerCommand, image;
     private final int timeoutSeconds;
 
     public MachineLearningExecutor(
             final ObjectMapper objectMapper,
-            @org.springframework.beans.factory.annotation.Value("${mentora.ml.container-command:docker}") final String containerCommand,
-            @org.springframework.beans.factory.annotation.Value("${mentora.ml.image:mentora-ml-runner:1}") final String image,
-            @org.springframework.beans.factory.annotation.Value("${mentora.ml.timeout-seconds:15}") final int timeoutSeconds) {
+            @Value("${mentora.ml.container-command:docker}") final String containerCommand,
+            @Value("${mentora.ml.image:mentora-ml-runner:1}") final String image,
+            @Value("${mentora.ml.timeout-seconds:15}") final int timeoutSeconds) {
         this.objectMapper = objectMapper;
         this.containerCommand = containerCommand;
         this.image = image;
@@ -90,11 +93,14 @@ public class MachineLearningExecutor {
             }
 
             final String output = outputFuture.join(), processError = errorFuture.join();
-            final int markerIndex = output.lastIndexOf("MENTORA_RESULT=");
-            if (markerIndex < 0)
+            final String structuredResult = output.lines()
+                    .filter(line -> line.startsWith("MENTORA_RESULT="))
+                    .reduce((first, second) -> second)
+                    .orElse("");
+            if (structuredResult.isEmpty())
                 return new ExecutionResult(false, false, null, trimOutput(output), trimOutput(processError.isBlank() ? "The runner did not return a structured result." : processError));
 
-            final JsonNode payload = objectMapper.readTree(output.substring(markerIndex + "MENTORA_RESULT=".length()).trim());
+            final JsonNode payload = objectMapper.readTree(structuredResult.substring("MENTORA_RESULT=".length()).trim());
             return new ExecutionResult(
                     false,
                     payload.path("success").asBoolean(false),
@@ -134,8 +140,8 @@ public class MachineLearningExecutor {
             final byte[] buffer = new byte[4096];
             int count;
             while ((count = stream.read(buffer)) >= 0) {
-                if (stored.size() < 16_384)
-                    stored.write(buffer, 0, Math.min(count, 16_384 - stored.size()));
+                if (stored.size() < MAX_RUNNER_OUTPUT_BYTES)
+                    stored.write(buffer, 0, Math.min(count, MAX_RUNNER_OUTPUT_BYTES - stored.size()));
             }
             return stored.toString(StandardCharsets.UTF_8);
         } catch (IOException exception) {
@@ -156,7 +162,9 @@ public class MachineLearningExecutor {
 
     private String trimOutput(final String value) {
         if (value == null) return "";
-        return value.length() <= 16_384 ? value : value.substring(0, 16_384);
+        return value.length() <= MAX_USER_OUTPUT_CHARS
+                ? value
+                : value.substring(0, MAX_USER_OUTPUT_CHARS) + "\n...[truncated]";
     }
 
     private void deleteDirectory(final Path directory) {

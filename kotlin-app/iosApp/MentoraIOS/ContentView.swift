@@ -18,6 +18,8 @@ private struct AuthenticationView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var email = ""
     @State private var password = ""
+    @State private var secondFactorCode = ""
+    @State private var useRecoveryCode = false
     @State private var isRegistering = false
     @State private var glowOffset = false
 
@@ -69,15 +71,50 @@ private struct AuthenticationView: View {
                                 .font((compact ? Font.title3 : Font.title2).weight(.bold))
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                            VStack(spacing: compact ? 12 : 18) {
-                                authField(icon: "envelope.fill", isEmail: true) {
-                                    TextField("email_address", text: $email)
+                            if let challenge = store.secondFactorChallenge {
+                                VStack(spacing: compact ? 12 : 18) {
+                                    Text(
+                                        useRecoveryCode
+                                            ? "Enter one of your unused recovery codes."
+                                            : "Enter the six-digit authenticator code. It expires in \(challenge.expiresInSeconds) seconds."
+                                    )
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    authField(icon: "lock.fill", isEmail: false) {
+                                        TextField(
+                                            useRecoveryCode ? "Recovery code" : "Authenticator code",
+                                            text: $secondFactorCode
+                                        )
+                                        .keyboardType(useRecoveryCode ? .asciiCapable : .numberPad)
+                                        .textContentType(.oneTimeCode)
+                                        .onChange(of: secondFactorCode) { value in
+                                            secondFactorCode = useRecoveryCode
+                                                ? String(value.prefix(64))
+                                                : String(value.filter(\.isNumber).prefix(6))
+                                        }
+                                    }
+                                    if challenge.recoveryAllowed {
+                                        Button(
+                                            useRecoveryCode ? "Use authenticator code" : "Use recovery code"
+                                        ) {
+                                            useRecoveryCode.toggle()
+                                            secondFactorCode = ""
+                                        }
+                                        .font(.subheadline.weight(.semibold))
+                                    }
                                 }
-                                authField(icon: "lock.fill", isEmail: false) {
-                                    SecureField("password", text: $password)
+                                .padding(.top, compact ? 18 : 28)
+                            } else {
+                                VStack(spacing: compact ? 12 : 18) {
+                                    authField(icon: "envelope.fill", isEmail: true) {
+                                        TextField("email_address", text: $email)
+                                    }
+                                    authField(icon: "lock.fill", isEmail: false) {
+                                        SecureField("password", text: $password)
+                                    }
                                 }
+                                .padding(.top, compact ? 18 : 28)
                             }
-                            .padding(.top, compact ? 18 : 28)
 
                             Button(action: submit) {
                                 HStack(spacing: 10) {
@@ -94,12 +131,27 @@ private struct AuthenticationView: View {
                             .background(MentoraTheme.accent, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .shadow(color: MentoraTheme.accent.opacity(0.38), radius: 12, y: 7)
                             .padding(.top, compact ? 22 : 34)
-                            .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty || isSubmitting)
-                            .opacity(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty ? 0.55 : 1)
+                            .disabled(
+                                !store.isConnected ||
+                                isSubmitting ||
+                                (store.secondFactorChallenge == nil
+                                    ? email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty
+                                    : secondFactorCode.isEmpty || (!useRecoveryCode && secondFactorCode.count != 6))
+                            )
 
-                            Button(isRegistering ? "I already have an account" : "Create a parent account") {
+                            Button(
+                                store.secondFactorChallenge == nil
+                                    ? (isRegistering ? "I already have an account" : "Create a parent account")
+                                    : "Cancel"
+                            ) {
                                 guard !isSubmitting else { return }
-                                isRegistering.toggle()
+                                if store.secondFactorChallenge != nil {
+                                    secondFactorCode = ""
+                                    useRecoveryCode = false
+                                    store.cancelSecondFactor()
+                                } else {
+                                    isRegistering.toggle()
+                                }
                             }
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(MentoraTheme.accent)
@@ -137,7 +189,13 @@ private struct AuthenticationView: View {
         case .waitingForConnection: return "Connecting…"
         case .signingIn: return "Signing in…"
         case .creatingAccount: return "Creating account…"
-        case .idle: return isRegistering ? "Register" : "Login"
+        case .resumingSession: return "Restoring session…"
+        case .awaitingSecondFactor: return "Verify"
+        case .verifyingSecondFactor: return "Verifying…"
+        case .idle:
+            return store.secondFactorChallenge == nil
+                ? (isRegistering ? "Register" : "Login")
+                : "Verify"
         }
     }
 
@@ -173,7 +231,9 @@ private struct AuthenticationView: View {
     }
 
     private func submit() {
-        if isRegistering {
+        if store.secondFactorChallenge != nil {
+            store.submitSecondFactor(secondFactorCode)
+        } else if isRegistering {
             appModel.register(email: email, password: password)
         } else {
             appModel.login(email: email, password: password)

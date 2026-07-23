@@ -10,6 +10,14 @@
     <string name="no_account_register">Don\'t have an account? Register</string>
     <string name="already_account_login">Already have an account? Log in</string>
     <string name="connecting">Connecting…</string>
+    <string name="two_factor_verification" translatable="false">Two-factor verification</string>
+    <string name="enter_authenticator_code" translatable="false">Enter the six-digit code from your authenticator app. This challenge expires in %1$d seconds.</string>
+    <string name="enter_recovery_code" translatable="false">Enter one of your unused recovery codes.</string>
+    <string name="authenticator_code" translatable="false">Authenticator code</string>
+    <string name="recovery_code" translatable="false">Recovery code</string>
+    <string name="use_recovery_code" translatable="false">Use a recovery code</string>
+    <string name="use_authenticator_code" translatable="false">Use an authenticator code</string>
+    <string name="verify" translatable="false">Verify</string>
     <string name="nav_home">Home</string>
     <string name="nav_history">History</string>
     <string name="nav_goals">Goals</string>
@@ -23,6 +31,21 @@
     <string name="language_english">English</string>
     <string name="language_romanian">Română</string>
     <string name="parent_account">Parent account</string>
+    <string name="security" translatable="false">Security</string>
+    <string name="two_factor_authentication" translatable="false">Two-factor authentication</string>
+    <string name="two_factor_description" translatable="false">Require an authenticator or recovery code after your password.</string>
+    <string name="enabled" translatable="false">Enabled</string>
+    <string name="disabled" translatable="false">Disabled</string>
+    <string name="enable_two_factor" translatable="false">Enable two-factor authentication</string>
+    <string name="disable_two_factor" translatable="false">Disable two-factor authentication</string>
+    <string name="current_password" translatable="false">Current password</string>
+    <string name="continue_label" translatable="false">Continue</string>
+    <string name="scan_authenticator_qr" translatable="false">Scan this QR code with your authenticator app, then enter its six-digit code.</string>
+    <string name="manual_setup_key" translatable="false">Manual setup key</string>
+    <string name="recovery_codes_title" translatable="false">Save your recovery codes</string>
+    <string name="recovery_codes_description" translatable="false">Each code can be used once. Store them somewhere safe; they will not be shown again.</string>
+    <string name="recovery_codes_remaining" translatable="false">%1$d recovery codes remaining</string>
+    <string name="done" translatable="false">Done</string>
     <string name="app_theme">App theme</string>
     <string name="dark_mode">Dark mode</string>
     <string name="theme_color">Theme color</string>

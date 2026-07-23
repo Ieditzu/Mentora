@@ -72,7 +72,7 @@ PERSOANA 1: Ideea centrală este ca elevul să fie activ. El formulează soluți
 
 <div class="grid-4" style="margin-top:1.15rem">
   <div class="card violet"><span class="icon icon-word">01 / PLAY</span><h3>Joc Unity</h3><p>Explorare 3D, coding pads, quiz-uri, Code Quest, CodeWorld, Rudolf și multiplayer LAN.</p></div>
-  <div class="card green"><span class="icon icon-word">02 / TRACK</span><h3>Aplicație parentală</h3><p>QR, progres, obiective, profil AI, raport săptămânal și sesiune live.</p></div>
+  <div class="card green"><span class="icon icon-word">02 / TRACK</span><h3>Aplicație parentală</h3><p>QR, progres, obiective, profil AI, sesiune live și autentificare 2FA TOTP.</p></div>
   <div class="card cyan"><span class="icon icon-word">03 / CREATE</span><h3>Creator Web</h3><p>Crearea, editarea și publicarea cursurilor și quiz-urilor pentru Community Island.</p></div>
   <div class="card backend"><span class="icon icon-word">04 / CONNECT</span><h3>Backend central</h3><p>Autentificare, persistență, AI, evaluare AI/ML și execuție izolată în containere Docker.</p></div>
 </div>
@@ -341,18 +341,18 @@ PERSOANA 2: Aceste activități arată diversitatea conținutului. Avem evaluare
 <div class="speaker-tag">Persoana 1</div>
 <div class="kicker">Aplicația parentală · Android și iOS</div>
 
-# Părintele vede progresul și poate interveni constructiv
+# Părintele vede progresul, cu un cont protejat prin 2FA
 
-<div style="display:flex;gap:1.25rem;align-items:center;justify-content:center;margin-top:.55rem">
+<div class="mobile-security-showcase" style="display:flex;gap:1.25rem;align-items:center;justify-content:center;margin-top:.55rem">
   <div><img class="phone-shot" src="./public/appMyKids.png" /><div class="image-caption">Android · copii și conectare QR</div></div>
   <div><img class="phone-shot" src="./public/iphoneMyKids.png" /><div class="image-caption">iPhone · obiective, sesiune live și provocări</div></div>
   <div><img class="phone-shot" src="./public/appSkillRadar.png" /><div class="image-caption">Profil AI și radar de competențe</div></div>
 </div>
 
-<div class="mobile-feature-bar"><span>Conectare QR</span><span>Profil AI</span><span>Obiective</span><span>Sesiune live</span><span>Rapoarte</span></div>
+<div class="mobile-feature-bar mobile-security-features"><span>Conectare QR</span><span>Profil AI</span><span>Obiective</span><span>Sesiune live</span><span>2FA TOTP</span><span>Coduri de recuperare</span></div>
 
 <!--
-PERSOANA 1: Aici se vede explicit suportul pe Android și iOS. Părintele conectează copilul prin QR, consultă istoricul, profilurile AI și rapoartele, urmărește sesiunea live și poate trimite provocări în joc.
+PERSOANA 1: Aici se vede explicit suportul pe Android și iOS. Părintele conectează copilul prin QR, consultă istoricul și profilurile AI, urmărește sesiunea live și poate trimite provocări în joc. Contul poate fi protejat prin autentificare în doi pași: după parolă, aplicația cere un cod TOTP dintr-un authenticator compatibil RFC 6238 sau un cod de recuperare de unică folosință.
 -->
 
 ---
@@ -577,7 +577,7 @@ PERSOANA 1: Eleganța nu înseamnă cod puțin, ci cod împărțit corect. Fieca
 <div class="speaker-tag">Persoana 2</div>
 <div class="kicker">II.5 · Securitate</div>
 
-# Cod real, executat într-un mediu controlat
+# Cod și identitate, protejate la fiecare frontieră
 
 <div class="grid-2 security-grid">
   <div class="card red"><h2>Protecție la execuție</h2>
@@ -589,11 +589,23 @@ PERSOANA 1: Eleganța nu înseamnă cod puțin, ci cod împărțit corect. Fieca
   --memory 256m/512m
   --user 65532:65532</code></pre>
 <p>Un container nou pentru fiecare rulare; sursele sunt montate read-only, iar <code>/tmp</code> este temporar.</p></div>
-  <div class="card cyan"><h2>Protecție la acces</h2><ul><li>Pachete WebSocket criptate AES/CBC cu seed dinamic și validare de lungime.</li><li>Tokenuri Bearer cu expirare pentru Creator-ul Web.</li><li>Verificarea proprietarului cursurilor și a relației părinte–copil.</li><li>Cheile AI și configurațiile sensibile sunt separate de cod.</li></ul></div>
+  <div class="card cyan identity-card">
+    <div class="security-card-heading"><span class="icon icon-word">2FA / TOTP</span><h2>Identitate și sesiuni</h2></div>
+    <div class="auth-flow">
+      <span><b>01</b>Parolă</span><i>›</i><span><b>02</b>Challenge</span><i>›</i><span><b>03</b>TOTP / recovery</span><i>›</i><span><b>04</b>Sesiune rotită</span>
+    </div>
+    <ul class="security-points">
+      <li>Coduri TOTP conform <strong>RFC 6238</strong> și coduri de recuperare de unică folosință.</li>
+      <li>Secretul TOTP este criptat pe server; tokenurile sunt criptate în <strong>Android Keystore</strong> și <strong>iOS Keychain</strong>.</li>
+      <li>Roluri explicite și verificări de ownership înainte de handler-ele de business.</li>
+      <li>Pachetele 41/43/44 cer părinte autentificat; voice/STT cer copil autentificat.</li>
+      <li>Cadrele binare au limite, lungimi validate și decodare UTF-8 strictă.</li>
+    </ul>
+  </div>
 </div>
 
 <!--
-PERSOANA 2: Securitatea este importantă deoarece elevul rulează cod. Python, C++, CodeWorld și problemele AI/ML pornesc fiecare într-un container Docker efemer, fără rețea și fără capabilități Linux. Containerul are filesystem read-only, utilizator fără privilegii, CPU, memorie, procese și fișiere limitate; la timeout este eliminat forțat. În plus, accesul la date este verificat prin autentificare și ownership.
+PERSOANA 2: Securitatea are două fronturi. Codul copilului rulează în containere efemere, fără rețea, capabilități Linux sau acces de scriere la workspace, cu limite pentru CPU, memorie, procese, output și timp. Pentru contul părintelui, parola deschide un challenge, iar autentificarea se finalizează cu TOTP sau cu un cod de recuperare de unică folosință. Secretul TOTP este criptat pe server, tokenurile de sesiune sunt criptate în Keystore sau Keychain și sunt rotite după operații sensibile. La nivel de protocol, rolurile sunt verificate înaintea handlerelor, iar pachetele de dezvoltare și serviciile voice/STT nu mai sunt disponibile înainte de autentificare.
 -->
 
 ---
@@ -601,21 +613,24 @@ PERSOANA 2: Securitatea este importantă deoarece elevul rulează cod. Python, C
 <div class="speaker-tag">Persoana 1</div>
 <div class="kicker">II.2 · II.4 · Testare și maturitate</div>
 
-# Verificare continuă și proiect pregătit pentru demonstrare
+# Testele de integrare verifică avantajul real al Mentora
 
-<div class="grid-3 test-grid">
-  <div class="card violet"><span class="icon icon-word">01 / TEST</span><h3>Testare funcțională</h3><p>Autentificare, QR, soluții corecte și incorecte, evaluare AI/ML, indicii AI, cursuri, quiz, obiective și multiplayer.</p></div>
-  <div class="card cyan"><span class="icon icon-word">02 / INTEGRATE</span><h3>Integrare</h3><p>Teste pentru serviciul și pachetele AI/ML, fluxuri server–Unity–mobil–web și builduri verificate înaintea demonstrației.</p></div>
-  <div class="card green"><span class="icon icon-word">03 / SHIP</span><h3>Maturitate</h3><p>Fluxuri complete pentru conturi, copii, conținut, AI, execuție de cod, rapoarte, multiplayer și localizare.</p></div>
+<div class="grid-3 test-metrics">
+  <div class="metric"><span class="value">26/26</span><span class="label">teste Unity EditMode trecute</span></div>
+  <div class="metric" style="border-color:var(--mentora-cyan)"><span class="value">24</span><span class="label">fixture-uri binare canonice</span></div>
+  <div class="metric" style="border-color:var(--mentora-green)"><span class="value">4</span><span class="label">consumatori: Java · C# · Kotlin · Swift</span></div>
 </div>
 
-<div class="grid-2" style="margin-top:1rem">
-  <div class="card orange"><h3>Git</h3><p>Mai multe repository-uri, cu peste <strong>500 de commit-uri cumulate</strong>, colaborare pe componente și revenire controlată la versiuni anterioare.</p></div>
-  <div class="card"><h3>Distribuire</h3><p>Configurații separate pe medii, instrucțiuni pentru backend, web, Android/iOS și Unity, plus cerințe de sistem documentate.</p></div>
+<div class="grid-3 integration-grid">
+  <div class="card violet"><span class="icon icon-word">01 / JOURNEY</span><h3>Golden path pe PostgreSQL</h3><p>Creatorul publică o problemă ML, copilul primește catalogul fără date private, runnerul ascuns evaluează, iar părintele vede feedbackul și progresul persistent.</p></div>
+  <div class="card cyan"><span class="icon icon-word">02 / EVALUATE</span><h3>Evaluator + teste ascunse</h3><p>Python și C++ corect/greșit, compilare, runtime, evaluare multi-case, scor determinist și persistența problemelor AI/ML.</p></div>
+  <div class="card green"><span class="icon icon-word">03 / ATTACK</span><h3>Docker adversarial</h3><p>Rețea, host și workspace blocate; fork bomb limitat; buclă oprită; output trunchiat; containerul dispare după rulare.</p></div>
 </div>
+
+<div class="ci-proof"><span class="icon icon-word">CI / VERIFY</span><strong>GitHub Actions:</strong><span>runner images · Gradle + PostgreSQL · Android/KMP · iOS Simulator · Unity · rapoarte JUnit și JaCoCo</span></div>
 
 <!--
-PERSOANA 1: Testarea urmărește traseul complet al utilizatorului și integrarea dintre componente. Proiectul este matur deoarece nu avem doar prototipuri de ecrane: avem fluxuri complete de la autentificare până la progres și raportare.
+PERSOANA 1: Am investit în teste de integrare care verifică granițele dintre componente, nu doar metode izolate. Golden path-ul backend folosește PostgreSQL Testcontainers și runnerul Docker real: publicare autentificată, catalog public fără datele ascunse, evaluare, feedback, recompensă idempotentă și progres vizibil părintelui. Evaluatorul acoperă separat soluții Python și C++, scor determinist și erori, iar suita adversarială demonstrează limitele containerelor. Corpusul de 24 de fixture-uri este validat integral de Java și Unity, de codecurile Kotlin/Android pentru pachetele implementate și de bridge-ul iOS pentru mesajele server suportate. Unity are 26 din 26 teste EditMode trecute, Android și KMP rulează teste host, iar iOS este verificat în CI pe simulator. Pipeline-ul construiește imaginile runner și publică rezultate JUnit și acoperirea JaCoCo.
 -->
 
 ---

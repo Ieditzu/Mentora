@@ -35,6 +35,12 @@ public class ChildMachineLearningProgress {
     @Column(name = "best_score", nullable = false)
     private Double bestScore;
 
+    @Column(name = "last_score")
+    private Double lastScore;
+
+    @Column(name = "last_feedback", columnDefinition = "TEXT")
+    private String lastFeedback;
+
     @Column(name = "is_completed", nullable = false)
     private Boolean completed;
 

@@ -37,6 +37,9 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets.getByName("test") {
+        resources.directories.add(rootProject.file("../test-fixtures/protocol/v1").absolutePath)
+    }
 }
 
 dependencies {

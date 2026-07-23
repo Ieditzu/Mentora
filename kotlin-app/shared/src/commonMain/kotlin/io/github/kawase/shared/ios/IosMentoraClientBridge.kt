@@ -13,8 +13,11 @@ import io.github.kawase.shared.protocol.AiResponsePacket
 import io.github.kawase.shared.protocol.AskAiPacket
 import io.github.kawase.shared.protocol.AuthPacket
 import io.github.kawase.shared.protocol.AuthResponsePacket
+import io.github.kawase.shared.protocol.BeginParentTotpEnrollmentPacket
 import io.github.kawase.shared.protocol.ClaimQRLoginPacket
 import io.github.kawase.shared.protocol.CompleteTaskPacket
+import io.github.kawase.shared.protocol.ConfirmParentTotpEnrollmentPacket
+import io.github.kawase.shared.protocol.DisableParentTotpPacket
 import io.github.kawase.shared.protocol.FetchChildStatsByParentPacket
 import io.github.kawase.shared.protocol.FetchChildStatsResponsePacket
 import io.github.kawase.shared.protocol.FetchChildrenPacket
@@ -23,6 +26,7 @@ import io.github.kawase.shared.protocol.FetchCompletedTasksPacket
 import io.github.kawase.shared.protocol.FetchCompletedTasksResponsePacket
 import io.github.kawase.shared.protocol.FetchGoalsPacket
 import io.github.kawase.shared.protocol.FetchGoalsResponsePacket
+import io.github.kawase.shared.protocol.FetchParentSecurityStatusPacket
 import io.github.kawase.shared.protocol.FetchTasksPacket
 import io.github.kawase.shared.protocol.FetchTasksResponsePacket
 import io.github.kawase.shared.protocol.FetchWeeklyReportPacket
@@ -33,12 +37,20 @@ import io.github.kawase.shared.protocol.PacketFactory
 import io.github.kawase.shared.protocol.PacketFrameCodec
 import io.github.kawase.shared.protocol.ParentChallengeCompletedPacket
 import io.github.kawase.shared.protocol.ParentChallengePacket
+import io.github.kawase.shared.protocol.ParentAuthSessionPacket
+import io.github.kawase.shared.protocol.ParentSecondFactorRequiredPacket
+import io.github.kawase.shared.protocol.ParentSecurityStatusPacket
+import io.github.kawase.shared.protocol.ParentTotpEnrollmentDetailsPacket
+import io.github.kawase.shared.protocol.ParentTotpEnrollmentResultPacket
 import io.github.kawase.shared.protocol.RegisterParentPacket
 import io.github.kawase.shared.protocol.RemoveChildPacket
+import io.github.kawase.shared.protocol.ResumeParentSessionPacket
+import io.github.kawase.shared.protocol.RevokeParentSessionPacket
 import io.github.kawase.shared.protocol.SendParentChallengePacket
 import io.github.kawase.shared.protocol.SetClientLanguagePacket
 import io.github.kawase.shared.protocol.SubscribeLiveSessionPacket
 import io.github.kawase.shared.protocol.UpdatePfpPacket
+import io.github.kawase.shared.protocol.VerifyParentSecondFactorPacket
 import io.github.kawase.shared.protocol.WeeklyReportResponsePacket
 
 /** A Swift-exportable, immutable view of all state received from the parent server. */
@@ -54,7 +66,9 @@ data class IosMentoraSnapshot(
     val profiles: List<IosChildProfile> = emptyList(),
     val liveSessions: List<LiveSessionState> = emptyList(),
     val weeklyReports: List<WeeklyReport> = emptyList(),
-    val lastAiResponse: String = ""
+    val lastAiResponse: String = "",
+    val twoFactorEnabled: Boolean = false,
+    val recoveryCodesRemaining: Int = 0
 )
 
 /** The server returns profile analytics as JSON; Swift owns presentation and parsing of this payload. */
@@ -74,7 +88,14 @@ data class IosMentoraEvent(
     val success: Boolean = true,
     val message: String = "",
     val requestPacketId: Int = -1,
-    val snapshot: IosMentoraSnapshot
+    val snapshot: IosMentoraSnapshot,
+    val challengeId: String = "",
+    val expiresInSeconds: Int = 0,
+    val recoveryAllowed: Boolean = false,
+    val enrollmentId: String = "",
+    val secretBase32: String = "",
+    val otpAuthUri: String = "",
+    val recoveryCodes: List<String> = emptyList()
 )
 
 /**
@@ -89,20 +110,37 @@ class IosMentoraClientBridge(languageTag: String = "en") {
     private val liveSessionsByChildId = linkedMapOf<Long, LiveSessionState>()
     private val reportsByChildId = linkedMapOf<Long, WeeklyReport>()
     private var pendingProfileChildId: Long? = null
+    private var pendingSessionToken = ""
+    private var pendingSessionExpiry = 0L
 
     fun snapshot(): IosMentoraSnapshot = current
 
     fun handshake(clientFingerprint: String = "ios_client"): ByteArray = frame(HandshakePacket(clientFingerprint))
+    fun handshakeV2(clientFingerprint: String, deviceId: String): ByteArray {
+        return frame(HandshakePacket(clientFingerprint, 2, deviceId))
+    }
 
     fun authenticate(email: String, password: String): ByteArray {
-        return authenticateHashed(MentoraSha256.hex(email), MentoraSha256.hex(password))
+        return authenticateHashed(
+            MentoraSha256.hex(email.trim().lowercase()),
+            MentoraSha256.hex(password)
+        )
     }
 
     fun authenticateHashed(emailHash: String, passwordHash: String): ByteArray = frame(AuthPacket(emailHash, passwordHash))
 
+    fun sha256(value: String): String = MentoraSha256.hex(value)
+
     /** Matches Android's deployed registration behavior: the server receives hashed email and password. */
     fun register(email: String, password: String): ByteArray {
-        return frame(RegisterParentPacket(MentoraSha256.hex(email), MentoraSha256.hex(password)))
+        return registerHashed(
+            MentoraSha256.hex(email.trim().lowercase()),
+            MentoraSha256.hex(password)
+        )
+    }
+
+    fun registerHashed(emailHash: String, passwordHash: String): ByteArray {
+        return frame(RegisterParentPacket(emailHash, passwordHash))
     }
 
     fun setLanguage(languageTag: String): ByteArray {
@@ -131,6 +169,61 @@ class IosMentoraClientBridge(languageTag: String = "en") {
     fun claimQrLogin(token: String, childId: Long): ByteArray = frame(ClaimQRLoginPacket(token, childId))
     fun updateProfilePicture(childId: Long, base64Picture: String): ByteArray = frame(UpdatePfpPacket(childId, base64Picture))
     fun askAi(question: String, context: String): ByteArray = frame(AskAiPacket(question, context))
+    fun verifySecondFactor(challengeId: String, code: String): ByteArray {
+        return frame(VerifyParentSecondFactorPacket(challengeId, code.trim()))
+    }
+    fun beginTotpEnrollment(password: String): ByteArray {
+        return frame(BeginParentTotpEnrollmentPacket(MentoraSha256.hex(password)))
+    }
+    fun confirmTotpEnrollment(enrollmentId: String, code: String): ByteArray {
+        return frame(ConfirmParentTotpEnrollmentPacket(enrollmentId, code.trim()))
+    }
+    fun disableTotp(password: String, code: String): ByteArray {
+        return frame(DisableParentTotpPacket(MentoraSha256.hex(password), code.trim()))
+    }
+    fun fetchParentSecurityStatus(): ByteArray = frame(FetchParentSecurityStatusPacket())
+    fun resumeParentSession(sessionToken: String, deviceId: String): ByteArray {
+        return frame(ResumeParentSessionPacket(sessionToken, deviceId))
+    }
+    fun revokeParentSession(sessionToken: String, revokeAll: Boolean): ByteArray {
+        return frame(RevokeParentSessionPacket(sessionToken, revokeAll))
+    }
+
+    fun takeSessionToken(): String {
+        val sessionToken = pendingSessionToken
+        pendingSessionToken = ""
+        return sessionToken
+    }
+
+    fun takeSessionExpiryEpochSeconds(): Long {
+        val sessionExpiry = pendingSessionExpiry
+        pendingSessionExpiry = 0L
+        return sessionExpiry
+    }
+
+    fun clearParentSession() {
+        pendingSessionToken = ""
+        pendingSessionExpiry = 0L
+        current = current.copy(
+            isLoggedIn = false,
+            parentId = -1L,
+            parentProfilePicture = "",
+            children = emptyList(),
+            tasks = emptyList(),
+            goals = emptyList(),
+            completedTasks = emptyList(),
+            profiles = emptyList(),
+            liveSessions = emptyList(),
+            weeklyReports = emptyList(),
+            lastAiResponse = "",
+            twoFactorEnabled = false,
+            recoveryCodesRemaining = 0
+        )
+        profilesByChildId.clear()
+        liveSessionsByChildId.clear()
+        reportsByChildId.clear()
+        pendingProfileChildId = null
+    }
 
     /** Commands normally issued immediately after a successful authentication response. */
     fun initialDashboardRequests(): List<ByteArray> = listOf(fetchChildren(), fetchTasks())
@@ -144,6 +237,13 @@ class IosMentoraClientBridge(languageTag: String = "en") {
         var success = true
         var message = ""
         var requestPacketId = -1
+        var challengeId = ""
+        var expiresInSeconds = 0
+        var recoveryAllowed = false
+        var enrollmentId = ""
+        var secretBase32 = ""
+        var otpAuthUri = ""
+        var recoveryCodes = emptyList<String>()
         when (packet) {
             is AuthResponsePacket -> {
                 type = "authentication"
@@ -162,6 +262,59 @@ class IosMentoraClientBridge(languageTag: String = "en") {
                 success = packet.success
                 message = packet.message
                 requestPacketId = packet.requestPacketId
+                if (!packet.success && packet.requestPacketId == 91) {
+                    clearParentSession()
+                }
+                if (packet.success && packet.requestPacketId == 87) {
+                    current = current.copy(twoFactorEnabled = false, recoveryCodesRemaining = 0)
+                }
+            }
+            is ParentSecondFactorRequiredPacket -> {
+                type = "secondFactorRequired"
+                challengeId = packet.challengeId
+                expiresInSeconds = packet.expiresInSeconds
+                recoveryAllowed = packet.recoveryAllowed
+            }
+            is ParentAuthSessionPacket -> {
+                type = "parentSession"
+                success = packet.success
+                message = packet.message
+                if (packet.success) {
+                    pendingSessionToken = packet.sessionToken
+                    pendingSessionExpiry = packet.expiresAtEpochSeconds
+                    current = current.copy(
+                        isLoggedIn = true,
+                        parentId = packet.parentId,
+                        parentProfilePicture = packet.parentPfp
+                    )
+                } else {
+                    clearParentSession()
+                }
+            }
+            is ParentTotpEnrollmentDetailsPacket -> {
+                type = "totpEnrollmentDetails"
+                enrollmentId = packet.enrollmentId
+                secretBase32 = packet.secretBase32
+                otpAuthUri = packet.otpAuthUri
+            }
+            is ParentTotpEnrollmentResultPacket -> {
+                type = "totpEnrollmentResult"
+                success = packet.success
+                message = packet.message
+                recoveryCodes = packet.recoveryCodes
+                if (packet.success) {
+                    current = current.copy(
+                        twoFactorEnabled = true,
+                        recoveryCodesRemaining = packet.recoveryCodes.size
+                    )
+                }
+            }
+            is ParentSecurityStatusPacket -> {
+                type = "parentSecurityStatus"
+                current = current.copy(
+                    twoFactorEnabled = packet.totpEnabled,
+                    recoveryCodesRemaining = packet.recoveryCodesRemaining
+                )
             }
             is FetchChildrenResponsePacket -> {
                 type = "children"
@@ -212,6 +365,19 @@ class IosMentoraClientBridge(languageTag: String = "en") {
             }
             else -> type = "packet_${packet.id}"
         }
-        return IosMentoraEvent(type, success, message, requestPacketId, current)
+        return IosMentoraEvent(
+            type,
+            success,
+            message,
+            requestPacketId,
+            current,
+            challengeId,
+            expiresInSeconds,
+            recoveryAllowed,
+            enrollmentId,
+            secretBase32,
+            otpAuthUri,
+            recoveryCodes
+        )
     }
 }

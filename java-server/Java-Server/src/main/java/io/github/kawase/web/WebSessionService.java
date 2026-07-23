@@ -1,31 +1,19 @@
 package io.github.kawase.web;
 
+import io.github.kawase.security.ParentSessionService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 @Service
+@RequiredArgsConstructor
 public class WebSessionService {
-    private static final long SESSION_TTL_SECONDS = 7L * 24L * 60L * 60L;
-    private final Map<String, SessionRecord> sessions = new ConcurrentHashMap<>();
+    private final ParentSessionService parentSessionService;
 
     public String createSession(final Long parentId) {
-        String token = UUID.randomUUID().toString();
-        sessions.put(token, new SessionRecord(parentId, Instant.now().plusSeconds(SESSION_TTL_SECONDS)));
-        return token;
+        return parentSessionService.issue(parentId, "web").rawToken();
     }
 
     public Long requireParentId(final String token) {
-        SessionRecord session = sessions.get(token);
-        if (session == null || session.expiresAt().isBefore(Instant.now())) {
-            sessions.remove(token);
-            throw new RuntimeException("Unauthorized");
-        }
-        return session.parentId();
+        return parentSessionService.validate(token).orElseThrow(() -> new RuntimeException("Unauthorized"));
     }
-
-    private record SessionRecord(Long parentId, Instant expiresAt) {}
 }

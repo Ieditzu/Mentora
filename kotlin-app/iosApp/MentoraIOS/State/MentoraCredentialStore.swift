@@ -1,47 +1,76 @@
 import Foundation
 import Security
 
-struct MentoraSavedCredentials: Equatable {
-    let email: String
-    let password: String
-}
-
 enum MentoraCredentialStore {
-    private static let account = "saved-login"
     private static let service = Bundle.main.bundleIdentifier ?? "io.github.kawase.mentora.ios"
+    private static let sessionAccount = "parent-session"
+    private static let deviceAccount = "device-id"
+    private static let legacyCredentialAccount = "saved-login"
 
-    static func save(email: String, password: String) throws {
-        guard !email.isEmpty, !password.isEmpty else {
-            throw CredentialStoreError.emptyCredentials
+    static func deviceID() throws -> String {
+        try clearLegacyCredentials()
+        if let data = try loadData(account: deviceAccount),
+           let deviceID = String(data: data, encoding: .utf8),
+           !deviceID.isEmpty {
+            return deviceID
         }
 
-        let credentials = try JSONEncoder().encode(
-            StoredCredentials(email: email, password: password)
-        )
-        let query = itemQuery()
-        let attributes: [CFString: Any] = [
-            kSecValueData: credentials,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
+        let deviceID = UUID().uuidString
+        try saveData(Data(deviceID.utf8), account: deviceAccount)
+        return deviceID
+    }
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        switch updateStatus {
-        case errSecSuccess:
-            return
-        case errSecItemNotFound:
-            var addQuery = query
-            attributes.forEach { addQuery[$0.key] = $0.value }
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw CredentialStoreError.keychainStatus(addStatus)
-            }
-        default:
-            throw CredentialStoreError.keychainStatus(updateStatus)
+    static func saveSessionToken(_ sessionToken: String) throws {
+        guard !sessionToken.isEmpty else {
+            throw CredentialStoreError.emptySessionToken
+        }
+        try saveData(Data(sessionToken.utf8), account: sessionAccount)
+    }
+
+    static func loadSessionToken() throws -> String? {
+        guard let data = try loadData(account: sessionAccount) else { return nil }
+        guard let sessionToken = String(data: data, encoding: .utf8), !sessionToken.isEmpty else {
+            throw CredentialStoreError.invalidStoredValue
+        }
+        return sessionToken
+    }
+
+    static func clearSessionToken() throws {
+        let status = SecItemDelete(itemQuery(account: sessionAccount) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw CredentialStoreError.keychainStatus(status)
         }
     }
 
-    static func load() throws -> MentoraSavedCredentials? {
-        var query = itemQuery()
+    private static func clearLegacyCredentials() throws {
+        let status = SecItemDelete(itemQuery(account: legacyCredentialAccount) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw CredentialStoreError.keychainStatus(status)
+        }
+    }
+
+    private static func saveData(_ data: Data, account: String) throws {
+        let query = itemQuery(account: account)
+        let attributes: [CFString: Any] = [
+            kSecValueData: data,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw CredentialStoreError.keychainStatus(updateStatus)
+        }
+
+        var addQuery = query
+        attributes.forEach { addQuery[$0.key] = $0.value }
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw CredentialStoreError.keychainStatus(addStatus)
+        }
+    }
+
+    private static func loadData(account: String) throws -> Data? {
+        var query = itemQuery(account: account)
         query[kSecReturnData] = true
         query[kSecMatchLimit] = kSecMatchLimitOne
 
@@ -52,8 +81,7 @@ enum MentoraCredentialStore {
             guard let data = result as? Data else {
                 throw CredentialStoreError.invalidStoredValue
             }
-            let credentials = try JSONDecoder().decode(StoredCredentials.self, from: data)
-            return MentoraSavedCredentials(email: credentials.email, password: credentials.password)
+            return data
         case errSecItemNotFound:
             return nil
         default:
@@ -61,14 +89,7 @@ enum MentoraCredentialStore {
         }
     }
 
-    static func clear() throws {
-        let status = SecItemDelete(itemQuery() as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw CredentialStoreError.keychainStatus(status)
-        }
-    }
-
-    private static func itemQuery() -> [CFString: Any] {
+    private static func itemQuery(account: String) -> [CFString: Any] {
         [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -78,22 +99,17 @@ enum MentoraCredentialStore {
     }
 }
 
-private struct StoredCredentials: Codable {
-    let email: String
-    let password: String
-}
-
 enum CredentialStoreError: LocalizedError {
-    case emptyCredentials
+    case emptySessionToken
     case invalidStoredValue
     case keychainStatus(OSStatus)
 
     var errorDescription: String? {
         switch self {
-        case .emptyCredentials:
-            return "Email and password are required."
+        case .emptySessionToken:
+            return "The parent session token is empty."
         case .invalidStoredValue:
-            return "Saved login information is invalid."
+            return "Saved session information is invalid."
         case .keychainStatus(let status):
             let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown Keychain error"
             return "Keychain error (\(status)): \(message)"

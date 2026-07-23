@@ -6,5 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface CompletedTaskRepository extends JpaRepository<CompletedTask, Long> {
-    List<CompletedTask> findByChildIdOrderByCompletedAtDesc(Long childId);
+    List<CompletedTask> findByChildIdOrderByCompletedAtDesc(final Long childId);
+    boolean existsByChildIdAndTaskId(final Long childId, final Long taskId);
 }

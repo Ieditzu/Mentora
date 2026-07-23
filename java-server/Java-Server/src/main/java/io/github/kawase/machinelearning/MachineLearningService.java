@@ -95,6 +95,7 @@ public class MachineLearningService {
 
         progress.setAttemptCount(progress.getAttemptCount() + 1);
         progress.setBestScore(Math.max(progress.getBestScore(), grade.score()));
+        progress.setLastScore(grade.score());
         progress.setLastAttemptAt(Instant.now());
         boolean rewardGranted = false;
         if (grade.passed()) {
@@ -118,15 +119,19 @@ public class MachineLearningService {
                 "problem=" + problem.getSlug() + ", difficulty=" + problem.getDifficulty() + ", metric=" + grade.metricValue()
         );
 
+        final String feedback = execution.success()
+                ? grade.passed() ? "Correct — the hidden evaluation passed." : "Not yet — improve the result against the hidden evaluation data."
+                : "The solution could not be evaluated because it raised an error.";
+        progress.setLastFeedback(feedback);
+        progressRepository.save(progress);
+
         final ObjectNode result = buildBaseResult(problem, child);
         result.put("passed", grade.passed());
         result.put("score", grade.score());
         result.put("metricName", problem.getMetricName());
         result.put("metricValue", grade.metricValue());
         result.put("threshold", problem.getThreshold());
-        result.put("feedback", execution.success()
-                ? grade.passed() ? "Correct — the hidden evaluation passed." : "Not yet — improve the result against the hidden evaluation data."
-                : "The solution could not be evaluated because it raised an error.");
+        result.put("feedback", feedback);
         result.put("stdout", execution.stdout());
         result.put("error", execution.error());
         result.put("attemptCount", progress.getAttemptCount());
@@ -156,18 +161,30 @@ public class MachineLearningService {
     }
 
     private Grade maeGrade(final JsonNode expected, final JsonNode actual, final double threshold) {
-        if (actual == null || !actual.isArray() || actual.size() != expected.size()) return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
+        if (expected == null || !expected.isArray() || expected.isEmpty()
+                || actual == null || !actual.isArray() || actual.size() != expected.size())
+            return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
         double totalError = 0.0;
         for (int index = 0; index < expected.size(); index++) {
-            if (!actual.get(index).isNumber()) return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
-            totalError += Math.abs(expected.get(index).asDouble() - actual.get(index).asDouble());
+            if (!expected.get(index).isNumber() || !actual.get(index).isNumber())
+                return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
+            final double expectedValue = expected.get(index).asDouble();
+            final double actualValue = actual.get(index).asDouble();
+            if (!Double.isFinite(expectedValue) || !Double.isFinite(actualValue))
+                return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
+            final double absoluteError = Math.abs(expectedValue - actualValue);
+            if (!Double.isFinite(absoluteError))
+                return new Grade(false, 0.0, Double.POSITIVE_INFINITY);
+            totalError += absoluteError;
         }
         final double meanAbsoluteError = totalError / expected.size();
         return new Grade(meanAbsoluteError <= threshold, Math.max(0.0, 100.0 - meanAbsoluteError * 10.0), meanAbsoluteError);
     }
 
     private Grade accuracyGrade(final JsonNode expected, final JsonNode actual, final double threshold) {
-        if (actual == null || !actual.isArray() || actual.size() != expected.size()) return new Grade(false, 0.0, 0.0);
+        if (expected == null || !expected.isArray() || expected.isEmpty()
+                || actual == null || !actual.isArray() || actual.size() != expected.size())
+            return new Grade(false, 0.0, 0.0);
         int correct = 0;
         for (int index = 0; index < expected.size(); index++) {
             if (equivalent(expected.get(index), actual.get(index)))

@@ -98,7 +98,6 @@ struct DashboardView: View {
             GoalsView(store: store)
         case .settings:
             SettingsView(store: store, onSignOut: {
-                store.disconnect()
                 appModel.signOut()
             })
         }

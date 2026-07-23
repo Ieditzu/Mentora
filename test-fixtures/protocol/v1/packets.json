@@ -1,0 +1,716 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 1,
+  "baseKeyUtf8": "CIOCLIKESKIDSIJIJSDJ1J2313J8123869699696",
+  "fixedSeedDecimal": "1700000000123456789",
+  "seedIvHex": "000102030405060708090a0b0c0d0e0f",
+  "payloadIvHex": "101112131415161718191a1b1c1d1e1f",
+  "vectors": [
+    {
+      "name": "handshake_v1_legacy_unicode",
+      "packetId": 1,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "hostId",
+          "kind": "string",
+          "value": "unity_game/școlar-🎮"
+        }
+      ],
+      "plainPayloadBase64": "AAAAAQAAABd1bml0eV9nYW1lL8iZY29sYXIt8J+Org==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH7yt3B6LDGDTg0YuC+r25N89JiQLPZ+XIrPqUA8/ifPr",
+      "plainSha256": "56682886e753248015aded7b555d4a0571889ce46a6816996aa8b915ad6d5901",
+      "envelopeSha256": "002b05f3b5cf0316e864d953c2187eb9950747ed52a66659b57197561190e49c"
+    },
+    {
+      "name": "handshake_v2_device_metadata",
+      "packetId": 1,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "fingerprint",
+          "kind": "string",
+          "value": "android_parent"
+        },
+        {
+          "name": "protocolVersion",
+          "kind": "int32",
+          "value": "2"
+        },
+        {
+          "name": "deviceId",
+          "kind": "string",
+          "value": "android:pixel-9-pro/🎮"
+        }
+      ],
+      "plainPayloadBase64": "AAAAAQAAAA5hbmRyb2lkX3BhcmVudAAAAAIAAAAYYW5kcm9pZDpwaXhlbC05LXByby/wn46u",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH65mqHdouvc/YZO8Xv7OE9l5cmmt7KdiPScv4UhutMsMVx7dTOtkDrd6xUgIkRAP2NUv23Is5z0GTH2TwhbtCwo=",
+      "plainSha256": "86e0de0da033cb2d87081d15a88c0def242275c740785319909fa8393e28f0a7",
+      "envelopeSha256": "8e84e7c1eab1579b462e0164cde1ee8e945e5a48d8faeed477a0d8f391fa5f6d"
+    },
+    {
+      "name": "parent_auth_request",
+      "packetId": 2,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "emailHash",
+          "kind": "string",
+          "value": "email-hash-α"
+        },
+        {
+          "name": "passwordHash",
+          "kind": "string",
+          "value": "password-hash-β"
+        }
+      ],
+      "plainPayloadBase64": "AAAAAgAAAA1lbWFpbC1oYXNoLc6xAAAAEHBhc3N3b3JkLWhhc2gtzrI=",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH54xHCpN5ZxtmMLNdbo+lJECjR4e9pQiLHkDsCZSKCjiNfINI8XZqSq13I6DfpZ1NQ==",
+      "plainSha256": "8217e26eaf493359fa8f612d42281677fde1690da2dc7f84693e17a20d7280ff",
+      "envelopeSha256": "461032a573236ebfca3f64c079fd8a1152db4d0838fe016f384aaf0d26f9bcf5"
+    },
+    {
+      "name": "parent_auth_response_failure",
+      "packetId": 10,
+      "direction": "backend-to-client",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "success",
+          "kind": "bool",
+          "value": "false"
+        },
+        {
+          "name": "parentId",
+          "kind": "int64",
+          "value": "-1"
+        },
+        {
+          "name": "message",
+          "kind": "string",
+          "value": "Invalid credentials – încearcă din nou"
+        },
+        {
+          "name": "parentPfp",
+          "kind": "string",
+          "value": ""
+        }
+      ],
+      "plainPayloadBase64": "AAAACgD//////////wAAACpJbnZhbGlkIGNyZWRlbnRpYWxzIOKAkyDDrm5jZWFyY8SDIGRpbiBub3UAAAAA",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH6Bro2Z9eMSXZMegILHZ5wCXqFQ1IZHriNLcJD3TtTNHYbxJw1Nn0IZR1bMsVjlurTYArAjkwizBosaEVpO1N0Q=",
+      "plainSha256": "e2a64bdb5255ebce9135f7905c26342da8573a84bcc10bd194935f5d0588c05f",
+      "envelopeSha256": "dcfa4c0b065f8d792b85a82ebc00e54bc4815d5ca87de608f107f9283ff35171"
+    },
+    {
+      "name": "children_response_repeated_records",
+      "packetId": 16,
+      "direction": "backend-to-client",
+      "unityDecode": true,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "children.count",
+          "kind": "int32",
+          "value": "2"
+        },
+        {
+          "name": "children[0].id",
+          "kind": "int64",
+          "value": "1"
+        },
+        {
+          "name": "children[0].name",
+          "kind": "string",
+          "value": "Ana 🧠"
+        },
+        {
+          "name": "children[0].totalPoints",
+          "kind": "int32",
+          "value": "1250"
+        },
+        {
+          "name": "children[0].isOnline",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "children[0].profilePicture",
+          "kind": "string",
+          "value": ""
+        },
+        {
+          "name": "children[1].id",
+          "kind": "int64",
+          "value": "72623859790382856"
+        },
+        {
+          "name": "children[1].name",
+          "kind": "string",
+          "value": "Ștefan"
+        },
+        {
+          "name": "children[1].totalPoints",
+          "kind": "int32",
+          "value": "-25"
+        },
+        {
+          "name": "children[1].isOnline",
+          "kind": "bool",
+          "value": "false"
+        },
+        {
+          "name": "children[1].profilePicture",
+          "kind": "string",
+          "value": "data:image/png;base64,AAEC"
+        }
+      ],
+      "plainPayloadBase64": "AAAAEAAAAAIAAAAAAAAAAQAAAAhBbmEg8J+noAAABOIBAAAAAAECAwQFBgcIAAAAB8iYdGVmYW7////nAAAAABpkYXRhOmltYWdlL3BuZztiYXNlNjQsQUFFQw==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHyAbsSVEeo8v0Ovz+y8i48mt7BD2U+EiBuQUAuVbwZ73Ns76oYIR2cKPS8XLv4H3HJNnQ2DdapWeo0CijHIX8FUbvzqoJE7ypSWBzk8575O10vfhZIpr/QMgbPgrKRo2Gg==",
+      "plainSha256": "2d3d3e8cfcf2ef3fd911dc73f3e60a2ff347051a77211532e1fe86d2279632ce",
+      "envelopeSha256": "ade160ed4aef7738057cfebd66729f427eeb1d2f80711304ea28156e2862ff7d"
+    },
+    {
+      "name": "child_auth_success_unicode",
+      "packetId": 22,
+      "direction": "backend-to-client",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "success",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "childId",
+          "kind": "int64",
+          "value": "72623859790382856"
+        },
+        {
+          "name": "childName",
+          "kind": "string",
+          "value": "Ștefan 🎓"
+        },
+        {
+          "name": "sessionToken",
+          "kind": "string",
+          "value": "tok-abc-123"
+        }
+      ],
+      "plainPayloadBase64": "AAAAFgEBAgMEBQYHCAAAAAzImHRlZmFuIPCfjpMAAAALdG9rLWFiYy0xMjM=",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHyNHPl+n0WbA6+3CQRG8bODOqte1Xf4NkWh6cRJzuCo/58yN+dG3IyS8y2qyOvcaBQ==",
+      "plainSha256": "c9d2cebe5f1947786c2b51e06790e3a1d61a29217e729293987c2cb9738ae765",
+      "envelopeSha256": "1a24f3c29b5646cbc8b86895a6e2027d069f73a987456214b9635b8a34671abf"
+    },
+    {
+      "name": "verify_child_session_unicode",
+      "packetId": 25,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "childId",
+          "kind": "int64",
+          "value": "72623859790382856"
+        },
+        {
+          "name": "sessionToken",
+          "kind": "string",
+          "value": "sess-școală-🎮"
+        }
+      ],
+      "plainPayloadBase64": "AAAAGQECAwQFBgcIAAAAEnNlc3MtyJljb2FsxIMt8J+Org==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH3Rnti89uQ8CYMUlLmd/Y1SEvjWRk8yw00biiDXGgcC4ygJm46veO93+dPVHYahYUw==",
+      "plainSha256": "99578431d07ba0f2c0865ddc22166763fd14ac3e4ca8495f005ea62cf56eaad8",
+      "envelopeSha256": "b92209e873c42608afb525a37391a85f9f8272c9944ff3b313a85b9724afce01"
+    },
+    {
+      "name": "companion_voice_audio_binary",
+      "packetId": 59,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "sampleRate",
+          "kind": "int32",
+          "value": "16000"
+        },
+        {
+          "name": "pcm16",
+          "kind": "hex",
+          "value": "00ff7f8001fe3412"
+        },
+        {
+          "name": "context",
+          "kind": "string",
+          "value": "Rudolf context: bună!"
+        }
+      ],
+      "plainPayloadBase64": "AAAAOwAAPoAAAAAIAP9/gAH+NBIAAAAWUnVkb2xmIGNvbnRleHQ6IGJ1bsSDIQ==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH+tB2uIzaju297ooeDTgZG/07iWKASb0utwMJXs5+ZJYNP0ilaQiOzVgy/QwfLItaw==",
+      "plainSha256": "412718e2a61e777a435ab91db775f78e744b001b23e3a6967043a6211cd04c8a",
+      "envelopeSha256": "1ee00edfe5e4b67db994bf1b89fc9047d18db017e8ea52d13702f9f3f613f9da"
+    },
+    {
+      "name": "live_session_update_full",
+      "packetId": 65,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "childId",
+          "kind": "int64",
+          "value": "72623859790382856"
+        },
+        {
+          "name": "childName",
+          "kind": "string",
+          "value": "Ana"
+        },
+        {
+          "name": "online",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "padName",
+          "kind": "string",
+          "value": "Python Pad 🐍"
+        },
+        {
+          "name": "codeText",
+          "kind": "string",
+          "value": "print('bună')\n"
+        },
+        {
+          "name": "attemptCount",
+          "kind": "int32",
+          "value": "3"
+        },
+        {
+          "name": "hintRequested",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "status",
+          "kind": "string",
+          "value": "Running attempt"
+        },
+        {
+          "name": "updatedAt",
+          "kind": "string",
+          "value": "2026-07-23T09:10:11Z"
+        }
+      ],
+      "plainPayloadBase64": "AAAAQQECAwQFBgcIAAAAA0FuYQEAAAAPUHl0aG9uIFBhZCDwn5CNAAAAD3ByaW50KCdidW7EgycpCgAAAAMBAAAAD1J1bm5pbmcgYXR0ZW1wdAAAABQyMDI2LTA3LTIzVDA5OjEwOjExWg==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH4kRnHIEmvuNhIa8fYwxtpo2r1T8/vNBr+1U2MALwKWX2571wC++bjbxuO6q+ZyPEm0XEOVu9Keo5M6mMQstCzzx9w5sQ9kTSLvxcS2XawqPqb0kOtaSf17O1/OXH1vTF4vrK2w22Qt3nv4gyb6zZiw=",
+      "plainSha256": "c5ac3c9289f2d6a27a91ed8f64820f692e9984bc9600b127f74d4178df20d802",
+      "envelopeSha256": "28413c5cb19982344c6074f58daa9c4254b8d65ebf82057d66d5a1d40846cde8"
+    },
+    {
+      "name": "codeworld_response_multiline",
+      "packetId": 75,
+      "direction": "backend-to-client",
+      "unityDecode": true,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "requestId",
+          "kind": "string",
+          "value": "req-cw-0001"
+        },
+        {
+          "name": "commandsText",
+          "kind": "string",
+          "value": "cube beacon 220 33 526 1 3 1\ncolor beacon red"
+        },
+        {
+          "name": "output",
+          "kind": "string",
+          "value": "gata ✓"
+        },
+        {
+          "name": "error",
+          "kind": "string",
+          "value": ""
+        }
+      ],
+      "plainPayloadBase64": "AAAASwAAAAtyZXEtY3ctMDAwMQAAAC1jdWJlIGJlYWNvbiAyMjAgMzMgNTI2IDEgMyAxCmNvbG9yIGJlYWNvbiByZWQAAAAIZ2F0YSDinJMAAAAA",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH9VqJZ+zy1t5BufngLZbzHtbwJcqKiv84QSdb37PYsx8CMPpUY6IZFmyUkTiISbj4jwczTKuI5IvV8pxaVybSzFsl2qwr5cpYFJFhfWfI7cO+FT2DvCQfT07u0Z7i9lceg==",
+      "plainSha256": "eaf97e36842aa71a3d7e37480f60bdf0e2829cc74ff2d427830481dbd2021e67",
+      "envelopeSha256": "4733e298098ae9f6bfcd44481feae95e54775ae29011c0873c2f77bd4a54a292"
+    },
+    {
+      "name": "submit_ml_solution_multiline",
+      "packetId": 79,
+      "direction": "client-to-backend",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "requestId",
+          "kind": "string",
+          "value": "req-ml-0001"
+        },
+        {
+          "name": "problemSlug",
+          "kind": "string",
+          "value": "easy-line-of-best-fit"
+        },
+        {
+          "name": "sourceCode",
+          "kind": "string",
+          "value": "def solve(train, test):\n    # șir 🎯\n    return [13, 15, 17]\n"
+        }
+      ],
+      "plainPayloadBase64": "AAAATwAAAAtyZXEtbWwtMDAwMQAAABVlYXN5LWxpbmUtb2YtYmVzdC1maXQAAABAZGVmIHNvbHZlKHRyYWluLCB0ZXN0KToKICAgICMgyJlpciDwn46vCiAgICByZXR1cm4gWzEzLCAxNSwgMTddCg==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH8KNhB6vj6BlzpDSCmq/KS0HRKiZduGo8dm0nylHjqaFp3V+LUbYfiQJQzA5MajO+3F3v5kOKzlCsME1oA09hhClNlYW+MZn4ycsabk4zaqa9gr0W4eys4ZcPS0OAH+gI1XCE+sJfNu7eLuEydsRsR17rf62iMrLnSxuU7g0q+cn",
+      "plainSha256": "4c2cdf443d07b4f4752e0c6da4ccad3d97fa5a2270cdddf718a8655ff60ef35f",
+      "envelopeSha256": "b3e90279896bd97011538c47bb740f8400f42c55da8a15b8c8edb53646bfb69b"
+    },
+    {
+      "name": "ml_submission_result_json",
+      "packetId": 80,
+      "direction": "backend-to-client",
+      "unityDecode": true,
+      "unityEncode": true,
+      "fields": [
+        {
+          "name": "requestId",
+          "kind": "string",
+          "value": "req-ml-0001"
+        },
+        {
+          "name": "resultJson",
+          "kind": "string",
+          "value": "{\"problemSlug\":\"easy-line-of-best-fit\",\"passed\":true,\"score\":0.95,\"feedback\":\"Foarte bine 🎉\",\"infrastructureError\":false}"
+        }
+      ],
+      "plainPayloadBase64": "AAAAUAAAAAtyZXEtbWwtMDAwMQAAAHx7InByb2JsZW1TbHVnIjoiZWFzeS1saW5lLW9mLWJlc3QtZml0IiwicGFzc2VkIjp0cnVlLCJzY29yZSI6MC45NSwiZmVlZGJhY2siOiJGb2FydGUgYmluZSDwn46JIiwiaW5mcmFzdHJ1Y3R1cmVFcnJvciI6ZmFsc2V9",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH+HQMWZptX60eGRW9LZ+zFBqg8EJ5uT1VUvdjX0Om+U27Y7UMr8rJxcUAy/SfwnGcSSH8JvxmcjMbmoUV7W0RK6KUAhrwBcXyTmC8/0fdpfBScmdX1Hu+SRijYm4oF10vO0i+OvhkguNdQ1+j4I+A26d9D79UpSaAn66OsMRTRKMjQefrRLzcev2wrlRCAe1uWBTviRgReLwZ8fSCo6Y1UQ=",
+      "plainSha256": "2647e0ee4b3695fb948f6097cb563b38dbf192941534bc6fba220c041625c660",
+      "envelopeSha256": "8115f6036facb5f98b7d22ceafaaa6c6025df9fe894954822fc363a98870dcaf"
+    },
+    {
+      "name": "second_factor_required",
+      "packetId": 81,
+      "direction": "backend-to-client",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "challengeId",
+          "kind": "string",
+          "value": "2fa-challenge-0001"
+        },
+        {
+          "name": "expiresInSeconds",
+          "kind": "int32",
+          "value": "300"
+        },
+        {
+          "name": "recoveryAllowed",
+          "kind": "bool",
+          "value": "true"
+        }
+      ],
+      "plainPayloadBase64": "AAAAUQAAABIyZmEtY2hhbGxlbmdlLTAwMDEAAAEsAQ==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH76xiIM+p+sh0LWiEDPgkS7AsYJ/jWDMp5HVBqOEBv0z",
+      "plainSha256": "f25b42824493ce95bcaf5d4296f2b3f0aa7d02b8c51ba3383ee3c28e712ea7bd",
+      "envelopeSha256": "34ed26c788a68c3c5be5f3bca4b31ad91967020d01d2f97ff6470ffbbc6f6ea0"
+    },
+    {
+      "name": "verify_second_factor_totp",
+      "packetId": 82,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "challengeId",
+          "kind": "string",
+          "value": "2fa-challenge-0001"
+        },
+        {
+          "name": "code",
+          "kind": "string",
+          "value": "123456"
+        }
+      ],
+      "plainPayloadBase64": "AAAAUgAAABIyZmEtY2hhbGxlbmdlLTAwMDEAAAAGMTIzNDU2",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHzRCyqwTz6rypzkMFXSpXL6HKVk3+eWqDzNhTb6a3BToW3j+t8Z95AQrndOBVWeZQQ==",
+      "plainSha256": "10f2e595b22935dfd69b3b0bd5d2a9abc85a59bd165ff5d1bff01582409703ac",
+      "envelopeSha256": "8d434de00a31012c151a0a534c6817b6de7287336f5a441bf06edcaa20032a7d"
+    },
+    {
+      "name": "begin_totp_enrollment",
+      "packetId": 83,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "passwordHash",
+          "kind": "string",
+          "value": "sha256:password-hash-α"
+        }
+      ],
+      "plainPayloadBase64": "AAAAUwAAABdzaGEyNTY6cGFzc3dvcmQtaGFzaC3OsQ==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH1BDWSEEzMWcX2e4TBBr7e7HX3SlwfCfzArmNNw2GFeh",
+      "plainSha256": "354533e6a01776eb902aea4d3eeb8783bd294ee4298aea6b72c96f94cc2ba02c",
+      "envelopeSha256": "49f4f4152125bc101340473dc50deb15e72b02f6883a388e0f8f91db2412876d"
+    },
+    {
+      "name": "totp_enrollment_details",
+      "packetId": 84,
+      "direction": "backend-to-client",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "enrollmentId",
+          "kind": "string",
+          "value": "enroll-0001"
+        },
+        {
+          "name": "secretBase32",
+          "kind": "string",
+          "value": "JBSWY3DPEHPK3PXP"
+        },
+        {
+          "name": "otpAuthUri",
+          "kind": "string",
+          "value": "otpauth://totp/Mentora:test%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Mentora"
+        }
+      ],
+      "plainPayloadBase64": "AAAAVAAAAAtlbnJvbGwtMDAwMQAAABBKQlNXWTNEUEVIUEszUFhQAAAAUG90cGF1dGg6Ly90b3RwL01lbnRvcmE6dGVzdCU0MGV4YW1wbGUuY29tP3NlY3JldD1KQlNXWTNEUEVIUEszUFhQJmlzc3Vlcj1NZW50b3Jh",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHxEdyYlP66jWaEDsS2VpF/TIMeh76F5Fe5I+JFkVCBa9Agfko1w8y07hqtX8zT3UigBN2EUuzMGEgQpTehvxvC99aXrCICBEvY+moRZwWWzXwAAbBvG0gA5p68YuXsNbecefVBxy32uU03OfAPGi7/aHuiXcE5E/X8rVeqJnUfUz",
+      "plainSha256": "0531988630f0313a78f4af672a4b58a8aa56a75694bea22dd072585de3f2ec99",
+      "envelopeSha256": "71f2a1f7249f4c3c463fbf814cc911ca33430899971ef1f28705c8ce4f7a9a85"
+    },
+    {
+      "name": "confirm_totp_enrollment",
+      "packetId": 85,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "enrollmentId",
+          "kind": "string",
+          "value": "enroll-0001"
+        },
+        {
+          "name": "code",
+          "kind": "string",
+          "value": "654321"
+        }
+      ],
+      "plainPayloadBase64": "AAAAVQAAAAtlbnJvbGwtMDAwMQAAAAY2NTQzMjE=",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH8m6voFHPdewRdShcBl59teKnv0PP5gyy8jz2Lf8W8lS",
+      "plainSha256": "96007bcdd7c3e03af4b626d5ff94d76d5d892869304ae4b84c75dea2c18b1c30",
+      "envelopeSha256": "3812be06f513c0cde7fb74147719dccdf8d7cef3aed114ff34a74bc3b0f11ef5"
+    },
+    {
+      "name": "totp_enrollment_result_with_recovery_codes",
+      "packetId": 86,
+      "direction": "backend-to-client",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "success",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "message",
+          "kind": "string",
+          "value": "TOTP enabled – păstrează codurile"
+        },
+        {
+          "name": "recoveryCodes.count",
+          "kind": "int32",
+          "value": "3"
+        },
+        {
+          "name": "recoveryCodes[0]",
+          "kind": "string",
+          "value": "ALPHA-1111"
+        },
+        {
+          "name": "recoveryCodes[1]",
+          "kind": "string",
+          "value": "BRAVO-2222"
+        },
+        {
+          "name": "recoveryCodes[2]",
+          "kind": "string",
+          "value": "ȘCOALA-3333"
+        }
+      ],
+      "plainPayloadBase64": "AAAAVgEAAAAlVE9UUCBlbmFibGVkIOKAkyBwxINzdHJlYXrEgyBjb2R1cmlsZQAAAAMAAAAKQUxQSEEtMTExMQAAAApCUkFWTy0yMjIyAAAADMiYQ09BTEEtMzMzMw==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH49yVfQyfcrZStDbhHdLO6jupfbDdz8tPDyrumERhIDPMpSCqdpN+xHDOOIQ/mb8Es/7JsTkAUgeqlry2ewArYqoIHrQGfCYbrr90KWDXlfLBFofSv9IefqSlWIqbVXrCQ==",
+      "plainSha256": "aacf4bf8b62777de64c6cbca7fa26d7c3842a2332c9be8d2ec0b72bb22169ee6",
+      "envelopeSha256": "a0d613b3f083ead4aee8042081d7857cd96984f86d62265ad7ba2ca06139aa9c"
+    },
+    {
+      "name": "disable_totp",
+      "packetId": 87,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "passwordHash",
+          "kind": "string",
+          "value": "sha256:password-hash-β"
+        },
+        {
+          "name": "code",
+          "kind": "string",
+          "value": "123456"
+        }
+      ],
+      "plainPayloadBase64": "AAAAVwAAABdzaGEyNTY6cGFzc3dvcmQtaGFzaC3OsgAAAAYxMjM0NTY=",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHzcVDR5FBY39jm4EArXH2yBvB4Qjrw24ZYTbKT2F1ibdNiEAAF2+/AZUjNMAHQD77g==",
+      "plainSha256": "d0afa9f99a44bfa9d0917df0b0a9bcea51eb2d85396ba3d6c78b4c9effb42fca",
+      "envelopeSha256": "00af590a504191e33e83de2426c6ae3092892f605694c8cbfba46e3fabf1d2d6"
+    },
+    {
+      "name": "totp_status_request",
+      "packetId": 88,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [],
+      "plainPayloadBase64": "AAAAWA==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH0jIXiii9D6m7mMKq0PPsS4=",
+      "plainSha256": "3523d19074cac2abcc3ace63b121eefa537c8e4070e30875ba5685f46bb010ef",
+      "envelopeSha256": "ea4e825e16eac8c50b83db09a5ae3f811306412cdb9fe558da3480376e0fdd9c"
+    },
+    {
+      "name": "totp_status_enabled",
+      "packetId": 89,
+      "direction": "backend-to-client",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "totpEnabled",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "recoveryCodesRemaining",
+          "kind": "int32",
+          "value": "7"
+        }
+      ],
+      "plainPayloadBase64": "AAAAWQEAAAAH",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH/goyzsKXfzmWKQtzTzG2Zw=",
+      "plainSha256": "e9c633a45e7643542b88cb7c47bd1171a54f7b05124da044f37cfe8ce514df77",
+      "envelopeSha256": "937dbad6166b1113fec0889060128013504b7d2185c8c65497a726465c1bfa6a"
+    },
+    {
+      "name": "parent_auth_session_success",
+      "packetId": 90,
+      "direction": "backend-to-client",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "success",
+          "kind": "bool",
+          "value": "true"
+        },
+        {
+          "name": "parentId",
+          "kind": "int64",
+          "value": "72623859790382856"
+        },
+        {
+          "name": "message",
+          "kind": "string",
+          "value": "Login reușit"
+        },
+        {
+          "name": "parentPfp",
+          "kind": "string",
+          "value": "data:image/png;base64,AAEC"
+        },
+        {
+          "name": "sessionToken",
+          "kind": "string",
+          "value": "parent-session-token-0001"
+        },
+        {
+          "name": "expiresAtEpochSeconds",
+          "kind": "int64",
+          "value": "1800000000"
+        }
+      ],
+      "plainPayloadBase64": "AAAAWgEBAgMEBQYHCAAAAA1Mb2dpbiByZXXImWl0AAAAGmRhdGE6aW1hZ2UvcG5nO2Jhc2U2NCxBQUVDAAAAGXBhcmVudC1zZXNzaW9uLXRva2VuLTAwMDEAAAAAa0nSAA==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH9xGHUJZ6iDHKEWTYxEgiaw+6mzYmqp5lnaklQOjf6v9TWDcJ5ZBTMhlg7O12hUvvqkEZhoM1BEhP2EW7679ar8LiImIuo+SxqFxMmHQLielIezADvmajmWT9f06sytPDF3a8IESfohEx7v3C+SCF4s=",
+      "plainSha256": "13a0877da09d1712f9e721ff3f1e82c6d0dcdd0c158b11d422887571baf43341",
+      "envelopeSha256": "96705dacc786a53876e2afb76be1288538f6e10d93479e538d427f8688034b55"
+    },
+    {
+      "name": "resume_parent_session",
+      "packetId": 91,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "sessionToken",
+          "kind": "string",
+          "value": "parent-session-token-0001"
+        },
+        {
+          "name": "deviceId",
+          "kind": "string",
+          "value": "android:pixel-9-pro/🎮"
+        }
+      ],
+      "plainPayloadBase64": "AAAAWwAAABlwYXJlbnQtc2Vzc2lvbi10b2tlbi0wMDAxAAAAGGFuZHJvaWQ6cGl4ZWwtOS1wcm8v8J+Org==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eHwxUC90SZn8HhHHFtKbiEBHRDzZZ5S13+UJKH+hHUxP/JrOnfzNyWSy/FKmp4AMFk5H2suf2W38ZmlbIjrdccJM=",
+      "plainSha256": "65d307d07289753c10bc33c4e5e4408b1920f28090bd290ec0492ced2472edec",
+      "envelopeSha256": "b2d7c9a35e7e7254afe3b7fc01c9dd68e7bc5ec79eea591c86b1e494e6c2987a"
+    },
+    {
+      "name": "revoke_all_parent_sessions",
+      "packetId": 92,
+      "direction": "client-to-backend",
+      "unityDecode": false,
+      "unityEncode": false,
+      "fields": [
+        {
+          "name": "sessionToken",
+          "kind": "string",
+          "value": "parent-session-token-0001"
+        },
+        {
+          "name": "revokeAll",
+          "kind": "bool",
+          "value": "true"
+        }
+      ],
+      "plainPayloadBase64": "AAAAXAAAABlwYXJlbnQtc2Vzc2lvbi10b2tlbi0wMDAxAQ==",
+      "encryptedEnvelopeBase64": "AAAAIAABAgMEBQYHCAkKCwwNDg8sD1bN+6I+g5sYD1699uS8EBESExQVFhcYGRobHB0eH1+i35pH+Uqjyjm4mUdNnah+FFVkU71mwJVVrrAgbGblgZxkwfSYexTgB4FTczIzAQ==",
+      "plainSha256": "3dbf3d17983a3370c37b94b2e5fabb454b27ea417680c1ae648dca3fcfcdb98e",
+      "envelopeSha256": "b81dcca3dc13b384f2eebad9f3476258f6afb34971d055ee9e1e97a462ae2ba4"
+    }
+  ]
+}

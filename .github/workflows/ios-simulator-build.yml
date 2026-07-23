@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "kotlin-app/**"
+      - "test-fixtures/**"
       - ".github/workflows/ios-simulator-build.yml"
   pull_request:
     paths:
       - "kotlin-app/**"
+      - "test-fixtures/**"
       - ".github/workflows/ios-simulator-build.yml"
   workflow_dispatch:
 
@@ -18,6 +20,7 @@ jobs:
   build:
     name: Build iOS IPA
     runs-on: macos-15
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: kotlin-app
@@ -49,6 +52,26 @@ jobs:
 
       - name: Test shared iOS protocol
         run: ./gradlew :shared:iosSimulatorArm64Test
+
+      - name: Test native iOS integration flows
+        run: >-
+          xcodebuild test
+          -project iosApp/MentoraIOS.xcodeproj
+          -scheme MentoraIOS
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest'
+          -resultBundlePath '${{ runner.temp }}/MentoraIOSTests.xcresult'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGN_IDENTITY=""
+
+      - name: Upload native iOS test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mentora-iOS-Test-Results
+          path: ${{ runner.temp }}/MentoraIOSTests.xcresult
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Archive app
         run: >-

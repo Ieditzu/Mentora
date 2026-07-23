@@ -6,6 +6,8 @@ import io.github.kawase.utility.EncryptionUtility;
 import lombok.Getter;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -15,6 +17,9 @@ import java.nio.charset.StandardCharsets;
  */
 @Getter
 public abstract class Packet {
+    private static final int MAX_ENCRYPTED_PACKET_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_STRING_BYTES = 1024 * 1024;
+    private static final int MIN_AES_CIPHERTEXT_BYTES = 32;
     private final int id;
 
     public Packet(final int id) {
@@ -36,7 +41,7 @@ public abstract class Packet {
             final ByteBuffer payloadBuffer = ByteBuffer.allocate(1024 * 1024);
 
             payloadBuffer.putInt(id);
-            this.write(payloadBuffer);
+            write(payloadBuffer);
             payloadBuffer.flip();
 
             final byte[] payloadBytes = new byte[payloadBuffer.remaining()];
@@ -59,7 +64,7 @@ public abstract class Packet {
     }
 
     public void decode(final ByteBuffer byteBuffer) {
-        this.read(byteBuffer);
+        read(byteBuffer);
     }
 
     /**
@@ -70,30 +75,48 @@ public abstract class Packet {
      * @throws Exception if the decryption fails.
      */
     public static Packet construct(final ByteBuffer byteBuffer, final PacketManager packetManager) throws Exception {
-        final int seedLength = byteBuffer.getInt();
+        try {
+            if (byteBuffer == null || byteBuffer.remaining() < Integer.BYTES)
+                throw new PacketException("Packet frame is missing its seed length");
+            if (byteBuffer.remaining() > MAX_ENCRYPTED_PACKET_BYTES)
+                throw new PacketException("Packet frame exceeds the 2 MB limit");
 
-        // this should prevent out of memory attacks.
-        if (seedLength <= 0 || seedLength > 1024) {
-            throw new PacketException("Invalid seed length");
+            final int seedLength = byteBuffer.getInt();
+
+            if (seedLength < MIN_AES_CIPHERTEXT_BYTES || seedLength > 1024 || seedLength > byteBuffer.remaining()
+                    || (seedLength - 16) % 16 != 0) {
+                throw new PacketException("Invalid seed length");
+            }
+
+            final byte[] encryptedSeed = new byte[seedLength];
+            byteBuffer.get(encryptedSeed);
+
+            final long dynamicSeed = EncryptionUtility.decryptLong(encryptedSeed, Data.baseKey);
+
+            if (byteBuffer.remaining() < MIN_AES_CIPHERTEXT_BYTES || (byteBuffer.remaining() - 16) % 16 != 0)
+                throw new PacketException("Invalid encrypted payload length");
+
+            final byte[] encryptedPayload = new byte[byteBuffer.remaining()];
+            byteBuffer.get(encryptedPayload);
+
+            final byte[] decryptedPayloadBytes = EncryptionUtility.decryptBytes(encryptedPayload, String.valueOf(dynamicSeed));
+            if (decryptedPayloadBytes.length < Integer.BYTES)
+                throw new PacketException("Decrypted packet is missing its ID");
+            final ByteBuffer decryptedBuffer = ByteBuffer.wrap(decryptedPayloadBytes);
+
+            final int packetID = decryptedBuffer.getInt();
+
+            final Packet packet = packetManager.createPacket(packetID);
+            packet.decode(decryptedBuffer);
+            if (decryptedBuffer.hasRemaining())
+                throw new PacketException("Unexpected trailing packet data");
+
+            return packet;
+        } catch (PacketException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new PacketException("Invalid encrypted packet", exception);
         }
-
-        final byte[] encryptedSeed = new byte[seedLength];
-        byteBuffer.get(encryptedSeed);
-
-        final long dynamicSeed = EncryptionUtility.decryptLong(encryptedSeed, Data.baseKey);
-
-        final byte[] encryptedPayload = new byte[byteBuffer.remaining()];
-        byteBuffer.get(encryptedPayload);
-
-        final byte[] decryptedPayloadBytes = EncryptionUtility.decryptBytes(encryptedPayload, String.valueOf(dynamicSeed));
-        final ByteBuffer decryptedBuffer = ByteBuffer.wrap(decryptedPayloadBytes);
-
-        final int packetID = decryptedBuffer.getInt();
-
-        final Packet packet = packetManager.createPacket(packetID);
-        packet.decode(decryptedBuffer);
-
-        return packet;
     }
 
     /**
@@ -114,11 +137,23 @@ public abstract class Packet {
      * @return the string it read from the buffer
      */
     public String readString(final ByteBuffer buffer) {
+        if (buffer.remaining() < Integer.BYTES)
+            throw new PacketException("String is missing its length");
         final int length = buffer.getInt();
+        if (length < 0 || length > MAX_STRING_BYTES || length > buffer.remaining())
+            throw new PacketException("Invalid string length");
         final byte[] bytes = new byte[length];
 
         buffer.get(bytes);
 
-        return new String(bytes, StandardCharsets.UTF_8);
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (CharacterCodingException exception) {
+            throw new PacketException("String contains invalid UTF-8", exception);
+        }
     }
 }

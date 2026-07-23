@@ -9,6 +9,9 @@ targets:
   MentoraIOS:
     type: application
     platform: iOS
+    scheme:
+      testTargets:
+        - MentoraIOSTests
     sources:
       - path: MentoraIOS
     settings:
@@ -28,6 +31,8 @@ targets:
     platform: iOS
     sources:
       - path: MentoraIOSTests
+      - path: ../../test-fixtures/protocol/v1/packets.json
+        buildPhase: resources
     dependencies:
       - target: MentoraIOS
     settings:

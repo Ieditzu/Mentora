@@ -19,7 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -33,9 +35,19 @@ import io.github.kawase.R
 @Composable
 fun AuthScreen(viewModel: SocketViewModel) {
     var isLogin by remember { mutableStateOf(true) }
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(viewModel.email.value) }
     var password by remember { mutableStateOf("") }
+    var secondFactorCode by remember { mutableStateOf("") }
+    var useRecoveryCode by remember { mutableStateOf(false) }
     val isConnected by viewModel.isConnected
+    val authenticationState by viewModel.authenticationState
+    val secondFactorChallenge = when (val state = authenticationState) {
+        is ParentAuthenticationState.AwaitingSecondFactor -> state
+        is ParentAuthenticationState.VerifyingSecondFactor -> state.challenge
+        else -> null
+    }
+    val isSubmitting = authenticationState == ParentAuthenticationState.SubmittingCredentials ||
+        authenticationState is ParentAuthenticationState.VerifyingSecondFactor
 
     val infiniteTransition = rememberInfiniteTransition(label = "bg")
     val animOffset1 by infiniteTransition.animateFloat(
@@ -113,61 +125,154 @@ fun AuthScreen(viewModel: SocketViewModel) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = stringResource(if (isLogin) R.string.login else R.string.create_account),
+                        text = if (secondFactorChallenge != null) {
+                            stringResource(R.string.two_factor_verification)
+                        } else {
+                            stringResource(if (isLogin) R.string.login else R.string.create_account)
+                        },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text(stringResource(R.string.email_address)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = viewModel.primaryColor.value) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = viewModel.primaryColor.value,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                            focusedLabelColor = viewModel.primaryColor.value
-                        ),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    if (secondFactorChallenge != null) {
+                        Text(
+                            text = if (useRecoveryCode) {
+                                stringResource(R.string.enter_recovery_code)
+                            } else {
+                                stringResource(
+                                    R.string.enter_authenticator_code,
+                                    secondFactorChallenge.expiresInSeconds
+                                )
+                            },
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        OutlinedTextField(
+                            value = secondFactorCode,
+                            onValueChange = { value ->
+                                secondFactorCode = if (useRecoveryCode) {
+                                    value.take(64)
+                                } else {
+                                    value.filter(Char::isDigit).take(6)
+                                }
+                            },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (useRecoveryCode) R.string.recovery_code else R.string.authenticator_code
+                                    )
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            leadingIcon = {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = viewModel.primaryColor.value)
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = if (useRecoveryCode) KeyboardType.Password else KeyboardType.NumberPassword
+                            ),
+                            singleLine = true
+                        )
+                        if (secondFactorChallenge.recoveryAllowed) {
+                            TextButton(
+                                onClick = {
+                                    useRecoveryCode = !useRecoveryCode
+                                    secondFactorCode = ""
+                                }
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (useRecoveryCode) R.string.use_authenticator_code else R.string.use_recovery_code
+                                    )
+                                )
+                            }
+                        }
+                        secondFactorChallenge.errorMessage?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error)
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text(stringResource(R.string.email_address)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            leadingIcon = {
+                                Icon(Icons.Default.Email, contentDescription = null, tint = viewModel.primaryColor.value)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = viewModel.primaryColor.value,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                focusedLabelColor = viewModel.primaryColor.value
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text(stringResource(R.string.password)) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = viewModel.primaryColor.value) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = viewModel.primaryColor.value,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                            focusedLabelColor = viewModel.primaryColor.value
-                        ),
-                        singleLine = true
-                    )
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text(stringResource(R.string.password)) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            leadingIcon = {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = viewModel.primaryColor.value)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = viewModel.primaryColor.value,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                focusedLabelColor = viewModel.primaryColor.value
+                            ),
+                            singleLine = true
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(40.dp))
 
                     Button(
                         onClick = {
-                            if (isLogin) viewModel.login(email, password)
-                            else viewModel.register(email, password)
+                            if (secondFactorChallenge != null) {
+                                viewModel.submitSecondFactor(secondFactorCode)
+                            } else if (isLogin) {
+                                viewModel.login(email, password)
+                            } else {
+                                viewModel.register(email, password)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = viewModel.primaryColor.value
                         ),
+                        enabled = isConnected && !isSubmitting && if (secondFactorChallenge != null) {
+                            secondFactorCode.isNotBlank() &&
+                                (useRecoveryCode || secondFactorCode.length == 6)
+                        } else {
+                            email.isNotBlank() && password.isNotEmpty()
+                        },
                         elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 8.dp)
                     ) {
+                        if (isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
                         Text(
-                            stringResource(if (isLogin) R.string.login else R.string.register),
+                            stringResource(
+                                if (secondFactorChallenge != null) {
+                                    R.string.verify
+                                } else if (isLogin) {
+                                    R.string.login
+                                } else {
+                                    R.string.register
+                                }
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
@@ -176,9 +281,28 @@ fun AuthScreen(viewModel: SocketViewModel) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    TextButton(onClick = { isLogin = !isLogin }) {
+                    TextButton(
+                        onClick = {
+                            if (secondFactorChallenge != null) {
+                                secondFactorCode = ""
+                                useRecoveryCode = false
+                                viewModel.cancelSecondFactor()
+                            } else {
+                                isLogin = !isLogin
+                            }
+                        },
+                        enabled = !isSubmitting
+                    ) {
                         Text(
-                            stringResource(if (isLogin) R.string.no_account_register else R.string.already_account_login),
+                            stringResource(
+                                if (secondFactorChallenge != null) {
+                                    R.string.cancel
+                                } else if (isLogin) {
+                                    R.string.no_account_register
+                                } else {
+                                    R.string.already_account_login
+                                }
+                            ),
                             color = viewModel.primaryColor.value,
                             fontWeight = FontWeight.SemiBold
                         )

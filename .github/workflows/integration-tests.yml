@@ -1,0 +1,196 @@
+name: Integration tests
+
+on:
+  push:
+    paths:
+      - "java-server/**"
+      - "kotlin-app/**"
+      - "unity/**"
+      - "test-fixtures/**"
+      - ".github/workflows/integration-tests.yml"
+  pull_request:
+    paths:
+      - "java-server/**"
+      - "kotlin-app/**"
+      - "unity/**"
+      - "test-fixtures/**"
+      - ".github/workflows/integration-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  backend:
+    name: Backend, PostgreSQL, evaluators, and sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: java-server/Java-Server
+    env:
+      MENTORA_TOTP_ENCRYPTION_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Python for fixture verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify canonical protocol fixtures
+        run: |
+          python -m pip install cryptography==43.0.3
+          python ../../test-fixtures/protocol/v1/generate_vectors.py --check
+
+      - name: Build disposable runner images
+        run: sh code-runners/build-images.sh
+
+      - name: Run backend test layers
+        run: >-
+          ./gradlew
+          test
+          integrationTest
+          dockerAdversarialTest
+          jacocoTestReport
+          jacocoTestCoverageVerification
+          --continue
+          --stacktrace
+
+      - name: Upload backend test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            java-server/Java-Server/build/test-results
+            java-server/Java-Server/build/reports/tests
+            java-server/Java-Server/build/reports/jacoco
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish backend JUnit report
+        if: always() && !cancelled()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Backend JUnit
+          path: java-server/Java-Server/build/test-results/**/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+  mobile:
+    name: Android and shared mobile contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: kotlin-app
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Run Android and shared host tests
+        run: ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebugAndroidTest
+
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android Keystore integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          script: cd kotlin-app && ./gradlew :app:connectedDebugAndroidTest
+
+      - name: Upload mobile JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-test-results
+          path: |
+            kotlin-app/app/build/test-results
+            kotlin-app/app/build/reports/tests
+            kotlin-app/app/build/outputs/androidTest-results
+            kotlin-app/app/build/reports/androidTests
+            kotlin-app/shared/build/test-results
+            kotlin-app/shared/build/reports/tests
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish mobile JUnit report
+        if: always() && !cancelled()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Mobile JUnit
+          path: |
+            kotlin-app/app/build/test-results/**/*.xml
+            kotlin-app/app/build/outputs/androidTest-results/**/*.xml
+            kotlin-app/shared/build/test-results/**/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+  unity:
+    name: Unity EditMode integration contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: unity/Library
+          key: UnityTests-${{ hashFiles('unity/Packages/packages-lock.json', 'unity/ProjectSettings/ProjectVersion.txt', 'unity/Assets/**/*.cs', 'unity/Assets/**/*.asmdef', 'test-fixtures/**') }}
+          restore-keys: |
+            UnityTests-
+            Library-
+
+      - name: Run Unity tests
+        id: unity-tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: unity
+          unityVersion: auto
+          testMode: editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          artifactsPath: artifacts/unity-tests
+
+      - name: Upload Unity test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-test-results
+          path: ${{ steps.unity-tests.outputs.artifactsPath }}
+          if-no-files-found: warn
+          retention-days: 30

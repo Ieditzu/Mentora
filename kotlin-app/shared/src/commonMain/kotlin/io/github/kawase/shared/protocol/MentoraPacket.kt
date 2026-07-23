@@ -6,9 +6,19 @@ sealed class MentoraPacket {
     internal abstract fun writeBody(cursor: ByteCursor)
 }
 
-data class HandshakePacket(val clientFingerprint: String) : MentoraPacket() {
+data class HandshakePacket(
+    val clientFingerprint: String,
+    val protocolVersion: Int = 1,
+    val deviceId: String = ""
+) : MentoraPacket() {
     override val id = 1
-    override fun writeBody(cursor: ByteCursor) = cursor.writeString(clientFingerprint)
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(clientFingerprint)
+        if (protocolVersion >= 2 || deviceId.isNotEmpty()) {
+            cursor.writeInt(protocolVersion)
+            cursor.writeString(deviceId)
+        }
+    }
 }
 
 data class AuthPacket(val emailHash: String, val passwordHash: String) : MentoraPacket() {
@@ -98,3 +108,138 @@ data class ParentChallengeCompletedPacket(val challengeId: String, val childId: 
 data class FetchWeeklyReportPacket(val childId: Long) : MentoraPacket() { override val id = 69; override fun writeBody(cursor: ByteCursor) = cursor.writeLong(childId) }
 data class WeeklyReportResponsePacket(val childId: Long, val childName: String, val weekStart: String, val weekEnd: String, val reportText: String, val aiGenerated: Boolean) : MentoraPacket() { override val id = 70; override fun writeBody(cursor: ByteCursor) { cursor.writeLong(childId); cursor.writeString(childName); cursor.writeString(weekStart); cursor.writeString(weekEnd); cursor.writeString(reportText); cursor.writeBoolean(aiGenerated) } }
 data class SetClientLanguagePacket(val languageTag: String) : MentoraPacket() { override val id = 76; override fun writeBody(cursor: ByteCursor) = cursor.writeString(languageTag) }
+
+data class ParentSecondFactorRequiredPacket(
+    val challengeId: String,
+    val expiresInSeconds: Int,
+    val recoveryAllowed: Boolean
+) : MentoraPacket() {
+    override val id = 81
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(challengeId)
+        cursor.writeInt(expiresInSeconds)
+        cursor.writeBoolean(recoveryAllowed)
+    }
+}
+
+data class VerifyParentSecondFactorPacket(
+    val challengeId: String,
+    val code: String
+) : MentoraPacket() {
+    override val id = 82
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(challengeId)
+        cursor.writeString(code)
+    }
+}
+
+data class BeginParentTotpEnrollmentPacket(val passwordHash: String) : MentoraPacket() {
+    override val id = 83
+    override fun writeBody(cursor: ByteCursor) = cursor.writeString(passwordHash)
+}
+
+data class ParentTotpEnrollmentDetailsPacket(
+    val enrollmentId: String,
+    val secretBase32: String,
+    val otpAuthUri: String
+) : MentoraPacket() {
+    override val id = 84
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(enrollmentId)
+        cursor.writeString(secretBase32)
+        cursor.writeString(otpAuthUri)
+    }
+}
+
+data class ConfirmParentTotpEnrollmentPacket(
+    val enrollmentId: String,
+    val code: String
+) : MentoraPacket() {
+    override val id = 85
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(enrollmentId)
+        cursor.writeString(code)
+    }
+}
+
+data class ParentTotpEnrollmentResultPacket(
+    val success: Boolean,
+    val message: String,
+    val recoveryCodes: List<String>
+) : MentoraPacket() {
+    override val id = 86
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeBoolean(success)
+        cursor.writeString(message)
+        cursor.writeInt(recoveryCodes.size)
+        recoveryCodes.forEach(cursor::writeString)
+    }
+}
+
+data class DisableParentTotpPacket(
+    val passwordHash: String,
+    val code: String
+) : MentoraPacket() {
+    override val id = 87
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(passwordHash)
+        cursor.writeString(code)
+    }
+}
+
+class FetchParentSecurityStatusPacket : MentoraPacket() {
+    override val id = 88
+    override fun writeBody(cursor: ByteCursor) = Unit
+}
+
+data class ParentSecurityStatusPacket(
+    val totpEnabled: Boolean,
+    val recoveryCodesRemaining: Int
+) : MentoraPacket() {
+    override val id = 89
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeBoolean(totpEnabled)
+        cursor.writeInt(recoveryCodesRemaining)
+    }
+}
+
+data class ParentAuthSessionPacket(
+    val success: Boolean,
+    val parentId: Long,
+    val message: String,
+    val parentPfp: String,
+    val sessionToken: String,
+    val expiresAtEpochSeconds: Long
+) : MentoraPacket() {
+    override val id = 90
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeBoolean(success)
+        cursor.writeLong(parentId)
+        cursor.writeString(message)
+        cursor.writeString(parentPfp)
+        cursor.writeString(sessionToken)
+        cursor.writeLong(expiresAtEpochSeconds)
+    }
+}
+
+data class ResumeParentSessionPacket(
+    val sessionToken: String,
+    val deviceId: String
+) : MentoraPacket() {
+    override val id = 91
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(sessionToken)
+        cursor.writeString(deviceId)
+    }
+}
+
+data class RevokeParentSessionPacket(
+    val sessionToken: String,
+    val revokeAll: Boolean
+) : MentoraPacket() {
+    override val id = 92
+    override fun writeBody(cursor: ByteCursor) {
+        cursor.writeString(sessionToken)
+        cursor.writeBoolean(revokeAll)
+    }
+}

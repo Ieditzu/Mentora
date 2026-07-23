@@ -5,7 +5,7 @@ import {
   AlertCircle, CheckCircle2, Layout,
   Layers, Sparkles, BookOpen, Zap,
   ChevronRight, MoreVertical, Activity, Settings, User, FileText,
-  Clock, Code, Cpu
+  Clock, Code, Cpu, ShieldCheck
 } from 'lucide-react';
 import { api, API_BASE } from './lib/api';
 import { translate } from './lib/i18n';
@@ -136,17 +136,46 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({ email: authState.email, password })
       });
-      setToken(response.token);
-      setParentId(String(response.parentId));
-      localStorage.setItem("mentora_creator_token", response.token);
-      localStorage.setItem("mentora_creator_parent_id", String(response.parentId));
-      showToast(t(authState.mode === "login" ? "Welcome back!" : "Account created!"));
-      setActiveTab('dashboard');
+      if (response.requiresTotp) {
+        setAuthState({
+          ...authState,
+          step: "totp",
+          challengeId: response.challengeId,
+          expiresInSeconds: response.expiresInSeconds
+        });
+        return;
+      }
+      completeWebAuthentication(response, authState.mode === "login" ? "Welcome back!" : "Account created!");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTotpSubmit = async (code) => {
+    setLoading(true);
+    try {
+      const response = await api("/api/web/auth/login/totp", {
+        method: "POST",
+        body: JSON.stringify({ challengeId: authState.challengeId, code: code.trim() })
+      });
+      completeWebAuthentication(response, "Two-factor sign-in complete");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeWebAuthentication = (response, message) => {
+    setToken(response.token);
+    setParentId(String(response.parentId));
+    localStorage.setItem("mentora_creator_token", response.token);
+    localStorage.setItem("mentora_creator_parent_id", String(response.parentId));
+    setAuthState({ step: "email", mode: "login", email: "" });
+    showToast(t(message));
+    setActiveTab('dashboard');
   };
 
   const handleSaveCourse = async () => {
@@ -224,6 +253,7 @@ export default function App() {
               t={t}
               onLookup={handleAuthLookup} 
               onSubmit={handleAuthSubmit}
+              onTotp={handleTotpSubmit}
               onReset={() => setAuthState({ step: "email", mode: "login", email: "" })}
             />
           </div>
@@ -650,9 +680,17 @@ function TextareaField({ label, ...props }) {
   );
 }
 
-function AuthSection({ state, onLookup, onSubmit, onReset, loading, t }) {
+function AuthSection({ state, onLookup, onSubmit, onTotp, onReset, loading, t }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+
+  useEffect(() => {
+    if (state.step === "totp") {
+      setPassword("");
+      setTotpCode("");
+    }
+  }, [state.step]);
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md">
@@ -665,10 +703,14 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading, t }) {
           </div>
           <div>
             <h2 className="text-2xl font-heading font-bold text-white tracking-tight">
-              {t("Sign In")}
+              {state.step === "totp" ? t("Verify your sign-in") : t("Sign In")}
             </h2>
             <p className="text-sm text-text-muted mt-1">
-              {state.step === 'email' ? t("Enter your email address to continue.") : t("Enter password for {{email}}", { email: state.email })}
+              {state.step === 'email'
+                ? t("Enter your email address to continue.")
+                : state.step === 'totp'
+                  ? t("Enter your authenticator or one-time recovery code. This challenge expires in {{seconds}} seconds.", { seconds: state.expiresInSeconds })
+                  : t("Enter password for {{email}}", { email: state.email })}
             </p>
           </div>
         </div>
@@ -681,6 +723,26 @@ function AuthSection({ state, onLookup, onSubmit, onReset, loading, t }) {
                 {loading ? t("Continuing...") : t("Continue")}
               </button>
             </>
+          ) : state.step === 'totp' ? (
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-brand/30 bg-brand/10 text-brand">
+                <ShieldCheck size={28} />
+              </div>
+              <InputField
+                label={t("Authenticator or recovery code")}
+                value={totpCode}
+                onChange={setTotpCode}
+                placeholder="123456"
+                autoComplete="one-time-code"
+                onKeyDown={e => e.key === 'Enter' && onTotp(totpCode)}
+              />
+              <div className="flex gap-3 pt-2">
+                <button onClick={onReset} className="btn-secondary flex-1 py-3">{t("Cancel")}</button>
+                <button onClick={() => onTotp(totpCode)} disabled={!totpCode.trim() || loading} className="btn-primary flex-[2] py-3">
+                  {loading ? t("Verifying...") : t("Verify")}
+                </button>
+              </div>
+            </motion.div>
           ) : (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
               <InputField label={t("Password")} type="password" value={password} onChange={setPassword} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && onSubmit(password)} />

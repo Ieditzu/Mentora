@@ -13,6 +13,7 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
+        withHostTestBuilder {}.configure {}
     }
 
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { iosTarget ->
@@ -25,6 +26,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
         }
     }
 }

@@ -53,11 +53,12 @@ public class TaskService {
 
     @Transactional
     public void completeTask(final Long childId, final Long taskId) {
-        final Child child = childRepository.findById(childId)
+        final Child child = childRepository.findByIdForUpdate(childId)
                 .orElseThrow(() -> new RuntimeException("Child not found with ID: " + childId));
                 
         final Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
+        if (completedTaskRepository.existsByChildIdAndTaskId(childId, taskId)) return;
 
         final CompletedTask completedTask = new CompletedTask();
         completedTask.setChild(child);

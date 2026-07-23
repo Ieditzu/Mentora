@@ -487,6 +487,20 @@
   letter-spacing: .05em;
 }
 
+.mobile-security-features {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: .6rem;
+}
+
+.mobile-security-features span:last-child {
+  border-color: rgba(155,226,45,.45);
+  background: linear-gradient(145deg, rgba(155,226,45,.16), rgba(50,216,199,.08));
+}
+
+.mobile-security-showcase .phone-shot {
+  height: 24rem;
+}
+
 .web-shot {
   display: block;
   width: 100%;
@@ -963,7 +977,124 @@
 .large-grid > .card { min-height: 17rem; }
 .security-grid > .card { min-height: 23rem; }
 .security-grid pre { margin: .8rem 0; padding: .8rem; border-radius: .7rem; background: rgba(3,4,8,.5); font-size: .8rem; line-height: 1.5; }
-.test-grid > .card { min-height: 14rem; }
+.identity-card {
+  justify-content: flex-start;
+}
+
+.security-card-heading {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.security-card-heading h2 {
+  margin: 0;
+}
+
+.auth-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1.2fr auto 1.2fr;
+  align-items: center;
+  gap: .25rem;
+  margin: .9rem 0 .6rem;
+}
+
+.auth-flow span {
+  min-height: 3.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: .35rem .28rem;
+  border: 1px solid rgba(50,216,199,.28);
+  border-radius: .55rem;
+  background: rgba(50,216,199,.075);
+  color: #eafdfb;
+  font-size: .63rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.auth-flow b {
+  color: var(--mentora-cyan);
+  font-size: .56rem;
+  letter-spacing: .08em;
+}
+
+.auth-flow i {
+  color: var(--mentora-electric);
+  font-size: 1.05rem;
+  font-style: normal;
+}
+
+.security-points {
+  margin: .25rem 0 0 !important;
+  padding-left: 1.1rem;
+  color: #dce0e8;
+  font-size: .76rem;
+  line-height: 1.34;
+}
+
+.security-points li {
+  margin: .31rem 0;
+}
+
+.test-metrics {
+  margin-top: .35rem;
+}
+
+.test-metrics > .metric {
+  min-height: 5.9rem;
+  padding: .65rem 1rem;
+}
+
+.test-metrics .value {
+  font-size: 2.15rem;
+}
+
+.test-metrics .label {
+  margin-top: .12rem;
+}
+
+.integration-grid {
+  gap: .8rem;
+  margin-top: .75rem;
+}
+
+.integration-grid > .card {
+  min-height: 10.2rem;
+  padding: .85rem 1rem;
+}
+
+.integration-grid .icon-word {
+  margin-bottom: .35rem;
+}
+
+.integration-grid p {
+  color: #c3c8d2;
+  font-size: .78rem;
+  line-height: 1.38;
+}
+
+.ci-proof {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: .7rem;
+  min-height: 3.7rem;
+  margin-top: .75rem;
+  padding: .65rem .95rem;
+  border: 1px solid rgba(255,156,85,.38);
+  border-radius: .72rem;
+  background: linear-gradient(90deg, rgba(255,156,85,.14), rgba(139,124,255,.09), rgba(50,216,199,.08));
+  box-shadow: 0 18px 42px rgba(0,0,0,.24);
+}
+
+.ci-proof > span:last-child {
+  color: #c8cdd7;
+  font-size: .75rem;
+  line-height: 1.3;
+}
 .content-grid > .card { min-height: 14rem; }
 .innovation-grid > .card { min-height: 11.5rem; }
 .docs-grid > .card { min-height: 13rem; }

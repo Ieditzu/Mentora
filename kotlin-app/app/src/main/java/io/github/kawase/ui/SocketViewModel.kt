@@ -9,7 +9,12 @@ import androidx.lifecycle.viewModelScope
 import io.github.kawase.socket.packet.Packet
 import io.github.kawase.socket.packet.PacketManager
 import io.github.kawase.socket.packet.impl.*
+import io.github.kawase.socket.security.ParentAuthenticationMode
+import io.github.kawase.socket.security.ParentAuthenticationTransition
+import io.github.kawase.socket.security.ParentSessionStore
+import io.github.kawase.socket.security.PendingParentAuthentication
 import io.github.kawase.socket.utility.HashUtility
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -17,6 +22,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
@@ -64,6 +70,36 @@ data class WeeklyReport(
     val reportText: String,
     val aiGenerated: Boolean
 )
+
+sealed interface ParentAuthenticationState {
+    data object Idle : ParentAuthenticationState
+    data object SubmittingCredentials : ParentAuthenticationState
+    data class VerifyingSecondFactor(
+        val challenge: AwaitingSecondFactor
+    ) : ParentAuthenticationState
+    data class AwaitingSecondFactor(
+        val challengeId: String,
+        val expiresInSeconds: Int,
+        val recoveryAllowed: Boolean,
+        val errorMessage: String? = null
+    ) : ParentAuthenticationState
+}
+
+data class TotpEnrollmentDetails(
+    val enrollmentId: String,
+    val secretBase32: String,
+    val otpAuthUri: String
+)
+
+data class ParentSecurityState(
+    val isLoading: Boolean = false,
+    val totpEnabled: Boolean? = null,
+    val recoveryCodesRemaining: Int = 0,
+    val enrollmentDetails: TotpEnrollmentDetails? = null,
+    val recoveryCodes: List<String> = emptyList(),
+    val message: String? = null
+)
+
 data class AiProfile(
     val level: String,
     val totalInteractions: Int,
@@ -88,15 +124,46 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     private var client: AndroidClientSocket? = null
     private val packetManager = PacketManager()
     private val prefs: SharedPreferences = application.getSharedPreferences("mentora_prefs", Context.MODE_PRIVATE)
+    private val sessionStore = ParentSessionStore(application)
+    private var deviceId: String? = null
+    private var sessionToken: String? = null
+    private var secureStoreInitializationError: String? = null
     private var notificationId = 100
+    private var pendingAuthentication: PendingParentAuthentication? = null
+    private var activeSecondFactorChallenge: ParentAuthenticationState.AwaitingSecondFactor? = null
+    private var authenticationTimeoutJob: Job? = null
+    private var securityTimeoutJob: Job? = null
+    private var logoutJob: Job? = null
+    private var logoutAcknowledgement: CompletableDeferred<Unit>? = null
 
     companion object {
         private const val CHANNEL_ID = "mentora_activity"
         private const val CHANNEL_NAME = "Mentora Activity"
         private const val APP_LANGUAGE_KEY = "app_language"
+        private const val REQUEST_TIMEOUT_MILLIS = 12_000L
+        private const val LOGOUT_ACKNOWLEDGEMENT_TIMEOUT_MILLIS = 1_000L
     }
 
     init {
+        if (!prefs.edit()
+            .remove("email_hash")
+            .remove("password_hash")
+            .commit()
+        ) {
+            secureStoreInitializationError = "Saved legacy credential hashes could not be removed."
+        }
+        runCatching(sessionStore::deviceId)
+            .onSuccess { deviceId = it }
+            .onFailure {
+                secureStoreInitializationError =
+                    "Secure device identity is unavailable: ${it.message ?: "unknown storage error"}"
+            }
+        runCatching(sessionStore::loadSessionToken)
+            .onSuccess { sessionToken = it }
+            .onFailure {
+                secureStoreInitializationError =
+                    "Saved parent session could not be loaded: ${it.message ?: "unknown storage error"}"
+            }
         createNotificationChannel(application)
     }
 
@@ -138,6 +205,12 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     private val _isLoggedIn = mutableStateOf(false)
     val isLoggedIn: State<Boolean> = _isLoggedIn
 
+    private val _authenticationState = mutableStateOf<ParentAuthenticationState>(ParentAuthenticationState.Idle)
+    val authenticationState: State<ParentAuthenticationState> = _authenticationState
+
+    private val _securityState = mutableStateOf(ParentSecurityState())
+    val securityState: State<ParentSecurityState> = _securityState
+
     private val _parentId = mutableStateOf(-1L)
     val parentId: State<Long> = _parentId
 
@@ -147,9 +220,6 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     private val _parentPfp = mutableStateOf<String?>(null)
     val parentPfp: State<String?> = _parentPfp
     
-    private var savedEmailHash: String? = prefs.getString("email_hash", null)
-    private var savedPasswordHash: String? = prefs.getString("password_hash", null)
-
     private var reconnectJob: Job? = null
     private var currentUrl: String = "wss://neuro.serenityutils.club"
 
@@ -173,15 +243,52 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun logout() {
+        if (logoutJob?.isActive == true) return
+        logoutJob = viewModelScope.launch {
+            val tokenToRevoke = sessionToken
+            val openClient = client?.takeIf { it.isOpen }
+            if (tokenToRevoke != null && openClient != null) {
+                val acknowledgement = CompletableDeferred<Unit>()
+                logoutAcknowledgement = acknowledgement
+                runCatching {
+                    openClient.send(RevokeParentSessionPacket(tokenToRevoke, false).encode())
+                }
+                withTimeoutOrNull(LOGOUT_ACKNOWLEDGEMENT_TIMEOUT_MILLIS) {
+                    acknowledgement.await()
+                }
+            }
+            logoutAcknowledgement = null
+            clearAuthenticatedUiState(clearSavedEmail = true)
+            client?.close()
+        }
+    }
+
+    private fun clearAuthenticatedUiState(clearSavedEmail: Boolean) {
         _isLoggedIn.value = false
-        savedEmailHash = null
-        savedPasswordHash = null
-        prefs.edit()
-            .remove("saved_email")
-            .remove("email_hash")
-            .remove("password_hash")
-            .apply()
-        client?.close()
+        _parentId.value = -1L
+        _parentPfp.value = null
+        clearTransientAuthentication()
+        _securityState.value = ParentSecurityState()
+        sessionToken = null
+        runCatching(sessionStore::clearSessionToken)
+            .onFailure { emitError("Secure session cleanup failed: ${it.message}") }
+        if (clearSavedEmail) {
+            prefs.edit().remove("saved_email").apply()
+            _email.value = ""
+        }
+        _children.clear()
+        _tasks.clear()
+        _goals.clear()
+        _completedTasks.clear()
+        _aiProfilesCpp.clear()
+        _aiProfilesPython.clear()
+        _aiProfilesGeneral.clear()
+        _aiProfilesMachineLearning.clear()
+        _liveSessions.clear()
+        _weeklyReports.clear()
+        _weeklyReportLoading.clear()
+        pendingChildStatsId = null
+        pendingWeeklyReportChildId = null
     }
 
     private val _children = mutableStateListOf<Child>()
@@ -221,6 +328,17 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
 
     fun connect(url: String = "wss://neuro.serenityutils.club") {
         currentUrl = url
+        if (deviceId == null) {
+            emitError(
+                secureStoreInitializationError
+                    ?: "Secure device identity is unavailable. Restart the app and try again."
+            )
+            return
+        }
+        secureStoreInitializationError?.let {
+            emitError(it)
+            secureStoreInitializationError = null
+        }
         if (reconnectJob == null || reconnectJob?.isCompleted == true) {
             startConnectionLoop()
         }
@@ -244,35 +362,138 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun login(email: String, password: String) {
-        this._email.value = email
-        val emailHash = HashUtility.hash(email)
-        val passwordHash = HashUtility.hash(password)
-        
-        savedEmailHash = emailHash
-        savedPasswordHash = passwordHash
-        prefs.edit()
-            .putString("saved_email", email)
-            .putString("email_hash", emailHash)
-            .putString("password_hash", passwordHash)
-            .apply()
-            
-        sendPacket(AuthPacket(emailHash, passwordHash))
+        if (email.trim().isEmpty() || password.isEmpty()) return
+        if (!ensureConnectedForAuthentication()) return
+
+        clearTransientAuthentication()
+        val attempt = PendingParentAuthentication.signIn(email, password)
+        pendingAuthentication = attempt
+        _email.value = attempt.normalizedEmail
+        activeSecondFactorChallenge = null
+        _authenticationState.value = ParentAuthenticationState.SubmittingCredentials
+        prefs.edit().putString("saved_email", attempt.normalizedEmail).apply()
+        sendCurrentAuthenticationAttempt()
     }
 
     fun register(email: String, password: String) {
-        this._email.value = email
-        val emailHash = HashUtility.hash(email)
-        val passwordHash = HashUtility.hash(password)
-        
-        savedEmailHash = emailHash
-        savedPasswordHash = passwordHash
-        prefs.edit()
-            .putString("saved_email", email)
-            .putString("email_hash", emailHash)
-            .putString("password_hash", passwordHash)
-            .apply()
-            
-        sendPacket(RegisterParentPacket(emailHash, passwordHash))
+        if (email.trim().isEmpty() || password.isEmpty()) return
+        if (!ensureConnectedForAuthentication()) return
+
+        clearTransientAuthentication()
+        val attempt = PendingParentAuthentication.register(email, password)
+        pendingAuthentication = attempt
+        _email.value = attempt.normalizedEmail
+        activeSecondFactorChallenge = null
+        _authenticationState.value = ParentAuthenticationState.SubmittingCredentials
+        prefs.edit().putString("saved_email", attempt.normalizedEmail).apply()
+        val emailHash = attempt.currentEmailHash
+            ?: return failAuthentication("Registration could not be prepared.")
+        val passwordHash = attempt.passwordHash
+            ?: return failAuthentication("Registration could not be prepared.")
+        startAuthenticationTimeout()
+        sendPacket(
+            RegisterParentPacket(emailHash, passwordHash),
+            onFailure = {
+                failAuthentication("Registration could not be sent. Check the connection and try again.")
+            }
+        )
+    }
+
+    fun submitSecondFactor(code: String) {
+        val challenge = activeSecondFactorChallenge ?: return
+        val normalizedCode = code.trim()
+        if (normalizedCode.isEmpty()) return
+
+        _authenticationState.value = ParentAuthenticationState.VerifyingSecondFactor(challenge)
+        startAuthenticationTimeout()
+        sendPacket(
+            VerifyParentSecondFactorPacket(challenge.challengeId, normalizedCode),
+            onFailure = {
+                failAuthentication(
+                    "Verification could not be sent. Sign in again to request a new code.",
+                    reconnect = true
+                )
+            }
+        )
+    }
+
+    fun cancelSecondFactor() {
+        val hadChallenge = activeSecondFactorChallenge != null
+        clearTransientAuthentication()
+        if (ParentAuthenticationTransition.shouldReconnectAfterChallengeCancellation(hadChallenge)) {
+            reconnectToResetPendingAuthentication()
+        }
+    }
+
+    fun fetchParentSecurityStatus() {
+        if (!_isLoggedIn.value || !ensureConnectedForSecurityRequest()) return
+        _securityState.value = _securityState.value.copy(isLoading = true, message = null)
+        startSecurityTimeout()
+        sendPacket(
+            FetchParentSecurityStatusPacket(),
+            onFailure = { failSecurityRequest("Security status could not be loaded.") }
+        )
+    }
+
+    fun beginTotpEnrollment(currentPassword: String) {
+        if (
+            !_isLoggedIn.value ||
+            currentPassword.isEmpty() ||
+            !ensureConnectedForSecurityRequest()
+        ) return
+        _securityState.value = _securityState.value.copy(
+            isLoading = true,
+            enrollmentDetails = null,
+            recoveryCodes = emptyList(),
+            message = null
+        )
+        startSecurityTimeout()
+        sendPacket(
+            BeginParentTotpEnrollmentPacket(HashUtility.hash(currentPassword)),
+            onFailure = { failSecurityRequest("Two-factor setup could not be started.") }
+        )
+    }
+
+    fun confirmTotpEnrollment(code: String) {
+        val enrollmentId = _securityState.value.enrollmentDetails?.enrollmentId ?: return
+        val normalizedCode = code.trim()
+        if (normalizedCode.isEmpty() || !ensureConnectedForSecurityRequest()) return
+
+        _securityState.value = _securityState.value.copy(isLoading = true, message = null)
+        startSecurityTimeout()
+        sendPacket(
+            ConfirmParentTotpEnrollmentPacket(enrollmentId, normalizedCode),
+            onFailure = { failSecurityRequest("The authenticator code could not be verified.") }
+        )
+    }
+
+    fun disableTotp(currentPassword: String, code: String) {
+        val normalizedCode = code.trim()
+        if (
+            !_isLoggedIn.value ||
+            currentPassword.isEmpty() ||
+            normalizedCode.isEmpty() ||
+            !ensureConnectedForSecurityRequest()
+        ) return
+
+        _securityState.value = _securityState.value.copy(isLoading = true, message = null)
+        startSecurityTimeout()
+        sendPacket(
+            DisableParentTotpPacket(HashUtility.hash(currentPassword), normalizedCode),
+            onFailure = { failSecurityRequest("Two-factor authentication could not be disabled.") }
+        )
+    }
+
+    fun clearTotpEnrollmentResult() {
+        val resetPendingEnrollment = _securityState.value.enrollmentDetails != null
+        _securityState.value = _securityState.value.copy(
+            isLoading = false,
+            enrollmentDetails = null,
+            recoveryCodes = emptyList(),
+            message = null
+        )
+        securityTimeoutJob?.cancel()
+        if (resetPendingEnrollment) reconnectToResetPendingAuthentication()
     }
 
     fun addChild(name: String) {
@@ -342,7 +563,7 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         sendPacket(UpdatePfpPacket(childId, base64Pfp))
     }
 
-    private fun sendPacket(packet: Packet) {
+    private fun sendPacket(packet: Packet, onFailure: (() -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             client?.let {
                 if (it.isOpen) {
@@ -350,12 +571,22 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                         it.send(packet.encode())
                     } catch (e: Exception) {
                         Log.e("Mentora", "Failed to send packet: ${e.message}")
+                        viewModelScope.launch {
+                            onFailure?.invoke()
+                            _errorFlow.emit("Request failed: ${e.message ?: "connection error"}")
+                        }
                     }
                 } else {
-                    _errorFlow.emit("Server disconnected. Retrying...")
+                    viewModelScope.launch {
+                        onFailure?.invoke()
+                        _errorFlow.emit("Server disconnected. Retrying...")
+                    }
                 }
             } ?: run {
-                _errorFlow.emit("Connecting to server...")
+                viewModelScope.launch {
+                    onFailure?.invoke()
+                    _errorFlow.emit("Connecting to server...")
+                }
             }
         }
     }
@@ -377,11 +608,18 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         override fun onOpen(handshakedata: ServerHandshake?) {
             Log.d("Mentora", "Socket opened")
             _isConnected.value = true
-            send(HandShakePacket("android_client").encode())
+            val storedDeviceId = deviceId
+            if (storedDeviceId == null) {
+                emitError("Secure device identity is unavailable.")
+                close()
+                return
+            }
+            send(HandShakePacket("android_parent", 2, storedDeviceId).encode())
             send(SetClientLanguagePacket(AppLanguages.resolve(appLanguage.value, getApplication<Application>().resources.configuration)).encode())
-            
-            if (savedEmailHash != null && savedPasswordHash != null) {
-                send(AuthPacket(savedEmailHash, savedPasswordHash).encode())
+            sessionToken?.let {
+                _authenticationState.value = ParentAuthenticationState.SubmittingCredentials
+                startAuthenticationTimeout()
+                send(ResumeParentSessionPacket(it, storedDeviceId).encode())
             }
         }
 
@@ -402,6 +640,16 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
             Log.d("Mentora", "Socket closed: $reason")
             _isConnected.value = false
             _isLoggedIn.value = false
+            logoutAcknowledgement?.complete(Unit)
+            if (activeSecondFactorChallenge != null || pendingAuthentication != null) {
+                failAuthentication("The connection closed. Try signing in again.")
+            } else {
+                authenticationTimeoutJob?.cancel()
+                _authenticationState.value = ParentAuthenticationState.Idle
+            }
+            if (_securityState.value.isLoading) {
+                failSecurityRequest("The connection closed before the security request completed.")
+            }
         }
 
         override fun onError(ex: Exception?) {
@@ -419,20 +667,118 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
         when (packet) {
             is AuthResponsePacket -> {
                 if (packet.isSuccess) {
-                    _parentId.value = packet.parentId
-                    _parentPfp.value = packet.parentPfp
-                    _isLoggedIn.value = true
-                    viewModelScope.launch { _successFlow.emit("Welcome back!") }
-                    fetchChildren()
-                    fetchTasks()
+                    completeAuthentication(packet.parentId, packet.parentPfp, null)
                 } else {
-                    viewModelScope.launch { _errorFlow.emit("Login failed: ${packet.message}") }
+                    val legacyEmailHash = pendingAuthentication?.retryWithLegacyEmailHash()
+                    val passwordHash = pendingAuthentication?.passwordHash
+                    if (legacyEmailHash != null && passwordHash != null) {
+                        _authenticationState.value = ParentAuthenticationState.SubmittingCredentials
+                        startAuthenticationTimeout()
+                        sendPacket(
+                            AuthPacket(legacyEmailHash, passwordHash),
+                            onFailure = {
+                                failAuthentication("Legacy account sign-in could not be sent.")
+                            }
+                        )
+                    } else {
+                        failAuthentication("Login failed: ${packet.message}")
+                    }
                 }
+            }
+            is ParentSecondFactorRequiredPacket -> {
+                authenticationTimeoutJob?.cancel()
+                pendingAuthentication?.clear()
+                pendingAuthentication = null
+                activeSecondFactorChallenge = ParentAuthenticationState.AwaitingSecondFactor(
+                    challengeId = packet.challengeId,
+                    expiresInSeconds = packet.expiresInSeconds,
+                    recoveryAllowed = packet.isRecoveryAllowed
+                )
+                _authenticationState.value = activeSecondFactorChallenge!!
+            }
+            is ParentAuthSessionPacket -> {
+                if (packet.isSuccess && packet.sessionToken.isNotBlank()) {
+                    completeAuthentication(packet.parentId, packet.parentPfp, packet.sessionToken)
+                } else if (
+                    ParentAuthenticationTransition.shouldClearAuthenticatedState(
+                        parentSessionFailed = true
+                    )
+                ) {
+                    clearAuthenticatedUiState(clearSavedEmail = false)
+                    emitError(packet.message.ifBlank { "Unable to restore the parent session." })
+                }
+            }
+            is ParentTotpEnrollmentDetailsPacket -> {
+                securityTimeoutJob?.cancel()
+                _securityState.value = _securityState.value.copy(
+                    isLoading = false,
+                    enrollmentDetails = TotpEnrollmentDetails(
+                        packet.enrollmentId,
+                        packet.secretBase32,
+                        packet.otpAuthUri
+                    ),
+                    recoveryCodes = emptyList(),
+                    message = null
+                )
+            }
+            is ParentTotpEnrollmentResultPacket -> {
+                securityTimeoutJob?.cancel()
+                if (packet.isSuccess) {
+                    sessionToken = null
+                    runCatching(sessionStore::clearSessionToken)
+                        .onFailure { emitError("Secure session cleanup failed: ${it.message}") }
+                }
+                _securityState.value = _securityState.value.copy(
+                    isLoading = false,
+                    totpEnabled = if (packet.isSuccess) true else _securityState.value.totpEnabled,
+                    recoveryCodesRemaining = if (packet.isSuccess) {
+                        packet.recoveryCodes.size
+                    } else {
+                        _securityState.value.recoveryCodesRemaining
+                    },
+                    enrollmentDetails = if (packet.isSuccess) null else _securityState.value.enrollmentDetails,
+                    recoveryCodes = if (packet.isSuccess) packet.recoveryCodes else emptyList(),
+                    message = packet.message
+                )
+            }
+            is ParentSecurityStatusPacket -> {
+                securityTimeoutJob?.cancel()
+                _securityState.value = _securityState.value.copy(
+                    isLoading = false,
+                    totpEnabled = packet.isTotpEnabled,
+                    recoveryCodesRemaining = packet.recoveryCodesRemaining,
+                    message = null
+                )
             }
             is ActionResponsePacket -> {
                 viewModelScope.launch {
                     if (packet.isSuccess) {
                         _successFlow.emit(packet.message ?: "Success")
+                        if (packet.requestPacketId == 3) {
+                            val attempt = pendingAuthentication
+                            if (
+                                !_isLoggedIn.value &&
+                                attempt?.mode == ParentAuthenticationMode.REGISTER
+                            ) {
+                                val emailHash = attempt.currentEmailHash
+                                val passwordHash = attempt.passwordHash
+                                if (emailHash != null && passwordHash != null) {
+                                    _authenticationState.value =
+                                        ParentAuthenticationState.SubmittingCredentials
+                                    startAuthenticationTimeout()
+                                    sendPacket(
+                                        AuthPacket(emailHash, passwordHash),
+                                        onFailure = {
+                                            failAuthentication(
+                                                "The account was created, but sign-in could not be sent."
+                                            )
+                                        }
+                                    )
+                                } else {
+                                    failAuthentication("The account was created. Sign in to continue.")
+                                }
+                            }
+                        }
                         if (packet.requestPacketId == 4 || packet.requestPacketId == 27) {
                             fetchChildren()
                         }
@@ -450,7 +796,49 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                         if (packet.requestPacketId == 66) {
                             _successFlow.emit(packet.message ?: "Challenge sent")
                         }
+                        if (packet.requestPacketId == 87) {
+                            securityTimeoutJob?.cancel()
+                            sessionToken = null
+                            runCatching(sessionStore::clearSessionToken)
+                                .onFailure { emitError("Secure session cleanup failed: ${it.message}") }
+                            _securityState.value = ParentSecurityState(
+                                totpEnabled = false,
+                                message = packet.message
+                            )
+                        }
+                        if (packet.requestPacketId == 92) {
+                            logoutAcknowledgement?.complete(Unit)
+                        }
                     } else {
+                        if (packet.requestPacketId == 3) {
+                            failAuthentication("Registration failed: ${packet.message}")
+                        }
+                        if (packet.requestPacketId == 82) {
+                            authenticationTimeoutJob?.cancel()
+                            authenticationTimeoutJob = null
+                            activeSecondFactorChallenge?.let {
+                                val challenge = it.copy(errorMessage = packet.message)
+                                activeSecondFactorChallenge = challenge
+                                _authenticationState.value = challenge
+                            }
+                        }
+                        if (packet.requestPacketId in 83..87) {
+                            securityTimeoutJob?.cancel()
+                            _securityState.value = _securityState.value.copy(
+                                isLoading = false,
+                                message = packet.message
+                            )
+                        }
+                        if (
+                            ParentAuthenticationTransition.shouldClearAuthenticatedState(
+                                requestPacketId = packet.requestPacketId
+                            )
+                        ) {
+                            clearAuthenticatedUiState(clearSavedEmail = false)
+                        }
+                        if (packet.requestPacketId == 92) {
+                            logoutAcknowledgement?.complete(Unit)
+                        }
                         if (packet.requestPacketId == 69) {
                             pendingWeeklyReportChildId?.let { _weeklyReportLoading[it] = false }
                             pendingWeeklyReportChildId = null
@@ -538,6 +926,124 @@ class SocketViewModel(application: Application) : AndroidViewModel(application) 
                 fetchChildren()
             }
         }
+    }
+
+    private fun ensureConnectedForAuthentication(): Boolean {
+        if (_isConnected.value && client?.isOpen == true) return true
+        clearTransientAuthentication()
+        emitError("Connect to the Mentora server before signing in.")
+        return false
+    }
+
+    private fun ensureConnectedForSecurityRequest(): Boolean {
+        if (_isConnected.value && client?.isOpen == true) return true
+        failSecurityRequest("Connect to the Mentora server before changing security settings.")
+        return false
+    }
+
+    private fun sendCurrentAuthenticationAttempt() {
+        val attempt = pendingAuthentication
+            ?: return failAuthentication("Sign-in could not be prepared.")
+        val emailHash = attempt.currentEmailHash
+            ?: return failAuthentication("Sign-in could not be prepared.")
+        val passwordHash = attempt.passwordHash
+            ?: return failAuthentication("Sign-in could not be prepared.")
+
+        startAuthenticationTimeout()
+        sendPacket(
+            AuthPacket(emailHash, passwordHash),
+            onFailure = { failAuthentication("Sign-in could not be sent. Check the connection.") }
+        )
+    }
+
+    private fun clearTransientAuthentication() {
+        authenticationTimeoutJob?.cancel()
+        authenticationTimeoutJob = null
+        pendingAuthentication?.clear()
+        pendingAuthentication = null
+        activeSecondFactorChallenge = null
+        _authenticationState.value = ParentAuthenticationState.Idle
+    }
+
+    private fun failAuthentication(message: String, reconnect: Boolean = false) {
+        clearTransientAuthentication()
+        emitError(message)
+        if (reconnect) reconnectToResetPendingAuthentication()
+    }
+
+    private fun failSecurityRequest(message: String) {
+        securityTimeoutJob?.cancel()
+        securityTimeoutJob = null
+        _securityState.value = _securityState.value.copy(
+            isLoading = false,
+            message = message
+        )
+        emitError(message)
+    }
+
+    private fun startAuthenticationTimeout() {
+        authenticationTimeoutJob?.cancel()
+        authenticationTimeoutJob = viewModelScope.launch {
+            delay(REQUEST_TIMEOUT_MILLIS)
+            when {
+                _authenticationState.value is ParentAuthenticationState.VerifyingSecondFactor -> {
+                    failAuthentication(
+                        "Verification timed out. Sign in again to request a new code.",
+                        reconnect = true
+                    )
+                }
+                pendingAuthentication != null -> {
+                    failAuthentication("The server did not respond. Check the connection and try again.")
+                }
+                sessionToken != null -> {
+                    clearAuthenticatedUiState(clearSavedEmail = false)
+                    emitError("The saved parent session could not be restored.")
+                }
+                else -> clearTransientAuthentication()
+            }
+        }
+    }
+
+    private fun startSecurityTimeout() {
+        securityTimeoutJob?.cancel()
+        securityTimeoutJob = viewModelScope.launch {
+            delay(REQUEST_TIMEOUT_MILLIS)
+            if (_securityState.value.isLoading) {
+                failSecurityRequest("The security request timed out. Try again.")
+            }
+        }
+    }
+
+    private fun reconnectToResetPendingAuthentication() {
+        val socket = client ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { socket.closeBlocking() }
+        }
+    }
+
+    private fun emitError(message: String) {
+        viewModelScope.launch {
+            _errorFlow.emit(message)
+        }
+    }
+
+    private fun completeAuthentication(parentId: Long, parentPfp: String?, rotatedSessionToken: String?) {
+        if (!rotatedSessionToken.isNullOrBlank()) {
+            runCatching { sessionStore.saveSessionToken(rotatedSessionToken) }
+                .onSuccess { sessionToken = rotatedSessionToken }
+                .onFailure {
+                    sessionToken = null
+                    emitError("Signed in, but the secure session could not be saved on this device.")
+                }
+        }
+        _parentId.value = parentId
+        _parentPfp.value = parentPfp
+        _isLoggedIn.value = true
+        clearTransientAuthentication()
+        viewModelScope.launch { _successFlow.emit("Welcome back!") }
+        fetchChildren()
+        fetchTasks()
+        fetchParentSecurityStatus()
     }
 
     private fun parseAiProfile(gameStatsJson: String, key: String): AiProfile? {

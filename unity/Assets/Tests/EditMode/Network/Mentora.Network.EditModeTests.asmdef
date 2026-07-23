@@ -1,0 +1,21 @@
+{
+  "name": "Mentora.Network.EditModeTests",
+  "rootNamespace": "Mentora.Network.Tests",
+  "references": [
+    "Mentora.Network"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

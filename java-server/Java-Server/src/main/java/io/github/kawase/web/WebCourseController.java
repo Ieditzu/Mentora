@@ -3,6 +3,8 @@ package io.github.kawase.web;
 import io.github.kawase.database.services.CourseService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -23,7 +26,7 @@ public class WebCourseController {
     private final CourseService courseService;
 
     @GetMapping("/mine")
-    public java.util.List<CourseService.CourseSummaryDto> mine(final HttpServletRequest request) {
+    public List<CourseService.CourseSummaryDto> mine(final HttpServletRequest request) {
         return courseService.getCoursesForParent(requireParentId(request));
     }
 
@@ -33,14 +36,17 @@ public class WebCourseController {
     }
 
     @PostMapping
-    public CourseService.CourseDetailDto create(final HttpServletRequest request, @RequestBody final CourseService.UpsertCourseRequest payload) {
+    public CourseService.CourseDetailDto create(
+            final HttpServletRequest request,
+            @RequestBody final CourseService.UpsertCourseRequest payload) {
         return courseService.createCourseDetail(requireParentId(request), payload);
     }
 
     @PutMapping("/{courseId}")
-    public CourseService.CourseDetailDto update(final HttpServletRequest request,
-                                                @PathVariable final Long courseId,
-                                                @RequestBody final CourseService.UpsertCourseRequest payload) {
+    public CourseService.CourseDetailDto update(
+            final HttpServletRequest request,
+            @PathVariable final Long courseId,
+            @RequestBody final CourseService.UpsertCourseRequest payload) {
         return courseService.updateCourseDetail(requireParentId(request), courseId, payload);
     }
 
@@ -51,15 +57,21 @@ public class WebCourseController {
     }
 
     @ExceptionHandler(RuntimeException.class)
-    public Map<String, String> handleError(RuntimeException exception) {
-        return Map.of("error", exception.getMessage() == null ? "Unexpected error" : exception.getMessage());
+    public ResponseEntity<Map<String, String>> handleError(final RuntimeException exception) {
+        final String message = exception.getMessage() == null ? "Unexpected error" : exception.getMessage();
+        final HttpStatus status = switch (message) {
+            case "Unauthorized" -> HttpStatus.UNAUTHORIZED;
+            case "Access denied" -> HttpStatus.FORBIDDEN;
+            case "Course not found", "Parent not found" -> HttpStatus.NOT_FOUND;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+        return ResponseEntity.status(status).body(Map.of("error", message));
     }
 
     private Long requireParentId(final HttpServletRequest request) {
-        String authorization = request.getHeader("Authorization");
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
+        final String authorization = request.getHeader("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer "))
             throw new RuntimeException("Unauthorized");
-        }
         return webSessionService.requireParentId(authorization.substring("Bearer ".length()).trim());
     }
 }
