@@ -5,6 +5,7 @@ import io.github.kawase.database.entity.ParentSession;
 import io.github.kawase.database.repository.ParentRepository;
 import io.github.kawase.database.repository.ParentSessionRepository;
 import io.github.kawase.utility.HashUtility;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class ParentSessionService {
     private final SecureRandom secureRandom;
     private final int ttlDays;
 
+    @Autowired
     public ParentSessionService(
             final ParentSessionRepository sessionRepository,
             final ParentRepository parentRepository,

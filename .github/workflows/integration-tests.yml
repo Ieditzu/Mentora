@@ -5,17 +5,21 @@ on:
     paths:
       - "java-server/**"
       - "kotlin-app/**"
-      - "unity/**"
       - "test-fixtures/**"
       - ".github/workflows/integration-tests.yml"
   pull_request:
     paths:
       - "java-server/**"
       - "kotlin-app/**"
-      - "unity/**"
       - "test-fixtures/**"
       - ".github/workflows/integration-tests.yml"
   workflow_dispatch:
+    inputs:
+      run_unity:
+        description: Run the license-dependent Unity EditMode job
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -139,20 +143,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Publish mobile JUnit report
+      - name: Publish mobile host JUnit report
         if: always() && !cancelled()
         uses: dorny/test-reporter@v3
         with:
-          name: Mobile JUnit
-          path: |
-            kotlin-app/app/build/test-results/**/*.xml
-            kotlin-app/app/build/outputs/androidTest-results/**/*.xml
-            kotlin-app/shared/build/test-results/**/*.xml
+          name: Mobile host JUnit
+          path: kotlin-app/**/build/test-results/**/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+      - name: Publish Android instrumentation JUnit report
+        if: always() && !cancelled()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Android instrumentation JUnit
+          path: kotlin-app/app/build/outputs/androidTest-results/**/*.xml
           reporter: java-junit
           fail-on-error: true
 
   unity:
-    name: Unity EditMode integration contracts
+    name: Unity EditMode integration contracts (manual)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_unity }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -170,6 +181,22 @@ jobs:
           restore-keys: |
             UnityTests-
             Library-
+
+      - name: Validate Unity licensing secrets
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        run: |
+          if [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; then
+            echo "::error::Add UNITY_EMAIL and UNITY_PASSWORD as repository secrets for GameCI."
+            exit 1
+          fi
+          if [ -z "$UNITY_LICENSE" ] && [ -z "$UNITY_SERIAL" ]; then
+            echo "::error::Add UNITY_LICENSE for Personal or UNITY_SERIAL for Professional."
+            exit 1
+          fi
 
       - name: Run Unity tests
         id: unity-tests

@@ -3,6 +3,7 @@ package io.github.kawase.security;
 import io.github.kawase.database.entity.Parent;
 import io.github.kawase.database.repository.ParentRepository;
 import io.github.kawase.utility.HashUtility;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class ParentAuthenticationService {
     private final Map<Long, LoginFailureBudget> loginFailureBudgets = new ConcurrentHashMap<>();
     private final Map<String, EnrollmentChallenge> enrollmentChallenges = new ConcurrentHashMap<>();
 
+    @Autowired
     public ParentAuthenticationService(
             final ParentRepository parentRepository,
             final ParentSessionService sessionService,

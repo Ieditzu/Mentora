@@ -1,5 +1,6 @@
 package io.github.kawase.security;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ public class TotpSecretCipher {
     private final byte[] encryptionKey;
     private final SecureRandom secureRandom;
 
+    @Autowired
     public TotpSecretCipher(@Value("${mentora.security.totp-encryption-key:}") final String encodedEncryptionKey) {
         this(encodedEncryptionKey, new SecureRandom());
     }

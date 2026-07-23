@@ -1,14 +1,66 @@
-# Mentora
+<p align="center">
+  <img src="images/mentora-logo.png" alt="Sigla Mentora" width="160" />
+</p>
 
-[![Integration tests](https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml)
+<h1 align="center">Mentora</h1>
 
-Mentora este un ecosistem educațional bazat pe IA pentru învățarea programării și a învățării automate prin intermediul unui joc Unity, al aplicațiilor Android/iOS pentru părinți, al unui creator web de cursuri și al unui backend Java/Spring. Proiectul îi învață pe copii Python, C++ și concepte AI/ML punându-i să scrie și să ruleze cod real, să lucreze cu seturi de date, să primească îndrumare oferită de IA și să își construiască un profil de învățare persistent.
+<p align="center">
+  <strong>Un ecosistem educațional bazat pe IA pentru a învăța programare prin joc, practică și feedback real.</strong>
+</p>
 
-Acest README se bazează pe codul sursă actual, nu doar pe notele mai vechi ale proiectului. Implementarea include în prezent pachete backend până la `92`, un nivel multiplayer Unity prin LAN separat, editare colaborativă CodeWorld, o insulă AI/ML cu evaluare deterministă pe server, autentificare TOTP pentru părinți, provocări generate de IA, provocări trimise de părinți, rapoarte săptămânale, monitorizarea în timp real a sesiunilor și un companion cu interacțiune vocală.
+<p align="center">
+  Joc Unity pentru elevi · aplicații Android/iOS pentru părinți · creator web · backend Java securizat
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml"><img alt="Teste de integrare" src="https://github.com/Ieditzu/Mentora/actions/workflows/integration-tests.yml/badge.svg" /></a>
+  <a href="https://github.com/Ieditzu/Mentora/actions/workflows/ios-simulator-build.yml"><img alt="Build iOS" src="https://github.com/Ieditzu/Mentora/actions/workflows/ios-simulator-build.yml/badge.svg" /></a>
+</p>
+
+<p align="center">
+  <img alt="Unity 2022.3" src="https://img.shields.io/badge/Unity-2022.3.62f3-000000?style=flat-square&logo=unity&logoColor=white" />
+  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white" />
+  <img alt="Spring Boot 3.2" src="https://img.shields.io/badge/Spring_Boot-3.2.12-6DB33F?style=flat-square&logo=springboot&logoColor=white" />
+  <img alt="Kotlin Multiplatform" src="https://img.shields.io/badge/Kotlin_Multiplatform-2.2.10-7F52FF?style=flat-square&logo=kotlin&logoColor=white" />
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=061A24" />
+  <img alt="PostgreSQL 16" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Sandboxed-2496ED?style=flat-square&logo=docker&logoColor=white" />
+</p>
+
+<p align="center">
+  <a href="#arhitectura-sistemului">Arhitectură</a> ·
+  <a href="#stiva-tehnologică">Tehnologii</a> ·
+  <a href="#note-despre-securitate">Securitate</a> ·
+  <a href="#rularea-proiectului">Pornire locală</a> ·
+  <a href="#starea-actuală-a-testării">Testare</a> ·
+  <a href="presentation-slidev/mentora-presentation.pdf">Prezentare PDF</a>
+</p>
+
+---
+
+## Despre Mentora
+
+Mentora conectează experiența de învățare a copilului cu instrumentele de monitorizare ale părintelui și cu un creator de conținut. Elevii scriu și rulează cod real în Python și C++, rezolvă probleme AI/ML evaluate pe teste ascunse și primesc feedback persistent, iar părinții urmăresc progresul și își protejează contul prin autentificare TOTP în doi pași.
+
+| Experiență | Pentru cine | Ce oferă |
+| --- | --- | --- |
+| 🎮 **Joc Unity** | Elevi | Python, C++, AI/ML, quiz-uri, CodeWorld, VR și multiplayer LAN |
+| 📱 **Aplicații mobile** | Părinți | Progres, obiective, rapoarte, sesiuni live și TOTP 2FA |
+| 🧩 **Creator web** | Creatori | Publicarea și administrarea cursurilor și problemelor |
+| 🛡️ **Backend** | Platformă | PostgreSQL, protocol binar, evaluare ascunsă și sandbox Docker |
+
+> **Stadiu:** protocol v2 cu 2FA și sesiuni rotite, probleme ML evaluate pe date ascunse, progres persistent și multiplayer Unity prin LAN.
+
+<p align="center">
+  <img src="images/entire_map_v2.png" alt="Lumea Mentora" width="78%" />
+</p>
 
 ## Prezentare vizuală
 
-Toate imaginile din [`images/`](images/) sunt incluse mai jos.
+<details>
+<summary><strong>Deschide galeria completă a produsului</strong></summary>
+
+<br />
 
 ### Jocul Unity
 
@@ -68,26 +120,7 @@ Mentora poate fi explorată în realitate virtuală, folosind controlere VR pent
 | --- | --- | --- |
 | ![Panoul creatorului web](images/web_creator.png) | ![Cursurile creatorului web](images/web_creator_courses.png) | ![Creatorul web în franceză](images/web_creator-fr.png) |
 
-## Cuprins
-
-- [Arhitectura sistemului](#arhitectura-sistemului)
-- [Structura repository-ului](#structura-repository-ului)
-- [Stiva tehnologică](#stiva-tehnologică)
-- [Backend](#backend)
-- [Criptarea pachetelor binare](#criptarea-pachetelor-binare)
-- [Referință pentru pachete](#referință-pentru-pachete)
-- [Autentificare](#autentificare)
-- [Profil de învățare pentru fiecare elev](#profil-de-învățare-pentru-fiecare-elev)
-- [Sistemul de IA](#sistemul-de-ia)
-- [Executarea securizată a codului](#executarea-securizată-a-codului)
-- [Jocul Unity](#jocul-unity-1)
-- [Aplicația Android pentru părinți](#aplicația-android-pentru-părinți)
-- [Creatorul web de cursuri](#creatorul-web-de-cursuri-1)
-- [Cursuri, sarcini, obiective și rapoarte](#cursuri-sarcini-obiective-și-rapoarte)
-- [Modelul bazei de date](#modelul-bazei-de-date)
-- [Note despre securitate](#note-despre-securitate)
-- [Rularea proiectului](#rularea-proiectului)
-- [Starea actuală a testării](#starea-actuală-a-testării)
+</details>
 
 ## Arhitectura sistemului
 
@@ -125,7 +158,7 @@ flowchart TD
 | --- | --- |
 | `java-server/Java-Server/` | Backend Spring Boot, server WebSocket, API REST, integrare IA, executarea codului, persistență |
 | `unity/` | Client de joc Unity 2022.3.62f3 HDRP |
-| `kotlin-app/` | Panou Android pentru părinți, construit cu Kotlin și Jetpack Compose |
+| `kotlin-app/` | Aplicații Android/iOS pentru părinți și modul shared Kotlin Multiplatform |
 | `web-creator/` | Platformă React/Vite pentru crearea cursurilor |
 | `images/` | Capturi de ecran ale proiectului, folosite în acest README și în materialele de prezentare |
 | `presentation-slidev/` | Resurse pentru prezentarea Slidev |
@@ -498,9 +531,9 @@ Jocul Unity oferă suport pentru:
 - modurile vocale `AlwaysOn`, `PushToTalk`, `Muted`.
 - declanșatoare contextuale pentru companion, precum reușita/eșecul unei provocări și accesarea panourilor de programare.
 
-## Aplicația Android pentru părinți
+## Aplicațiile mobile pentru părinți
 
-Aplicația Android este o suită de monitorizare parentală, nu doar un client de autentificare.
+Clienții Android și iOS formează o suită de monitorizare parentală, nu doar un mecanism de autentificare. Logica de protocol comună este partajată prin Kotlin Multiplatform, iar fiecare platformă își protejează sesiunea prin mecanismul securizat nativ.
 
 Fișiere principale:
 
@@ -512,6 +545,8 @@ Fișiere principale:
 | `ui/SocketViewModel.kt` | Starea WebSocket, pachetele, modelele de date și notificările |
 | `socket/ClientSocket.java` | Clientul WebSocket |
 | `socket/packet/Packet.java` | Componenta corespondentă pentru serializarea/criptarea pachetelor |
+| `iosApp/MentoraIOS/State/MentoraLiveStore.swift` | Starea, reconectarea și fluxurile de securitate iOS |
+| `shared/.../IosMentoraClientBridge.kt` | Bridge-ul Kotlin/Native pentru protocolul iOS |
 
 Funcționalitățile implementate ale aplicației includ:
 
@@ -861,9 +896,9 @@ Workflow-ul [`integration-tests.yml`](.github/workflows/integration-tests.yml) c
 
 - testele backend unitare, PostgreSQL/Testcontainers, evaluator și sandbox adversarial, cu rezultate JUnit și JaCoCo publicate ca artefacte.
 - testele host Android/Kotlin shared, urmate de testul Android Keystore instrumentat pe un emulator API 35.
-- testele Unity EditMode prin GameCI, cu rezultatele Unity păstrate ca artefact.
+- testele Unity EditMode prin GameCI, disponibile manual prin opțiunea `run_unity`; acestea nu rulează la fiecare push sau pull request.
 
-Jobul Unity necesită secretele de licențiere potrivite tipului de licență: `UNITY_LICENSE`, `UNITY_EMAIL` și `UNITY_PASSWORD` pentru Personal sau `UNITY_EMAIL`, `UNITY_PASSWORD` și `UNITY_SERIAL` pentru Professional. Workflow-ul [`ios-simulator-build.yml`](.github/workflows/ios-simulator-build.yml) rulează separat testele Kotlin/Native și Swift pe un runner macOS, publică bundle-ul `.xcresult`, apoi construiește artefactul iOS.
+Jobul Unity este dezactivat implicit inclusiv la pornirea manuală a workflow-ului. Dacă este solicitat explicit, necesită secretele de licențiere potrivite tipului de licență: `UNITY_LICENSE`, `UNITY_EMAIL` și `UNITY_PASSWORD` pentru Personal sau `UNITY_EMAIL`, `UNITY_PASSWORD` și `UNITY_SERIAL` pentru Professional. Workflow-ul [`ios-simulator-build.yml`](.github/workflows/ios-simulator-build.yml) rulează separat testele Kotlin/Native și Swift pe un runner macOS, publică bundle-ul `.xcresult`, apoi construiește artefactul iOS.
 
 ## Corelarea cu criteriile competiției/proiectului
 

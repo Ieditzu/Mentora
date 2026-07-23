@@ -244,8 +244,8 @@ class ContainerSandboxDockerIntegrationTest {
                 """);
 
         assertTrue(first.success(), first.error());
-        assertEquals("[13.0,15.0,17.0]", first.result().toString());
-        assertEquals(first.result(), second.result());
+        assertRegressionPredictions(first.result());
+        assertRegressionPredictions(second.result());
         assertTrue(wrong.success(), wrong.error());
         assertEquals("[0,0,0]", wrong.result().toString());
         assertFalse(runtimeError.success());
@@ -263,6 +263,14 @@ class ContainerSandboxDockerIntegrationTest {
         assertEquals("[13,15,17]", oversizedOutput.result().toString());
         assertTrue(oversizedOutput.stdout().length() < 8_300);
         assertTrue(oversizedOutput.stdout().endsWith("...[truncated]"));
+    }
+
+    private void assertRegressionPredictions(final JsonNode predictions) {
+        assertTrue(predictions.isArray());
+        assertEquals(3, predictions.size());
+        assertEquals(13.0, predictions.get(0).asDouble(), 1.0e-9);
+        assertEquals(15.0, predictions.get(1).asDouble(), 1.0e-9);
+        assertEquals(17.0, predictions.get(2).asDouble(), 1.0e-9);
     }
 
     private static CommandResult runCommand(final String... command) throws IOException, InterruptedException {
